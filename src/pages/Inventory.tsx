@@ -238,7 +238,11 @@ export function InventoryPage() {
     </>
   );
 }
-const blank: ProductInput = {
+type ProductFormValues = Omit<ProductInput, 'purchaseCost' | 'sellingPrice'> & {
+  purchaseCost: string | number;
+  sellingPrice: string | number;
+};
+const blank: ProductFormValues = {
   brand: '',
   model: '',
   status: 'AVAILABLE',
@@ -246,8 +250,8 @@ const blank: ProductInput = {
   category: '',
   condition: 'Good',
   serialNumber: '',
-  purchaseCost: 0,
-  sellingPrice: 0,
+  purchaseCost: '',
+  sellingPrice: '',
   location: '',
   descriptionTh: '',
   descriptionEn: '',
@@ -276,7 +280,7 @@ export function ProductForm() {
     id ? `/products/${id}` : null,
   );
   const { data: settings } = useData<Settings>('/settings');
-  const [form, setForm] = useState<ProductInput>(blank);
+  const [form, setForm] = useState<ProductFormValues>(blank);
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
@@ -291,7 +295,11 @@ export function ProductForm() {
     try {
       const p = await api<Product>(id ? `/products/${id}` : '/products', {
         method: id ? 'PATCH' : 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          purchaseCost: Number(form.purchaseCost),
+          sellingPrice: Number(form.sellingPrice),
+        }),
       });
       nav(`/inventory/${p.id}${stay ? '/edit' : ''}`);
     } catch (e) {
@@ -395,9 +403,7 @@ export function ProductForm() {
                   min="0"
                   step="0.01"
                   value={form[k]}
-                  onChange={(e) =>
-                    setForm({ ...form, [k]: Number(e.target.value) })
-                  }
+                  onChange={(e) => setForm({ ...form, [k]: e.target.value })}
                 />
               </Field>
             ))}

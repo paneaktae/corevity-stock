@@ -77,14 +77,17 @@ export function CustomersPage() {
     </>
   );
 }
-const blank: CustomerInput = {
+type CustomerFormValues = Omit<CustomerInput, 'budget'> & {
+  budget: string | number;
+};
+const blank: CustomerFormValues = {
   name: '',
   companyName: '',
   contactName: '',
   phone: '',
   lineId: '',
   email: '',
-  budget: 0,
+  budget: '',
   interestedIn: '',
   notes: '',
 };
@@ -94,7 +97,7 @@ export function CustomerForm() {
   const { data, error: loadError } = useData<CustomerDetail>(
     id ? `/customers/${id}` : null,
   );
-  const [form, setForm] = useState<CustomerInput>(blank);
+  const [form, setForm] = useState<CustomerFormValues>(blank);
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
@@ -109,7 +112,7 @@ export function CustomerForm() {
     try {
       const c = await api<Customer>(id ? `/customers/${id}` : '/customers', {
         method: id ? 'PATCH' : 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, budget: Number(form.budget) }),
       });
       nav(`/customers/${c.id}`);
     } catch (e) {
@@ -167,10 +170,7 @@ export function CustomerForm() {
                   onChange={(e) =>
                     setForm({
                       ...form,
-                      [key]:
-                        key === 'budget'
-                          ? Number(e.target.value)
-                          : e.target.value,
+                      [key]: e.target.value,
                     })
                   }
                 />

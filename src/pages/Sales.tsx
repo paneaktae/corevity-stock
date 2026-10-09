@@ -115,11 +115,14 @@ export function SalesPage() {
     </>
   );
 }
-const blank: LeadInput = {
+type LeadFormValues = Omit<LeadInput, 'estimatedValue'> & {
+  estimatedValue: string | number;
+};
+const blank: LeadFormValues = {
   customerId: '',
   title: '',
   status: 'NEW',
-  estimatedValue: 0,
+  estimatedValue: '',
   lastContactAt: null,
   nextFollowUpAt: null,
   notes: '',
@@ -134,7 +137,7 @@ export function LeadForm() {
   );
   const { data: customers } = useData<Customer[]>('/customers');
   const { data: products } = useData<Product[]>('/products');
-  const [form, setForm] = useState<LeadInput>({
+  const [form, setForm] = useState<LeadFormValues>({
     ...blank,
     customerId: params.get('customerId') ?? '',
   });
@@ -152,7 +155,10 @@ export function LeadForm() {
     try {
       const l = await api<Lead>(id ? `/leads/${id}` : '/leads', {
         method: id ? 'PATCH' : 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          estimatedValue: Number(form.estimatedValue),
+        }),
       });
       nav(`/sales/${l.id}`);
     } catch (e) {
@@ -217,7 +223,7 @@ export function LeadForm() {
                 step="0.01"
                 value={form.estimatedValue}
                 onChange={(e) =>
-                  setForm({ ...form, estimatedValue: Number(e.target.value) })
+                  setForm({ ...form, estimatedValue: e.target.value })
                 }
               />
             </Field>
