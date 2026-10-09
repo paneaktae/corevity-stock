@@ -206,6 +206,7 @@ export function LeadForm() {
             <Field label="Estimated value (THB)" error={fields.estimatedValue}>
               <input
                 type="number"
+                inputMode="decimal"
                 min="0"
                 step="0.01"
                 value={form.estimatedValue}

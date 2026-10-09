@@ -107,6 +107,16 @@ textarea {
   min-height: 44px;
   color: #25342f;
 }
+/* Monetary amounts are typed directly, without browser stepper controls. */
+input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 textarea {
   resize: vertical;
 }

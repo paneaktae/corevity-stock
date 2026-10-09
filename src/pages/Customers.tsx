@@ -159,6 +159,7 @@ export function CustomerForm() {
                           ? 'tel'
                           : 'text'
                   }
+                  inputMode={key === 'budget' ? 'decimal' : undefined}
                   min={key === 'budget' ? 0 : undefined}
                   step={key === 'budget' ? '0.01' : undefined}
                   value={form[key]}
