@@ -1,0 +1,35 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE products (id TEXT PRIMARY KEY, sku TEXT NOT NULL UNIQUE, brand TEXT NOT NULL, model TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', serial_number TEXT NOT NULL DEFAULT '', condition TEXT NOT NULL DEFAULT '', purchase_cost REAL NOT NULL DEFAULT 0 CHECK(purchase_cost>=0), selling_price REAL NOT NULL DEFAULT 0 CHECK(selling_price>=0), status TEXT NOT NULL DEFAULT 'AVAILABLE' CHECK(status IN ('AVAILABLE','RESERVED','SOLD')), location TEXT NOT NULL DEFAULT '', description_th TEXT NOT NULL DEFAULT '', description_en TEXT NOT NULL DEFAULT '', short_description TEXT NOT NULL DEFAULT '', facebook_caption TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', sold_at TEXT, archived_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE customers (id TEXT PRIMARY KEY, name TEXT NOT NULL, company_name TEXT NOT NULL DEFAULT '', contact_name TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '', line_id TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', budget REAL NOT NULL DEFAULT 0 CHECK(budget>=0), interested_in TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE leads (id TEXT PRIMARY KEY, customer_id TEXT NOT NULL REFERENCES customers(id), title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'NEW' CHECK(status IN ('NEW','CONTACTED','INTERESTED','QUOTED','WON','LOST')), estimated_value REAL NOT NULL DEFAULT 0 CHECK(estimated_value>=0), last_contact_at TEXT, next_follow_up_at TEXT, notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE lead_products (lead_id TEXT NOT NULL REFERENCES leads(id), product_id TEXT NOT NULL REFERENCES products(id), PRIMARY KEY(lead_id, product_id));
+CREATE TABLE product_images (id TEXT PRIMARY KEY, product_id TEXT NOT NULL REFERENCES products(id), r2_key TEXT NOT NULL UNIQUE, file_name TEXT NOT NULL, mime_type TEXT NOT NULL, file_size INTEGER NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, is_primary INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+CREATE UNIQUE INDEX one_primary_image ON product_images(product_id) WHERE is_primary=1;
+CREATE TABLE reservations (id TEXT PRIMARY KEY, product_id TEXT NOT NULL UNIQUE REFERENCES products(id), customer_id TEXT NOT NULL REFERENCES customers(id), lead_id TEXT REFERENCES leads(id), reserved_at TEXT NOT NULL, expires_at TEXT, notes TEXT NOT NULL DEFAULT '');
+CREATE TABLE activities (id TEXT PRIMARY KEY, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL, user_email TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE sku_sequences (year INTEGER PRIMARY KEY, value INTEGER NOT NULL);
+INSERT INTO settings VALUES ('conditions','["Excellent","Good","Fair","Needs Repair"]');
+CREATE INDEX products_status ON products(status,archived_at);
+CREATE INDEX products_brand_category ON products(brand,category);
+CREATE INDEX products_serial ON products(serial_number);
+CREATE INDEX products_sold ON products(sold_at);
+CREATE INDEX customers_name ON customers(name);
+CREATE INDEX customers_company ON customers(company_name);
+CREATE INDEX customers_phone ON customers(phone);
+CREATE INDEX leads_followup ON leads(status,next_follow_up_at);
+CREATE INDEX leads_customer ON leads(customer_id);
+CREATE INDEX images_product ON product_images(product_id,sort_order);
+CREATE INDEX activities_entity ON activities(entity_type,entity_id,created_at);
+CREATE INDEX lead_products_product ON lead_products(product_id);
+-- A reservation is authoritative. These triggers keep inventory status synchronized in the same transaction.
+CREATE TRIGGER reservation_guard BEFORE INSERT ON reservations BEGIN
+ SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM products WHERE id=NEW.product_id AND status='AVAILABLE' AND archived_at IS NULL) THEN RAISE(ABORT,'Product is not available') END);
+ SELECT (CASE WHEN NEW.lead_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM leads JOIN lead_products ON leads.id=lead_products.lead_id WHERE leads.id=NEW.lead_id AND leads.customer_id=NEW.customer_id AND lead_products.product_id=NEW.product_id AND leads.status NOT IN ('WON','LOST')) THEN RAISE(ABORT,'Reservation does not match an active lead') END);
+END;
+CREATE TRIGGER reservation_created AFTER INSERT ON reservations BEGIN UPDATE products SET status='RESERVED',updated_at=NEW.reserved_at WHERE id=NEW.product_id; END;
+CREATE TRIGGER reservation_released AFTER DELETE ON reservations BEGIN UPDATE products SET status='AVAILABLE',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=OLD.product_id AND status='RESERVED'; END;
+CREATE TRIGGER product_sold AFTER UPDATE OF status ON products WHEN NEW.status='SOLD' BEGIN DELETE FROM reservations WHERE product_id=NEW.id; END;
+CREATE TRIGGER reservation_required BEFORE UPDATE OF status ON products WHEN NEW.status='RESERVED' AND NOT EXISTS(SELECT 1 FROM reservations WHERE product_id=NEW.id) BEGIN SELECT RAISE(ABORT,'Reserve this product for a customer first'); END;
+CREATE TRIGGER reserved_no_direct_release BEFORE UPDATE OF status ON products WHEN OLD.status='RESERVED' AND NEW.status='AVAILABLE' AND EXISTS(SELECT 1 FROM reservations WHERE product_id=NEW.id) BEGIN SELECT RAISE(ABORT,'Release the reservation first'); END;
+CREATE TRIGGER sold_immutable BEFORE UPDATE OF status ON products WHEN OLD.status='SOLD' AND NEW.status!='SOLD' BEGIN SELECT RAISE(ABORT,'Sold products cannot be reopened'); END;

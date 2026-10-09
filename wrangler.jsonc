@@ -1,0 +1,72 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fitness-equipment-manager",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true,
+  },
+  "observability": {
+    "enabled": true,
+  },
+  "preview_urls": false,
+  "vars": {
+    "ENVIRONMENT": "development",
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    "ALLOWED_EMAILS": "",
+    "AI_MODEL": "",
+    "AI_BASE_URL": "",
+    "MAX_UPLOAD_MB": "10",
+    "BUSINESS_TIMEZONE": "Asia/Bangkok",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fitness-equipment-manager",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "drizzle/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PRODUCT_IMAGES",
+      "bucket_name": "fitness-equipment-manager-images",
+    },
+  ],
+  "env": {
+    "production": {
+      "name": "fitness-equipment-manager",
+      "workers_dev": true,
+      "preview_urls": false,
+      "vars": {
+        "ENVIRONMENT": "production",
+        "ACCESS_TEAM_DOMAIN": "noisy-night-ad63.cloudflareaccess.com",
+        "ACCESS_AUD": "f00b66a557481fac37222bf27af3e99649c5cd45fa260401d7b2f9b39b2ba58e",
+        "ALLOWED_EMAILS": "analyziie@gmail.com",
+        "AI_MODEL": "",
+        "AI_BASE_URL": "",
+        "MAX_UPLOAD_MB": "10",
+        "BUSINESS_TIMEZONE": "Asia/Bangkok",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "fitness-equipment-manager",
+          "database_id": "de34955b-5a97-47a9-9169-3dbed136cb75",
+          "migrations_dir": "drizzle/migrations",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "PRODUCT_IMAGES",
+          "bucket_name": "fitness-equipment-manager-images",
+        },
+      ],
+    },
+  },
+  "account_id": "7e8a63993a65056ced687bb043f254ca",
+}

@@ -1,0 +1,5 @@
+# Only honored by a Vite development build, on a loopback hostname.
+LOCAL_MOCK_EMAIL=demo@example.test
+# AI_API_KEY=
+# AI_MODEL=
+# AI_BASE_URL=https://your-provider.example/v1
