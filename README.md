@@ -14,8 +14,8 @@ Cloudflare resources and all three migrations have already been provisioned for 
 - Access application: `Fitness Equipment Manager`, covering the complete workers.dev hostname.
 - Email-code sign-in: only `analyziie@gmail.com` is allowed initially. No second user has been supplied. Add the second address to both the Access policy and `ALLOWED_EMAILS`, then redeploy.
 - Preview URLs are disabled. The production workers.dev URL is intentionally enabled **after** the Access application was created.
-- AI is not configured yet. Set the chosen provider/model and Worker secret to enable generation.
-- GitHub upload was rejected with `Resource not accessible by integration`; grant the connection repository write access before publishing the source.
+- AI setup is intentionally deferred at the owner’s request. Set the chosen provider/model and Worker secret later to enable generation.
+- Source is published on the `main` branch of [paneaktae/corevity-stock](https://github.com/paneaktae/corevity-stock). The initial GitHub Actions checks passed. Deployment remains manual.
 
 Verified: strict TypeScript, ESLint, 17 isolated D1/R2 backend tests, production build, all remote schema migrations, and the live browser redirect to the Access sign-in screen. A signed-in production session and live AI generation have not yet been tested. Local visual/mobile browser testing was blocked by client permissions.
 
