@@ -1255,3 +1255,51 @@ td small {
     margin-bottom: 0;
   }
 }
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.language-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #42556e;
+}
+.language-picker select {
+  width: auto;
+  min-height: 36px;
+  padding: 5px 9px;
+}
+html[lang='th'] {
+  line-height: 1.65;
+}
+html[lang='th'] h1,
+html[lang='th'] h2,
+html[lang='th'] .eyebrow,
+html[lang='th'] .nav-label {
+  letter-spacing: normal;
+}
+@media (max-width: 760px) {
+  .topbar {
+    height: auto;
+    min-height: 52px;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .topbar-actions {
+    gap: 6px;
+  }
+  .topbar-actions .workspace-tag {
+    display: none;
+  }
+  .language-picker select {
+    min-height: 40px;
+  }
+  html[lang='th'] .sidebar nav a {
+    font-size: 10px;
+  }
+}

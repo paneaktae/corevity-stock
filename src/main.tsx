@@ -1,3 +1,4 @@
+import { t, useLanguage, setLanguage } from './i18n';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
 import {
@@ -24,6 +25,8 @@ const navigation = [
   ['/settings', 'Settings', Settings],
 ] as const;
 function App() {
+  const language = useLanguage();
+  document.documentElement.lang = language;
   return (
     <BrowserRouter>
       <div className="app">
@@ -33,30 +36,43 @@ function App() {
               <Dumbbell size={25} />
             </div>
             <div>
-              COREVITY<small>EQUIPMENT MANAGER</small>
+              COREVITY<small>{t('EQUIPMENT MANAGER')}</small>
             </div>
           </NavLink>
-          <div className="nav-label">WORKSPACE</div>
+          <div className="nav-label">{t('WORKSPACE')}</div>
           <nav>
             {navigation.map(([to, name, Icon]) => (
               <NavLink key={to} to={to} end={to === '/'}>
                 <Icon size={19} />
-                <span>{name}</span>
+                <span>{t(name)}</span>
                 <ChevronRight className="nav-arrow" size={15} />
               </NavLink>
             ))}
           </nav>
           <div className="sidebar-bottom">
-            <span className="status-dot" /> Your business, in motion.
-            <small>Fitness Equipment Manager</small>
+            <span className="status-dot" /> {t('Your business, in motion.')}
+            <small>{t('Fitness Equipment Manager')}</small>
           </div>
         </aside>
         <main>
           <div className="topbar">
-            <span>Internal workspace</span>
-            <span className="workspace-tag">
-              <span className="status-dot" /> Corevity Operations
-            </span>
+            <span>{t('Internal workspace')}</span>
+            <div className="topbar-actions">
+              <label className="language-picker">
+                <span>{t('Language')}</span>
+                <select
+                  aria-label={t('Language')}
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as 'th' | 'en')}
+                >
+                  <option value="th">ไทย</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <span className="workspace-tag">
+                <span className="status-dot" /> {t('Corevity Operations')}
+              </span>
+            </div>
           </div>
           <div className="content">
             <Routes>
@@ -75,7 +91,7 @@ function App() {
               <Route path="/sales/:id/edit" element={<LeadForm />} />
               <Route path="/followups" element={<FollowupsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*" element={<h1>Page not found</h1>} />
+              <Route path="*" element={<h1>{t('Page not found')}</h1>} />
             </Routes>
           </div>
         </main>

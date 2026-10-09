@@ -30,6 +30,10 @@ Verified: strict TypeScript, ESLint, 18 isolated backend/static-asset tests, pro
 
 The single deployment follows Cloudflare's [React SPA + API guide](https://developers.cloudflare.com/workers/vite-plugin/tutorial/) and [JWT validation guidance](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/).
 
+## Language
+
+Use the language selector in the top bar to switch between Thai and English. The choice is saved in browser local storage and defaults to the browser language. Switching preserves in-progress forms and leaves product/customer data unchanged. Dates and THB amounts follow the selected locale; database status codes stay unchanged. Custom notes, descriptions, condition names and historical activity records are not automatically translated. UI translations are maintained in `src/th.json`.
+
 ## What works
 
 - Dashboard counts, inventory cost value, recent equipment, recent sales, overdue/today/upcoming follow-ups.

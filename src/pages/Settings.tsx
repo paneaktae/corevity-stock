@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 import { ShieldCheck, Sparkles } from 'lucide-react';
 import type { Settings } from '../../shared/schemas';
@@ -22,17 +23,18 @@ export function SettingsPage() {
   return (
     <>
       <Header
-        title="Workspace settings"
-        subtitle="The essentials for a small, focused team."
+        title={t('Workspace settings')}
+        subtitle={t('The essentials for a small, focused team.')}
       />
       <ErrorBox message={error} />
-      {saved && <div className="success">Conditions saved.</div>}
+      {saved && <div className="success">{t('Conditions saved.')}</div>}
       <div className="detail-grid">
         <section className="panel">
-          <h2>Equipment conditions</h2>
+          <h2>{t('Equipment conditions')}</h2>
           <p className="muted">
-            One condition per line. Existing equipment keeps its saved
-            condition.
+            {t(
+              'One condition per line. Existing equipment keeps its saved condition.',
+            )}
           </p>
           <form
             onSubmit={async (e) => {
@@ -59,7 +61,7 @@ export function SettingsPage() {
               }
             }}
           >
-            <Field label="Available conditions">
+            <Field label={t('Available conditions')}>
               <textarea
                 rows={8}
                 value={conditions}
@@ -67,47 +69,56 @@ export function SettingsPage() {
               />
             </Field>
             <button disabled={busy} className="primary">
-              Save conditions
+              {t('Save conditions')}
             </button>
           </form>
         </section>
         <div>
           <section className="panel">
             <h2>
-              <ShieldCheck size={20} /> Access & identity
+              <ShieldCheck size={20} /> {t('Access & identity')}
             </h2>
             <p>
-              Signed in as <strong>{data.userEmail}</strong>
+              {t('Signed in as')}
+              <strong>{data.userEmail}</strong>
             </p>
             <p>
               {data.environment === 'development'
-                ? 'Local development workspace'
-                : 'Protected company workspace'}
+                ? t('Local development workspace')
+                : t('Protected company workspace')}
             </p>
             <small>
-              Authorized accounts are managed in Cloudflare Access. No passwords
-              are stored here.
+              {t(
+                'Authorized accounts are managed in Cloudflare Access. No passwords are stored here.',
+              )}
             </small>
           </section>
           <section className="panel">
             <h2>
-              <Sparkles size={20} /> AI descriptions
+              <Sparkles size={20} /> {t('AI descriptions')}
             </h2>
             <p>
               {data.aiConfigured
-                ? 'AI is configured and ready.'
-                : 'AI provider configuration is needed.'}
+                ? t('AI is configured and ready.')
+                : t('AI provider configuration is needed.')}
             </p>
             <small>
-              Your administrator manages the provider and secret on the Worker.
-              Generated text is always reviewed before saving.
+              {t(
+                'Your administrator manages the provider and secret on the Worker. Generated text is always reviewed before saving.',
+              )}
             </small>
           </section>
           <section className="panel">
-            <h2>Workspace defaults</h2>
-            <p>Currency: THB</p>
-            <p>Business timezone: {data.timezone}</p>
-            <p>Maximum photo size: {data.maxUploadMB} MB</p>
+            <h2>{t('Workspace defaults')}</h2>
+            <p>{t('Currency: THB')}</p>
+            <p>
+              {t('Business timezone:')}
+              {data.timezone}
+            </p>
+            <p>
+              {t('Maximum photo size:')}
+              {data.maxUploadMB} {t('MB')}
+            </p>
           </section>
         </div>
       </div>

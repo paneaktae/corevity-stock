@@ -1,3 +1,4 @@
+import { t, localized } from '../i18n';
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   Link,
@@ -40,9 +41,9 @@ export function SalesPage() {
   return (
     <>
       <Header
-        title="Sales pipeline"
-        subtitle="Keep every conversation moving forward."
-        action={<AddLink to="/sales/new">Add lead</AddLink>}
+        title={t('Sales pipeline')}
+        subtitle={t('Keep every conversation moving forward.')}
+        action={<AddLink to="/sales/new">{t('Add lead')}</AddLink>}
       />
       <div className="view-switch">
         <button
@@ -50,22 +51,22 @@ export function SalesPage() {
           onClick={() => setView('kanban')}
         >
           <LayoutGrid size={16} />
-          Board
+          {t('Board')}
         </button>
         <button
           className={view === 'list' ? 'selected' : ''}
           onClick={() => setView('list')}
         >
           <List size={16} />
-          List
+          {t('List')}
         </button>
       </div>
       <ErrorBox message={error} />
       {!data && !error ? (
         <Loading />
       ) : !data?.length ? (
-        <Empty title="Your next sale starts here">
-          <p>Create a lead and connect it to equipment.</p>
+        <Empty title={t('Your next sale starts here')}>
+          <p>{t('Create a lead and connect it to equipment.')}</p>
         </Empty>
       ) : view === 'kanban' ? (
         <div className="kanban">
@@ -84,7 +85,7 @@ export function SalesPage() {
                     <strong>{money(l.estimatedValue)}</strong>
                     <p>
                       {l.products?.map((p) => p.model).join(', ') ||
-                        'No equipment linked'}
+                        t('No equipment linked')}
                     </p>
                     {l.nextFollowUpAt && (
                       <small className="due-date">
@@ -171,14 +172,16 @@ export function LeadForm() {
   return (
     <>
       <Header
-        title={id ? 'Edit lead' : 'Start a new conversation'}
-        subtitle="Connect a customer with the equipment they're looking for."
+        title={id ? t('Edit lead') : t('Start a new conversation')}
+        subtitle={t(
+          "Connect a customer with the equipment they're looking for.",
+        )}
       />
       <form onSubmit={(e) => void save(e)}>
         <ErrorBox message={error} />
         <section className="panel">
           <div className="form-grid">
-            <Field label="Customer *" error={fields.customerId}>
+            <Field label={t('Customer *')} error={fields.customerId}>
               <select
                 required
                 disabled={!!id}
@@ -187,23 +190,26 @@ export function LeadForm() {
                   setForm({ ...form, customerId: e.target.value })
                 }
               >
-                <option value="">Select a customer</option>
+                <option value="">{t('Select a customer')}</option>
                 {customers?.map((c) => (
                   <option value={c.id} key={c.id}>
                     {c.name}
                   </option>
                 ))}
               </select>
-              <Link to="/customers/new">Add a customer</Link>
+              <Link to="/customers/new">{t('Add a customer')}</Link>
             </Field>
-            <Field label="Lead title *" error={fields.title}>
+            <Field label={t('Lead title *')} error={fields.title}>
               <input
                 required
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
               />
             </Field>
-            <Field label="Estimated value (THB)" error={fields.estimatedValue}>
+            <Field
+              label={t('Estimated value (THB)')}
+              error={fields.estimatedValue}
+            >
               <input
                 type="number"
                 inputMode="decimal"
@@ -215,7 +221,7 @@ export function LeadForm() {
                 }
               />
             </Field>
-            <Field label="Stage" error={fields.status}>
+            <Field label={t('Stage')} error={fields.status}>
               <select
                 disabled={form.status === 'WON'}
                 value={form.status}
@@ -235,7 +241,7 @@ export function LeadForm() {
                   ))}
               </select>
             </Field>
-            <Field label="Last contact" error={fields.lastContactAt}>
+            <Field label={t('Last contact')} error={fields.lastContactAt}>
               <input
                 type="datetime-local"
                 value={localDate(form.lastContactAt)}
@@ -244,7 +250,7 @@ export function LeadForm() {
                 }
               />
             </Field>
-            <Field label="Next follow-up" error={fields.nextFollowUpAt}>
+            <Field label={t('Next follow-up')} error={fields.nextFollowUpAt}>
               <input
                 type="datetime-local"
                 value={localDate(form.nextFollowUpAt)}
@@ -254,7 +260,7 @@ export function LeadForm() {
               />
             </Field>
           </div>
-          <Field label="Notes" error={fields.notes}>
+          <Field label={t('Notes')} error={fields.notes}>
             <textarea
               rows={4}
               value={form.notes}
@@ -263,10 +269,11 @@ export function LeadForm() {
           </Field>
         </section>
         <section className="panel">
-          <h2>Interested equipment</h2>
+          <h2>{t('Interested equipment')}</h2>
           <p className="muted">
-            Select one or more products. You will choose the actual sold items
-            when winning the deal.
+            {t(
+              'Select one or more products. You will choose the actual sold items when winning the deal.',
+            )}
           </p>
           <ErrorBox message={fields.productIds?.join(' ') ?? ''} />
           <div className="product-picker">
@@ -299,10 +306,10 @@ export function LeadForm() {
         </section>
         <div className="form-actions">
           <Link className="button" to={id ? `/sales/${id}` : '/sales'}>
-            Cancel
+            {t('Cancel')}
           </Link>
           <button disabled={busy} className="primary">
-            {busy ? 'Saving…' : 'Save lead'}
+            {busy ? t('Saving…') : t('Save lead')}
           </button>
         </div>
       </form>
@@ -352,7 +359,7 @@ export function LeadPage() {
         subtitle={d.customer.name}
         action={
           <Link className="button" to={`/sales/${id}/edit`}>
-            Edit lead
+            {t('Edit lead')}
           </Link>
         }
       />
@@ -379,7 +386,8 @@ export function LeadPage() {
                 })
               }
             >
-              Mark {label(status)}
+              {t('Mark')}
+              {label(status)}
             </button>
           ))}
           <button
@@ -387,14 +395,16 @@ export function LeadPage() {
             className="primary"
             onClick={() => setWinning(!winning)}
           >
-            Mark won
+            {t('Mark won')}
           </button>
           <button
             disabled={busy || ['WON', 'LOST'].includes(l.status)}
             onClick={() => {
               if (
                 confirm(
-                  'Mark this lead lost? Any equipment reservations must be released separately.',
+                  t(
+                    'Mark this lead lost? Any equipment reservations must be released separately.',
+                  ),
                 )
               )
                 void action(`/leads/${id}`, {
@@ -403,15 +413,16 @@ export function LeadPage() {
                 });
             }}
           >
-            Mark lost
+            {t('Mark lost')}
           </button>
         </div>
         {winning && (
           <div className="ai-draft">
-            <h3>Which equipment was actually sold?</h3>
+            <h3>{t('Which equipment was actually sold?')}</h3>
             <p>
-              Only checked items will be marked sold. Leave unchecked products
-              unchanged.
+              {t(
+                'Only checked items will be marked sold. Leave unchecked products unchanged.',
+              )}
             </p>
             {d.products
               .filter((p) => p.status !== 'SOLD')
@@ -439,20 +450,24 @@ export function LeadPage() {
               onClick={() => {
                 if (
                   confirm(
-                    `Win this lead and mark ${sold.length} selected equipment item(s) sold?`,
+                    localized(
+                      `Win this lead and mark ${sold.length} selected equipment item(s) sold?`,
+                      `ยืนยันปิดการขายและบันทึกสินค้า ${sold.length} รายการว่าขายแล้วหรือไม่?`,
+                    ),
                   )
                 )
                   void action(`/leads/${id}/win`, { productIds: sold }, 'POST');
               }}
             >
-              Confirm won · {sold.length} item(s) sold
+              {t('Confirm won ·')}
+              {sold.length} {t('item(s) sold')}
             </button>
           </div>
         )}
       </section>
       <div className="detail-grid">
         <section className="panel">
-          <h2>Customer & follow-up</h2>
+          <h2>{t('Customer & follow-up')}</h2>
           <Link className="text-link" to={`/customers/${d.customer.id}`}>
             {d.customer.name}
             <ArrowUpRight size={15} />
@@ -460,16 +475,19 @@ export function LeadPage() {
           <p>
             {d.customer.phone ||
               d.customer.email ||
-              'No contact details recorded'}
+              t('No contact details recorded')}
           </p>
-          <p className="muted">Last contact: {date(l.lastContactAt)}</p>
+          <p className="muted">
+            {t('Last contact:')}
+            {date(l.lastContactAt)}
+          </p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               void action(`/leads/${id}`, { nextFollowUpAt: toISO(followup) });
             }}
           >
-            <Field label="Next follow-up">
+            <Field label={t('Next follow-up')}>
               <input
                 type="datetime-local"
                 value={followup}
@@ -477,14 +495,14 @@ export function LeadPage() {
               />
             </Field>
             <button disabled={busy || ['WON', 'LOST'].includes(l.status)}>
-              Save follow-up
+              {t('Save follow-up')}
             </button>
           </form>
-          <h3>Notes</h3>
-          <p className="preserve">{l.notes || 'No notes yet.'}</p>
+          <h3>{t('Notes')}</h3>
+          <p className="preserve">{l.notes || t('No notes yet.')}</p>
         </section>
         <section className="panel">
-          <h2>Interested equipment</h2>
+          <h2>{t('Interested equipment')}</h2>
           {d.products.length ? (
             d.products.map((p) => (
               <div className="linked-product" key={p.id}>
@@ -507,14 +525,16 @@ export function LeadPage() {
                         )
                       }
                     >
-                      Reserve
+                      {t('Reserve')}
                     </button>
                   )}
               </div>
             ))
           ) : (
-            <Empty title="No equipment linked">
-              <Link to={`/sales/${id}/edit`}>Choose interested products</Link>
+            <Empty title={t('No equipment linked')}>
+              <Link to={`/sales/${id}/edit`}>
+                {t('Choose interested products')}
+              </Link>
             </Empty>
           )}
         </section>
@@ -536,8 +556,8 @@ export function FollowupsPage() {
   return (
     <>
       <Header
-        title="Keep the conversation going"
-        subtitle="Small follow-ups. Stronger customer relationships."
+        title={t('Keep the conversation going')}
+        subtitle={t('Small follow-ups. Stronger customer relationships.')}
       />
       <ErrorBox message={error || loadError} />
       {!data && !loadError ? (
@@ -569,10 +589,13 @@ export function FollowupsPage() {
                     <p>
                       {l.products
                         ?.map((p) => `${p.brand} ${p.model}`)
-                        .join(', ') || 'No equipment linked'}
+                        .join(', ') || t('No equipment linked')}
                     </p>
                     <strong>{money(l.estimatedValue)}</strong>
-                    <small>Last contact: {date(l.lastContactAt)}</small>
+                    <small>
+                      {t('Last contact:')}
+                      {date(l.lastContactAt)}
+                    </small>
                     <small className="due-date">
                       <Clock size={14} />
                       {date(l.nextFollowUpAt)}
@@ -603,10 +626,10 @@ export function FollowupsPage() {
                           }
                         }}
                       >
-                        Mark contacted
+                        {t('Mark contacted')}
                       </button>
                       <Link className="button" to={`/sales/${l.id}`}>
-                        Reschedule / open
+                        {t('Reschedule / open')}
                       </Link>
                     </div>
                   </article>
@@ -615,8 +638,11 @@ export function FollowupsPage() {
             ) : (
               <div className="quiet-empty">
                 {group === 'today'
-                  ? "No follow-ups today. You're all caught up."
-                  : `No ${group} follow-ups.`}
+                  ? t("No follow-ups today. You're all caught up.")
+                  : localized(
+                      `No ${group} follow-ups.`,
+                      `ไม่มีรายการติดตาม${label(group)}`,
+                    )}
               </div>
             )}
           </section>

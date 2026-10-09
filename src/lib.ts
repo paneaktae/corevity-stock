@@ -1,3 +1,4 @@
+import { t, getLanguage } from './i18n';
 import { useCallback, useEffect, useState } from 'react';
 export class ApiError extends Error {
   constructor(
@@ -61,24 +62,26 @@ export function useDebounce(value: string) {
   return result;
 }
 export const money = (n: number) =>
-  new Intl.NumberFormat('en-TH', {
+  new Intl.NumberFormat(getLanguage() === 'th' ? 'th-TH' : 'en-TH', {
     style: 'currency',
     currency: 'THB',
     maximumFractionDigits: 2,
   }).format(n);
 export const date = (s: string | null | undefined) =>
   s
-    ? new Intl.DateTimeFormat('en-GB', {
+    ? new Intl.DateTimeFormat(getLanguage() === 'th' ? 'th-TH' : 'en-GB', {
         dateStyle: 'medium',
         timeStyle: 'short',
         timeZone: 'Asia/Bangkok',
       }).format(new Date(s))
-    : 'Not set';
+    : t('Not set');
 export const label = (s: string) =>
-  s
-    .toLowerCase()
-    .replaceAll('_', ' ')
-    .replace(/^./, (s) => s.toUpperCase());
+  t(
+    s
+      .toLowerCase()
+      .replaceAll('_', ' ')
+      .replace(/^./, (s) => s.toUpperCase()),
+  );
 export function localDate(s: string | null) {
   if (!s) return '';
   const d = new Date(s);

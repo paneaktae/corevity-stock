@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Dumbbell, Plus, ArrowUpRight } from 'lucide-react';
@@ -25,7 +26,7 @@ export function Header({
   return (
     <header className="page-header">
       <div>
-        <div className="eyebrow">{eyebrow ?? 'YOUR WORKSPACE'}</div>
+        <div className="eyebrow">{t(eyebrow ?? t('YOUR WORKSPACE'))}</div>
         <h1>{title}</h1>
         {subtitle && <p>{subtitle}</p>}
       </div>
@@ -43,7 +44,7 @@ export function Empty({
   return (
     <div className="empty">
       <Dumbbell size={30} />
-      <h3>{title}</h3>
+      <h3>{t(title)}</h3>
       {children}
     </div>
   );
@@ -51,14 +52,14 @@ export function Empty({
 export function ErrorBox({ message }: { message: string }) {
   return message ? (
     <div className="error" role="alert">
-      {message}
+      {t(message)}
     </div>
   ) : null;
 }
 export function Loading() {
   return (
     <div className="empty" role="status">
-      Loading your workspace…
+      {t('Loading your workspace…')}
     </div>
   );
 }
@@ -80,7 +81,7 @@ export function Photo({ product }: { product: Product }) {
   ) : (
     <div className="photo-placeholder">
       <Dumbbell size={26} />
-      <span>No photo</span>
+      <span>{t('No photo')}</span>
     </div>
   );
 }
@@ -95,16 +96,16 @@ export function Field({
 }) {
   return (
     <label className="field">
-      <span>{caption}</span>
+      <span>{t(caption)}</span>
       {children}
-      {error && <small className="field-error">{error.join(' ')}</small>}
+      {error && <small className="field-error">{error.map(t).join(' ')}</small>}
     </label>
   );
 }
 export function ActivityList({ items }: { items: Activity[] }) {
   return (
     <section className="panel">
-      <h2>Recent activity</h2>
+      <h2>{t('Recent activity')}</h2>
       {items.length ? (
         items.map((item) => (
           <div className="activity" key={item.id}>
@@ -118,7 +119,7 @@ export function ActivityList({ items }: { items: Activity[] }) {
           </div>
         ))
       ) : (
-        <p className="muted">No activity yet.</p>
+        <p className="muted">{t('No activity yet.')}</p>
       )}
     </section>
   );

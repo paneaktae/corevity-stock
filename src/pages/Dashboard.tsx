@@ -1,3 +1,4 @@
+import { t, localized } from '../i18n';
 import { Link } from 'react-router-dom';
 import {
   ArrowUpRight,
@@ -29,24 +30,36 @@ export function DashboardPage() {
       </>
     );
   const metrics = [
-    ['Available equipment', d.available, Package, 'Ready for a new home'],
-    ['Reserved equipment', d.reserved, Clock, 'Held for your customers'],
-    ['Sold this month', d.soldThisMonth, CheckCheck, 'Equipment put to work'],
+    [t('Available equipment'), d.available, Package, t('Ready for a new home')],
+    [t('Reserved equipment'), d.reserved, Clock, t('Held for your customers')],
     [
-      'Inventory cost value',
+      t('Sold this month'),
+      d.soldThisMonth,
+      CheckCheck,
+      t('Equipment put to work'),
+    ],
+    [
+      t('Inventory cost value'),
       money(d.inventoryCostValue),
       Wallet,
-      'Available + reserved',
+      t('Available + reserved'),
     ],
-    ['Active leads', d.activeLeads, Users, 'Conversations in progress'],
-    ['Follow-ups today', d.dueToday, CalendarClock, `${d.overdue} overdue`],
+    [t('Active leads'), d.activeLeads, Users, t('Conversations in progress')],
+    [
+      t('Follow-ups today'),
+      d.dueToday,
+      CalendarClock,
+      localized(`${d.overdue} overdue`, `เลยกำหนด ${d.overdue} รายการ`),
+    ],
   ] as const;
   return (
     <>
       <Header
-        title="Your business at a glance"
-        subtitle="A clear view of your equipment, customers, and next steps."
-        action={<AddLink to="/inventory/new">Add equipment</AddLink>}
+        title={t('Your business at a glance')}
+        subtitle={t(
+          'A clear view of your equipment, customers, and next steps.',
+        )}
+        action={<AddLink to="/inventory/new">{t('Add equipment')}</AddLink>}
       />
       <ErrorBox message={error} />
       {d.overdue > 0 && (
@@ -54,10 +67,12 @@ export function DashboardPage() {
           <CalendarClock size={21} />
           <span>
             <strong>
-              {d.overdue} follow-up{d.overdue !== 1 ? 's' : ''} need your
-              attention
+              {localized(
+                `${d.overdue} follow-ups need your attention`,
+                `มี ${d.overdue} รายการที่ต้องติดตาม`,
+              )}
             </strong>
-            <small>A quick check-in can move a deal forward.</small>
+            <small>{t('A quick check-in can move a deal forward.')}</small>
           </span>
           <ArrowUpRight size={20} />
         </Link>
@@ -77,8 +92,8 @@ export function DashboardPage() {
       <div className="dashboard-grid">
         <section className="panel">
           <div className="section-heading">
-            <h2>Recent equipment</h2>
-            <SectionLink to="/inventory">View inventory</SectionLink>
+            <h2>{t('Recent equipment')}</h2>
+            <SectionLink to="/inventory">{t('View inventory')}</SectionLink>
           </div>
           {d.recentProducts.length ? (
             d.recentProducts.map((p) => (
@@ -91,7 +106,7 @@ export function DashboardPage() {
                     {p.brand} {p.model}
                   </strong>
                   <small>
-                    {p.sku} · {p.category || 'Uncategorized'}
+                    {p.sku} · {p.category || t('Uncategorized')}
                   </small>
                 </div>
                 <div className="align-right">
@@ -101,15 +116,17 @@ export function DashboardPage() {
               </Link>
             ))
           ) : (
-            <Empty title="No products yet">
-              <Link to="/inventory/new">Add your first equipment item.</Link>
+            <Empty title={t('No products yet')}>
+              <Link to="/inventory/new">
+                {t('Add your first equipment item.')}
+              </Link>
             </Empty>
           )}
         </section>
         <section className="panel">
           <div className="section-heading">
-            <h2>Next conversations</h2>
-            <SectionLink to="/followups">View all</SectionLink>
+            <h2>{t('Next conversations')}</h2>
+            <SectionLink to="/followups">{t('View all')}</SectionLink>
           </div>
           {d.followups.length ? (
             d.followups.map((l) => (
@@ -126,17 +143,17 @@ export function DashboardPage() {
               </Link>
             ))
           ) : (
-            <Empty title="You're all caught up">
-              <p>No follow-ups scheduled.</p>
+            <Empty title={t("You're all caught up")}>
+              <p>{t('No follow-ups scheduled.')}</p>
             </Empty>
           )}
         </section>
       </div>
       <section className="panel">
         <div className="section-heading">
-          <h2>Recent sales</h2>
+          <h2>{t('Recent sales')}</h2>
           <SectionLink to="/inventory?status=SOLD">
-            View sold equipment
+            {t('View sold equipment')}
           </SectionLink>
         </div>
         {d.recentSales.length ? (
@@ -156,7 +173,7 @@ export function DashboardPage() {
             </Link>
           ))
         ) : (
-          <p className="muted">Your completed sales will appear here.</p>
+          <p className="muted">{t('Your completed sales will appear here.')}</p>
         )}
       </section>
     </>

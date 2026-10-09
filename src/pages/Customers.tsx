@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Search, ArrowUpRight, Users } from 'lucide-react';
@@ -26,16 +27,16 @@ export function CustomersPage() {
   return (
     <>
       <Header
-        title="Your customers"
-        subtitle="The people behind your next sale."
-        action={<AddLink to="/customers/new">Add customer</AddLink>}
+        title={t('Your customers')}
+        subtitle={t('The people behind your next sale.')}
+        action={<AddLink to="/customers/new">{t('Add customer')}</AddLink>}
       />
       <div className="panel toolbar">
         <label className="search">
           <Search size={18} />
           <input
-            aria-label="Search customers"
-            placeholder="Search name, company, or phone…"
+            aria-label={t('Search customers')}
+            placeholder={t('Search name, company, or phone…')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -59,18 +60,18 @@ export function CustomersPage() {
                 <ArrowUpRight size={18} />
               </div>
               <h2>{c.name}</h2>
-              <p>{c.companyName || 'Individual customer'}</p>
-              <small>{c.phone || c.email || 'No contact details yet'}</small>
+              <p>{c.companyName || t('Individual customer')}</p>
+              <small>{c.phone || c.email || t('No contact details yet')}</small>
               <div className="card-footer">
                 <Users size={15} />
-                {c.interestedIn || 'Interests not set'}
+                {c.interestedIn || t('Interests not set')}
               </div>
             </Link>
           ))}
         </div>
       ) : (
-        <Empty title="No customers found">
-          <p>Add a customer to start a conversation.</p>
+        <Empty title={t('No customers found')}>
+          <p>{t('Add a customer to start a conversation.')}</p>
         </Empty>
       )}
     </>
@@ -128,8 +129,8 @@ export function CustomerForm() {
   return (
     <>
       <Header
-        title={id ? 'Edit customer' : 'Add a customer'}
-        subtitle="A name is all you need to get started."
+        title={id ? t('Edit customer') : t('Add a customer')}
+        subtitle={t('A name is all you need to get started.')}
       />
       <form onSubmit={(e) => void save(e)}>
         <ErrorBox message={error} />
@@ -137,14 +138,14 @@ export function CustomerForm() {
           <div className="form-grid">
             {(
               [
-                ['name', 'Name *'],
-                ['companyName', 'Company'],
-                ['contactName', 'Contact person'],
-                ['phone', 'Phone'],
-                ['lineId', 'LINE ID'],
-                ['email', 'Email'],
-                ['budget', 'Budget (THB)'],
-                ['interestedIn', 'Interested in'],
+                ['name', t('Name *')],
+                ['companyName', t('Company')],
+                ['contactName', t('Contact person')],
+                ['phone', t('Phone')],
+                ['lineId', t('LINE ID')],
+                ['email', t('Email')],
+                ['budget', t('Budget (THB)')],
+                ['interestedIn', t('Interested in')],
               ] as const
             ).map(([key, title]) => (
               <Field key={key} label={title} error={fields[key]}>
@@ -176,7 +177,7 @@ export function CustomerForm() {
               </Field>
             ))}
           </div>
-          <Field label="Notes" error={fields.notes}>
+          <Field label={t('Notes')} error={fields.notes}>
             <textarea
               rows={5}
               value={form.notes}
@@ -186,10 +187,10 @@ export function CustomerForm() {
         </section>
         <div className="form-actions">
           <Link className="button" to={id ? `/customers/${id}` : '/customers'}>
-            Cancel
+            {t('Cancel')}
           </Link>
           <button className="primary" disabled={busy}>
-            {busy ? 'Saving…' : 'Save customer'}
+            {busy ? t('Saving…') : t('Save customer')}
           </button>
         </div>
       </form>
@@ -215,39 +216,41 @@ export function CustomerPage() {
     <>
       <Header
         title={c.name}
-        subtitle={c.companyName || 'Individual customer'}
+        subtitle={c.companyName || t('Individual customer')}
         action={
           <Link className="button" to={`/customers/${id}/edit`}>
-            Edit customer
+            {t('Edit customer')}
           </Link>
         }
       />
       <div className="detail-grid">
         <section className="panel">
-          <h2>Contact & interests</h2>
+          <h2>{t('Contact & interests')}</h2>
           <div className="facts">
             {[
-              ['Contact person', c.contactName],
-              ['Phone', c.phone],
+              [t('Contact person'), c.contactName],
+              [t('Phone'), c.phone],
               ['LINE', c.lineId],
-              ['Email', c.email],
-              ['Budget', money(c.budget)],
-              ['Interested in', c.interestedIn],
-              ['Next follow-up', date(next?.nextFollowUpAt)],
+              [t('Email'), c.email],
+              [t('Budget'), money(c.budget)],
+              [t('Interested in'), c.interestedIn],
+              [t('Next follow-up'), date(next?.nextFollowUpAt)],
             ].map(([k, v]) => (
               <div key={k}>
                 <span>{k}</span>
-                <strong>{v || 'Not set'}</strong>
+                <strong>{v || t('Not set')}</strong>
               </div>
             ))}
           </div>
-          <h3>Notes</h3>
-          <p className="preserve">{c.notes || 'No notes yet.'}</p>
+          <h3>{t('Notes')}</h3>
+          <p className="preserve">{c.notes || t('No notes yet.')}</p>
         </section>
         <section className="panel">
           <div className="section-heading">
-            <h2>Leads & conversations</h2>
-            <AddLink to={`/sales/new?customerId=${id}`}>Add lead</AddLink>
+            <h2>{t('Leads & conversations')}</h2>
+            <AddLink to={`/sales/new?customerId=${id}`}>
+              {t('Add lead')}
+            </AddLink>
           </div>
           {d.leads.length ? (
             d.leads.map((l) => (
@@ -257,7 +260,7 @@ export function CustomerPage() {
                   <small>
                     {l.products
                       ?.map((p) => `${p.brand} ${p.model}`)
-                      .join(', ') || 'No equipment linked'}
+                      .join(', ') || t('No equipment linked')}
                   </small>
                   <small>{date(l.nextFollowUpAt)}</small>
                 </div>
@@ -265,8 +268,8 @@ export function CustomerPage() {
               </Link>
             ))
           ) : (
-            <Empty title="Start a conversation">
-              <p>Add a lead and the equipment they're interested in.</p>
+            <Empty title={t('Start a conversation')}>
+              <p>{t("Add a lead and the equipment they're interested in.")}</p>
             </Empty>
           )}
         </section>
