@@ -22,6 +22,12 @@ beforeAll(async () => {
       compatibilityFlags: ['nodejs_compat'],
       d1Databases: { DB: 'test-db' },
       r2Buckets: ['PRODUCT_IMAGES'],
+      serviceBindings: {
+        ASSETS: async () =>
+          new Response('<html>App</html>', {
+            headers: { 'Content-Type': 'text/html' },
+          }),
+      },
       bindings: {
         ENVIRONMENT: 'development',
         LOCAL_MOCK_EMAIL: 'tester@example.test',
@@ -76,6 +82,13 @@ async function customer() {
   return json<{ id: string }>(r);
 }
 describe('D1-backed inventory and sales', () => {
+  it('serves bound static assets with security headers', async () => {
+    const response = await mf.dispatchFetch('http://localhost/');
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('<html>App</html>');
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  });
   it('creates, reads, searches, updates and archives equipment', async () => {
     const p = await product('Cybex');
     expect(p.sku).toMatch(/^EQ-\d{4}-\d{4}$/);

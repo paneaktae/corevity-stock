@@ -99,13 +99,13 @@ const activities = async (
     .limit(50);
 app.use('*', secureHeaders());
 app.use('*', async (c, next) => {
+  await next();
   c.header('Cache-Control', 'private, no-store');
   if (!import.meta.env.DEV)
     c.header(
       'Content-Security-Policy',
       "default-src 'self'; img-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     );
-  return next();
 });
 app.use('*', auth);
 app.use('/api/*', async (c, next) => {
@@ -891,5 +891,8 @@ app.all('/api/*', (c) =>
     404,
   ),
 );
-app.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
+app.get('*', async (c) => {
+  const response = await c.env.ASSETS.fetch(c.req.raw);
+  return new Response(response.body, response);
+});
 export default app;
