@@ -46,6 +46,7 @@ export const leads = sqliteTable('leads', {
   status: text('status', {
     enum: ['NEW', 'CONTACTED', 'INTERESTED', 'QUOTED', 'WON', 'LOST'],
   }).notNull(),
+  assignedTo: text('assigned_to').notNull().default(''),
   estimatedValue: real('estimated_value').notNull(),
   lastContactAt: text('last_contact_at'),
   nextFollowUpAt: text('next_follow_up_at'),

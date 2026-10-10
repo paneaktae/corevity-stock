@@ -51,6 +51,7 @@ export const leadInput = z.object({
   customerId: z.string().min(1),
   title: z.string().trim().min(1).max(200),
   status: z.enum(leadStatuses).default('NEW'),
+  assignedTo: z.union([z.literal(''), z.string().email()]).default(''),
   estimatedValue: money,
   lastContactAt: z.string().datetime().nullable().default(null),
   nextFollowUpAt: z.string().datetime().nullable().default(null),

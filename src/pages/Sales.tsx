@@ -122,6 +122,7 @@ const blank: LeadFormValues = {
   customerId: '',
   title: '',
   status: 'NEW',
+  assignedTo: '',
   estimatedValue: '',
   lastContactAt: null,
   nextFollowUpAt: null,
@@ -137,6 +138,8 @@ export function LeadForm() {
   );
   const { data: customers } = useData<Customer[]>('/customers');
   const { data: products } = useData<Product[]>('/products');
+  const { data: salespeople } =
+    useData<{ email: string; lineReady: boolean }[]>('/line/salespeople');
   const [form, setForm] = useState<LeadFormValues>({
     ...blank,
     customerId: params.get('customerId') ?? '',
@@ -246,6 +249,36 @@ export function LeadForm() {
                     </option>
                   ))}
               </select>
+            </Field>
+            <Field
+              label={t('Responsible salesperson')}
+              error={fields.assignedTo}
+            >
+              <select
+                value={form.assignedTo}
+                onChange={(e) =>
+                  setForm({ ...form, assignedTo: e.target.value })
+                }
+              >
+                <option value="">{t('Unassigned — no LINE reminder')}</option>
+                {salespeople?.map((sale) => (
+                  <option key={sale.email} value={sale.email}>
+                    {sale.email} ·{' '}
+                    {t(sale.lineReady ? 'LINE ready' : 'LINE not connected')}
+                  </option>
+                ))}
+                {form.assignedTo &&
+                  !salespeople?.some(
+                    (sale) => sale.email === form.assignedTo,
+                  ) && (
+                    <option value={form.assignedTo}>{form.assignedTo}</option>
+                  )}
+              </select>
+              <small>
+                {t(
+                  'Only the assigned salesperson receives a reminder about 24 hours before the appointment.',
+                )}
+              </small>
             </Field>
             <Field label={t('Last contact')} error={fields.lastContactAt}>
               <input
@@ -474,6 +507,10 @@ export function LeadPage() {
       <div className="detail-grid">
         <section className="panel">
           <h2>{t('Customer & follow-up')}</h2>
+          <p>
+            {t('Responsible salesperson')}:{' '}
+            {l.assignedTo || t('Unassigned — no LINE reminder')}
+          </p>
           <Link className="text-link" to={`/customers/${d.customer.id}`}>
             {d.customer.name}
             <ArrowUpRight size={15} />

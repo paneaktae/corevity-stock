@@ -15,7 +15,13 @@ import {
   sql,
 } from 'drizzle-orm';
 import { z, ZodError } from 'zod';
-import { auth, type AppEnv } from './auth';
+import { auth, type AppEnv, type Bindings } from './auth';
+import { lineRoutes } from './line-routes';
+import {
+  allowedSales,
+  handleLineWebhook,
+  processLineReminders,
+} from './services/line';
 import * as s from './db/schema';
 import {
   productInput,
@@ -196,6 +202,7 @@ app.onError((error, c) => {
     500,
   );
 });
+app.route('/api/line', lineRoutes);
 app.get('/api/settings', async (c) => {
   const [row] = await db(c)
     .select()
@@ -515,6 +522,8 @@ app.post('/api/leads', async (c) => {
   const { productIds, ...data } = leadInput.parse(await c.req.json());
   if (data.status === 'WON')
     fail(422, 'Create the lead first, then choose the items sold.');
+  if (data.assignedTo && !allowedSales(c.env).includes(data.assignedTo))
+    fail(422, 'Choose an authorized salesperson.');
   await getCustomer(c, data.customerId);
   await validateProducts(c, productIds);
   const leadId = id();
@@ -548,6 +557,8 @@ app.patch('/api/leads/:id', async (c) => {
   const lead = await getLead(c, c.req.param('id'));
   const raw = await c.req.json();
   const { productIds, ...data } = provided(leadInput.partial().parse(raw), raw);
+  if (data.assignedTo && !allowedSales(c.env).includes(data.assignedTo))
+    fail(422, 'Choose an authorized salesperson.');
   if (data.status === 'WON' && lead.status !== 'WON')
     fail(422, 'Use the win action to select sold equipment.');
   if (lead.status === 'WON' && data.status && data.status !== 'WON')
@@ -895,4 +906,16 @@ app.get('*', async (c) => {
   const response = await c.env.ASSETS.fetch(c.req.raw);
   return new Response(response.body, response);
 });
-export default app;
+export default {
+  fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
+    if (new URL(request.url).pathname === '/api/line/webhook') {
+      return handleLineWebhook(request, env).catch(
+        () => new Response('Webhook processing failed', { status: 500 }),
+      );
+    }
+    return app.fetch(request, env, ctx);
+  },
+  async scheduled(_event: ScheduledController, env: Bindings) {
+    await processLineReminders(env);
+  },
+};

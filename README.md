@@ -6,7 +6,7 @@ A small internal backoffice for Corevity: receive equipment, upload photos, prep
 
 Live app: https://fitness-equipment-manager.analyziie.workers.dev
 
-Cloudflare resources and all three migrations have already been provisioned for this workspace. Do **not** run the resource-creation commands again for this account. Production starts empty; fake seed data is local only.
+Cloudflare resources and all four migrations have already been provisioned for this workspace. Do **not** run the resource-creation commands again for this account. Production starts empty; fake seed data is local only.
 
 - D1: `fitness-equipment-manager` (`de34955b-5a97-47a9-9169-3dbed136cb75`).
 - Private R2: `fitness-equipment-manager-images`.
@@ -17,7 +17,7 @@ Cloudflare resources and all three migrations have already been provisioned for 
 - AI uses OpenAI `gpt-4.1-mini` at `https://api.openai.com/v1`. The owner supplies `AI_API_KEY` as a Cloudflare Worker secret; never commit it.
 - Source is published on the `main` branch of [paneaktae/corevity-stock](https://github.com/paneaktae/corevity-stock). The initial GitHub Actions checks passed. Deployment remains manual.
 
-Verified: strict TypeScript, ESLint, 18 isolated backend/static-asset tests, production build, all remote schema migrations, and the live browser redirect to the Access sign-in screen. A signed-in production session and live AI generation have not yet been tested. Local visual/mobile browser testing was blocked by client permissions.
+Verified: strict TypeScript, ESLint, 26 isolated backend/static-asset/language/LINE tests, production build, all remote schema migrations, and the live browser redirect to the Access sign-in screen. A signed-in production session and live AI generation have not yet been tested. Local visual/mobile browser testing was blocked by client permissions.
 
 ## Architecture
 
@@ -233,3 +233,18 @@ Use normal GitHub authentication. `.gitignore` excludes local secrets, generated
 No accounting, payments/deposits, invoices, delivery, warranty, auto-posting or multi-company support. Manual sales-copy publishing, reliable stage buttons instead of drag-and-drop, and explicit reservation release keep the workflow simple. Inventory and customer list endpoints currently cap results at 1,000 rows; add pagination before inventory/CRM approaches that scale. Lead-based dashboard/follow-up totals include all leads. Image uploads do not transcode/compress or generate thumbnails. No automatic reservation-expiry job. Last-writer-wins detail editing for two users; stock transitions have stronger database guards.
 
 Logical later improvements: pagination, thumbnail generation, CSV export, reservation-expiry reminders, and a restore screen. Do not add those until the team needs them.
+
+## Personal LINE follow-up reminders
+
+Apply `0004_line_reminders.sql` before deploying this feature. Leads have `assignedTo` (an allowed Access email); existing leads remain unassigned until edited. Each salesperson must be in both Cloudflare Access and `ALLOWED_EMAILS`.
+
+1. Store `LINE_CHANNEL_ACCESS_TOKEN` and `LINE_CHANNEL_SECRET` as Worker secrets. The token is a Messaging API channel access token, not the numeric channel ID. Keep secrets out of Git and chat.
+2. Set the Messaging API webhook to `https://fitness-equipment-manager.analyziie.workers.dev/api/line/webhook`, press Verify, and enable **Use webhook** in LINE Developers. If the OA already has another webhook integration, coordinate a shared receiver first; do not silently replace it.
+3. Cloudflare Access has a dedicated path application for `fitness-equipment-manager.analyziie.workers.dev/api/line/webhook` with a bypass policy. This path has no app data APIs and accepts only POST requests authenticated by LINE HMAC-SHA256. All other routes still require Access JWT validation; descendants of the webhook path are not handled as webhooks.
+4. Set `APP_URL` to the production HTTPS origin. Configure the Worker cron `*/5 * * * *` (UTC). The handler checks every five minutes; reminders become eligible 24 hours before a future appointment. An appointment created with less than 24 hours left is eligible on the next run. Past and WON/LOST appointments are skipped.
+5. In Settings, each salesperson adds the OA as a friend, creates a connection code, and sends it privately to the OA. The code expires after 10 minutes, is stored hashed, and is single-use. Group chat codes are ignored. One LINE user can belong to only one app email. Connecting opts in; pause/disconnect controls are available. Unfollow events disable delivery.
+6. Choose **Responsible salesperson** in the lead form and set the next follow-up. Only that salesperson is notified. Messages include appointment time and a protected app link, without customer names, notes, lead titles, or prices.
+
+Delivery jobs are stored in D1 with a unique key for appointment/lead/recipient. Concurrent cron invocations acquire a lease; LINE retries reuse a UUID retry key. Transient network/429/5xx failures back off (5–60 minutes, maximum 12 attempts and 23 hours). Rescheduling/reassignment/cancellation invalidates stale jobs, with a final live check before each send. A change after the final check can race a message already in flight. LINE acceptance is not a delivery/read receipt; a blocked OA, quota or provider outage can prevent delivery. See the recipient's Settings for recent status. Failed jobs do not automatically restart after the retry window. Cron changes may take up to 15 minutes to propagate.
+
+Local tests use signed synthetic webhooks and an injected sender: no real LINE messages. Production end-to-end delivery requires an actual salesperson to link their own LINE and opt in. Do not simulate a real user's linking signature or change real appointments for a test.

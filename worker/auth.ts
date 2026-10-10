@@ -1,6 +1,12 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { MiddlewareHandler } from 'hono';
-export type Bindings = Env & { LOCAL_MOCK_EMAIL?: string; AI_API_KEY?: string };
+export type Bindings = Env & {
+  LOCAL_MOCK_EMAIL?: string;
+  AI_API_KEY?: string;
+  LINE_CHANNEL_ACCESS_TOKEN?: string;
+  LINE_CHANNEL_SECRET?: string;
+  APP_URL?: string;
+};
 export type AppEnv = { Bindings: Bindings; Variables: { email: string } };
 export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const url = new URL(c.req.url);

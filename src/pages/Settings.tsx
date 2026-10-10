@@ -1,3 +1,4 @@
+import { LineSettings } from '../components/LineSettings';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 import { ShieldCheck, Sparkles } from 'lucide-react';
@@ -28,6 +29,7 @@ export function SettingsPage() {
       />
       <ErrorBox message={error} />
       {saved && <div className="success">{t('Conditions saved.')}</div>}
+      <LineSettings />
       <div className="detail-grid">
         <section className="panel">
           <h2>{t('Equipment conditions')}</h2>

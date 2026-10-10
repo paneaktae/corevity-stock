@@ -1303,3 +1303,14 @@ html[lang='th'] .nav-label {
     font-size: 10px;
   }
 }
+
+.line-code {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--brand-soft);
+  border-radius: 8px;
+}
+.line-code input {
+  font-family: monospace;
+  font-size: 13px;
+}
