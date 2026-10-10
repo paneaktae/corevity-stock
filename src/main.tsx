@@ -16,6 +16,7 @@ import { InventoryPage, ProductPage, ProductForm } from './pages/Inventory';
 import { CustomersPage, CustomerPage, CustomerForm } from './pages/Customers';
 import { SalesPage, LeadPage, LeadForm, FollowupsPage } from './pages/Sales';
 import { ChatPage } from './pages/Chat';
+import { ChatBadge } from './components/ChatBadge';
 import { SettingsPage } from './pages/Settings';
 import './style.css';
 const navigation = [
@@ -48,6 +49,7 @@ function App() {
               <NavLink key={to} to={to} end={to === '/'}>
                 <Icon size={19} />
                 <span>{t(name)}</span>
+                {to === '/chat' && <ChatBadge />}
                 <ChevronRight className="nav-arrow" size={15} />
               </NavLink>
             ))}
