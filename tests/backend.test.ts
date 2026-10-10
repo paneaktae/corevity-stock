@@ -474,8 +474,17 @@ describe('AI response validation', () => {
     priceRating: 8.5,
     designRating: 7,
     qualityPerformanceRating: 9,
+    features: ['ปรับระดับแรงต้านได้'],
     strengths: ['แบรนด์เป็นที่รู้จัก'],
     weaknesses: ['ยังไม่มีข้อมูลการรับประกัน'],
+    analysisSources: [
+      { title: 'Manufacturer manual', url: 'https://example.com/manual' },
+    ],
+    ratingReasons: {
+      price: 'มีราคาอ้างอิงจากแหล่งข้อมูล',
+      design: 'มีข้อมูลการออกแบบจากคู่มือ',
+      qualityPerformance: 'มีข้อมูลสมรรถนะจากคู่มือ',
+    },
   };
   it('accepts valid structured JSON and fenced JSON', () => {
     expect(parseDescriptions(JSON.stringify(valid))).toEqual(valid);
