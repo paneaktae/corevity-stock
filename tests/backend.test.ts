@@ -145,17 +145,23 @@ describe('D1-backed inventory and sales', () => {
       priceRating: number;
       designRating: number;
       qualityPerformanceRating: number;
+      strengths: string[];
+      weaknesses: string[];
     }>(
       await request(`/products/${p.id}`, 'PATCH', {
         priceRating: 8.5,
         designRating: 7,
         qualityPerformanceRating: 9.25,
+        strengths: ['แบรนด์เป็นที่รู้จัก'],
+        weaknesses: ['ยังไม่มีข้อมูลการรับประกัน'],
       }),
     );
     expect(saved).toMatchObject({
       priceRating: 8.5,
       designRating: 7,
       qualityPerformanceRating: 9.25,
+      strengths: ['แบรนด์เป็นที่รู้จัก'],
+      weaknesses: ['ยังไม่มีข้อมูลการรับประกัน'],
     });
     expect(
       (await request(`/products/${p.id}`, 'PATCH', { priceRating: 10.1 }))
@@ -468,6 +474,8 @@ describe('AI response validation', () => {
     priceRating: 8.5,
     designRating: 7,
     qualityPerformanceRating: 9,
+    strengths: ['แบรนด์เป็นที่รู้จัก'],
+    weaknesses: ['ยังไม่มีข้อมูลการรับประกัน'],
   };
   it('accepts valid structured JSON and fenced JSON', () => {
     expect(parseDescriptions(JSON.stringify(valid))).toEqual(valid);

@@ -1,0 +1,2 @@
+ALTER TABLE products ADD COLUMN strengths TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE products ADD COLUMN weaknesses TEXT NOT NULL DEFAULT '[]';

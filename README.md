@@ -14,7 +14,7 @@ Cloudflare resources and all four migrations have already been provisioned for t
 - Access application: `Fitness Equipment Manager`, covering the complete workers.dev hostname.
 - Email-code sign-in: only `analyziie@gmail.com` is allowed initially. No second user has been supplied. Add the second address to both the Access policy and `ALLOWED_EMAILS`, then redeploy.
 - Preview URLs are disabled. The production workers.dev URL is intentionally enabled **after** the Access application was created.
-- AI uses OpenAI `gpt-4.1-mini` at `https://api.openai.com/v1`. The owner supplies `AI_API_KEY` as a Cloudflare Worker secret; never commit it. Each generation also returns 0–10 ratings for price, design, and quality/performance; a neutral 5 is required when the supplied product data is insufficient.
+- AI uses OpenAI `gpt-4.1-mini` at `https://api.openai.com/v1`. The owner supplies `AI_API_KEY` as a Cloudflare Worker secret; never commit it. Each generation returns detailed Thai/English copy, factual Thai strengths and weaknesses, and 0–10 ratings for price, design, and quality/performance. Unsupported points are omitted and a neutral 5 is required when the supplied product data is insufficient for a score.
 - Source is published on the `main` branch of [paneaktae/corevity-stock](https://github.com/paneaktae/corevity-stock). The initial GitHub Actions checks passed. Deployment remains manual.
 
 Verified: strict TypeScript, ESLint, 26 isolated backend/static-asset/language/LINE tests, production build, all remote schema migrations, and the live browser redirect to the Access sign-in screen. A signed-in production session and live AI generation have not yet been tested. Local visual/mobile browser testing was blocked by client permissions.
@@ -44,7 +44,7 @@ Use the language selector in the top bar to switch between Thai and English. The
 - Six-stage sales board and list, product associations, quick status actions, contact and follow-up tracking.
 - Customer-linked reservations, optional expiry and notes, release and visible reserved customer.
 - Winning a lead explicitly selects sold products. D1 batches and sale constraints prevent partial wins, duplicate sales and selling a product held for another customer. Unselected products remain unchanged.
-- Reviewed AI drafts for Thai, English, short description and Facebook copy, with saved 0–10 product ratings for price, design, and quality/performance. Saving requires confirmation before replacing matching text and scores. Copy buttons support manual publishing.
+- Reviewed AI drafts for Thai, English, short description and Facebook copy, with editable strengths, weaknesses, and saved 0–10 product ratings for price, design, and quality/performance. Saving requires confirmation before replacing matching text, analysis, and scores. Copy buttons support manual publishing.
 - Configurable equipment conditions and an activity log with authenticated email.
 
 ## Local development

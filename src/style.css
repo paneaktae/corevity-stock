@@ -828,6 +828,30 @@ td small {
   border-radius: inherit;
   background: var(--brand-blue);
 }
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0 4px;
+}
+.analysis-card {
+  border-radius: 10px;
+  padding: 15px;
+  background: #fff;
+  border: 1px solid #dfe4ea;
+}
+.analysis-card h4 {
+  margin: 0 0 9px;
+  color: var(--brand-blue-dark);
+}
+.analysis-card ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #56667c;
+}
+.analysis-card li + li {
+  margin-top: 7px;
+}
 .activity {
   display: flex;
   gap: 12px;
@@ -1547,7 +1571,8 @@ a.chat-product:hover {
   color: #64748b;
 }
 @media (max-width: 760px) {
-  .rating-grid {
+  .rating-grid,
+  .analysis-grid {
     grid-template-columns: 1fr;
   }
   .chat-heading {

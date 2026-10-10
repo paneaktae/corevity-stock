@@ -49,6 +49,25 @@ const fail = (status: 400 | 404 | 409 | 422, message: string): never => {
   throw new HTTPException(status, { message });
 };
 const db = (c: Parameters<typeof auth>[0]) => drizzle(c.env.DB);
+function parseProductBullets(value: string | null): string[] {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]');
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+function productResponse<T extends { strengths: string; weaknesses: string }>(
+  product: T,
+) {
+  return {
+    ...product,
+    strengths: parseProductBullets(product.strengths),
+    weaknesses: parseProductBullets(product.weaknesses),
+  };
+}
 const activity = (
   c: Parameters<typeof auth>[0],
   entityType: string,
@@ -73,7 +92,7 @@ const getProduct = async (c: Parameters<typeof auth>[0], productId: string) => {
     .from(s.products)
     .where(and(eq(s.products.id, productId), isNull(s.products.archivedAt)));
   if (!p) fail(404, 'Equipment not found.');
-  return p;
+  return productResponse(p);
 };
 const getLead = async (c: Parameters<typeof auth>[0], leadId: string) => {
   const [l] = await db(c).select().from(s.leads).where(eq(s.leads.id, leadId));
@@ -291,7 +310,8 @@ async function productList(c: Parameters<typeof auth>[0]) {
     .from(s.products)
     .where(and(...clauses))
     .orderBy(order)
-    .limit(1000);
+    .limit(1000)
+    .then((rows) => rows.map(productResponse));
 }
 app.get('/api/products', async (c) => c.json(await productList(c)));
 app.post('/api/products', async (c) => {
@@ -354,6 +374,14 @@ app.patch('/api/products/:id', async (c) => {
   const p = await getProduct(c, c.req.param('id'));
   const raw = await c.req.json();
   const data = provided(productUpdateInput.parse(raw), raw);
+  const { strengths, weaknesses, ...fields } = data;
+  const dbData = {
+    ...fields,
+    ...(strengths === undefined ? {} : { strengths: JSON.stringify(strengths) }),
+    ...(weaknesses === undefined
+      ? {}
+      : { weaknesses: JSON.stringify(weaknesses) }),
+  };
   if (data.status && data.status !== p.status)
     fail(
       422,
@@ -370,7 +398,7 @@ app.patch('/api/products/:id', async (c) => {
   await db(c).batch([
     db(c)
       .update(s.products)
-      .set({ ...data, updatedAt: now() })
+      .set({ ...dbData, updatedAt: now() })
       .where(eq(s.products.id, p.id)),
     activity(c, 'product', p.id, 'updated', 'Equipment details updated'),
   ]);
@@ -507,7 +535,9 @@ async function leadList(c: Parameters<typeof auth>[0]): Promise<Lead[]> {
   return rows.map((l) => ({
     ...l,
     productIds: links.filter((p) => p.leadId === l.id).map((p) => p.product.id),
-    products: links.filter((p) => p.leadId === l.id).map((p) => p.product),
+    products: links
+      .filter((p) => p.leadId === l.id)
+      .map((p) => productResponse(p.product)),
   }));
 }
 app.get('/api/customers/:id', async (c) => {
@@ -555,7 +585,7 @@ app.get('/api/leads/:id', async (c) => {
   return c.json({
     lead: { ...lead, productIds: linked.map((p) => p.product.id) },
     customer: await getCustomer(c, lead.customerId),
-    products: linked.map((p) => p.product),
+    products: linked.map((p) => productResponse(p.product)),
     activities: await activities(c, 'lead', lead.id),
   });
 });
@@ -687,11 +717,12 @@ app.get('/api/followups', async (c) => {
 });
 app.get('/api/dashboard', async (c) => {
   const all = await db(c).select().from(s.products);
-  const products = all.filter((p) => !p.archivedAt);
+  const products = all.filter((p) => !p.archivedAt).map(productResponse);
+  const allProducts = all.map(productResponse);
   const leads = await leadList(c);
   const active = leads.filter((l) => !['WON', 'LOST'].includes(l.status));
   const today = day(now(), c.env.BUSINESS_TIMEZONE);
-  const sales = all.filter((p) => p.status === 'SOLD' && p.soldAt);
+  const sales = allProducts.filter((p) => p.status === 'SOLD' && p.soldAt);
   const followups = active
     .filter((l) => l.nextFollowUpAt)
     .sort((a, b) => a.nextFollowUpAt!.localeCompare(b.nextFollowUpAt!));
@@ -747,6 +778,8 @@ app.post('/api/products/:id/generate-description', async (c) => {
             priceRating: output.priceRating,
             designRating: output.designRating,
             qualityPerformanceRating: output.qualityPerformanceRating,
+            strengths: output.strengths,
+            weaknesses: output.weaknesses,
           },
     );
   } catch (error) {

@@ -37,10 +37,15 @@ export const productInput = z.object({
   notes: text,
 });
 const rating = z.number().finite().min(0).max(10).nullable();
+const bulletList = z
+  .array(z.string().trim().min(1).max(500))
+  .max(8);
 export const productUpdateInput = productInput.partial().extend({
   priceRating: rating.optional(),
   designRating: rating.optional(),
   qualityPerformanceRating: rating.optional(),
+  strengths: bulletList.optional(),
+  weaknesses: bulletList.optional(),
 });
 export const customerInput = z.object({
   name: z.string().trim().min(1).max(200),
@@ -73,6 +78,8 @@ export const descriptionSchema = z
     priceRating: rating.unwrap(),
     designRating: rating.unwrap(),
     qualityPerformanceRating: rating.unwrap(),
+    strengths: bulletList,
+    weaknesses: bulletList,
   })
   .strict();
 export const generateInput = z.object({
@@ -100,6 +107,8 @@ export type Product = ProductInput & {
   priceRating: number | null;
   designRating: number | null;
   qualityPerformanceRating: number | null;
+  strengths: string[];
+  weaknesses: string[];
   primaryImageId?: string | null;
   reservedCustomerName?: string | null;
 };

@@ -22,6 +22,8 @@ export const products = sqliteTable('products', {
   priceRating: real('price_rating'),
   designRating: real('design_rating'),
   qualityPerformanceRating: real('quality_performance_rating'),
+  strengths: text('strengths').notNull().default('[]'),
+  weaknesses: text('weaknesses').notNull().default('[]'),
   notes: text('notes').notNull(),
   soldAt: text('sold_at'),
   archivedAt: text('archived_at'),

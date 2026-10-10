@@ -278,7 +278,14 @@ const ratings = [
   ['designRating', 'Design'],
   ['qualityPerformanceRating', 'Quality & performance'],
 ] as const;
+const analysisLists = [
+  ['strengths', 'Strengths'],
+  ['weaknesses', 'Weaknesses / considerations'],
+] as const;
 type RatingValues = Partial<Record<(typeof ratings)[number][0], number | null>>;
+type AnalysisValues = Partial<
+  Record<(typeof analysisLists)[number][0], string[]>
+>;
 function RatingCards({ values }: { values: RatingValues }) {
   return (
     <div className="rating-grid">
@@ -310,6 +317,26 @@ function RatingCards({ values }: { values: RatingValues }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+function AnalysisLists({ values }: { values: AnalysisValues }) {
+  return (
+    <div className="analysis-grid">
+      {analysisLists.map(([key, title]) => (
+        <div className="analysis-card" key={key}>
+          <h4>{t(title)}</h4>
+          {values[key]?.length ? (
+            <ul>
+              {values[key]!.map((item, index) => (
+                <li key={`${key}-${index}`}>{item}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">{t('No supported points yet.')}</p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -880,6 +907,24 @@ export function ProductPage() {
             </p>
             <h4>{t('AI rating')}</h4>
             <RatingCards values={draft} />
+            {analysisLists.map(([key, title]) => (
+              <Field label={title} key={key}>
+                <textarea
+                  rows={4}
+                  value={(draft[key] ?? []).join('\n')}
+                  placeholder={t('One point per line')}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      [key]: e.target.value
+                        .split('\n')
+                        .map((item) => item.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+              </Field>
+            ))}
             {descriptions
               .filter(([key]) => draft[key] !== undefined)
               .map(([key, title]) => (
@@ -947,6 +992,7 @@ export function ProductPage() {
             </div>
           </div>
           <RatingCards values={p} />
+          <AnalysisLists values={p} />
         </div>
         {descriptions.map(([key, title]) => (
           <div className="description" key={key}>
