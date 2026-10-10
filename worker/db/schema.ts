@@ -119,3 +119,11 @@ export const salespeople = sqliteTable('salespeople', {
   phone: text('phone').notNull().default(''),
   updatedAt: text('updated_at').notNull(),
 });
+export const chatMessages = sqliteTable('chat_messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  requestId: text('request_id').notNull(),
+  senderEmail: text('sender_email').notNull(),
+  body: text('body').notNull(),
+  productIds: text('product_ids').notNull().default('[]'),
+  createdAt: text('created_at').notNull(),
+});

@@ -188,3 +188,41 @@ export function salespersonName(sale: Salesperson) {
     [sale.firstName, sale.lastName].filter(Boolean).join(' ') || sale.email
   );
 }
+
+export const chatInput = z
+  .object({
+    requestId: z.string().uuid(),
+    body: z.string().trim().max(2000).default(''),
+    productIds: z.array(z.string().min(1).max(100)).max(3).default([]),
+  })
+  .strict()
+  .refine((v) => !!v.body || v.productIds.length > 0, {
+    message: 'Write a message or attach equipment.',
+  })
+  .refine((v) => new Set(v.productIds).size === v.productIds.length, {
+    message: 'Each equipment item can only be attached once.',
+  });
+export type ChatProduct = Pick<
+  Product,
+  | 'id'
+  | 'sku'
+  | 'brand'
+  | 'model'
+  | 'status'
+  | 'sellingPrice'
+  | 'primaryImageId'
+  | 'archivedAt'
+>;
+export type ChatMessage = {
+  id: number;
+  senderEmail: string;
+  senderName: string;
+  body: string;
+  createdAt: string;
+  products: ChatProduct[];
+};
+export type ChatPage = {
+  messages: ChatMessage[];
+  hasMore: boolean;
+  userEmail: string;
+};

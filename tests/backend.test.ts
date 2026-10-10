@@ -556,3 +556,147 @@ describe('Salesperson profiles', () => {
     ).toBeNull();
   });
 });
+
+describe('Private shared team chat', () => {
+  it('stores authenticated messages and attached products, including attachment-only messages', async () => {
+    const p = await product('Chat equipment');
+    const sent = await request('/chat', 'POST', {
+      requestId: crypto.randomUUID(),
+      body: 'Hello team <script>alert(1)</script>',
+      productIds: [p.id],
+    });
+    expect(sent.status).toBe(201);
+    const m = await json<{
+      id: number;
+      senderEmail: string;
+      body: string;
+      products: { id: string; sku: string; purchaseCost?: number }[];
+    }>(sent);
+    expect(m.senderEmail).toBe('tester@example.test');
+    expect(m.products[0].id).toBe(p.id);
+    expect(m.products[0].purchaseCost).toBeUndefined();
+    const feed = await json<{ messages: (typeof m)[] }>(await request('/chat'));
+    expect(feed.messages.find((item) => item.id === m.id)?.body).toBe(m.body);
+    expect(
+      (
+        await request('/chat', 'POST', {
+          requestId: crypto.randomUUID(),
+          productIds: [p.id],
+        })
+      ).status,
+    ).toBe(201);
+    const db = await mf.getD1Database('DB');
+    await db
+      .prepare('UPDATE products SET archived_at=? WHERE id=?')
+      .bind(new Date().toISOString(), p.id)
+      .run();
+    const history = await json<{
+      messages: { id: number; products: { archivedAt: string }[] }[];
+    }>(await request('/chat'));
+    expect(
+      history.messages.find((item) => item.id === m.id)?.products[0].archivedAt,
+    ).toBeTruthy();
+    expect(
+      (
+        await request('/chat', 'POST', {
+          requestId: crypto.randomUUID(),
+          productIds: [p.id],
+        })
+      ).status,
+    ).toBe(422);
+  });
+  it('deduplicates concurrent retries and rejects changed content for the same request', async () => {
+    const payload = { requestId: crypto.randomUUID(), body: 'Send only once' };
+    const replies = await Promise.all([
+      request('/chat', 'POST', payload),
+      request('/chat', 'POST', payload),
+    ]);
+    const a = await json<{ id: number }>(replies[0]),
+      b = await json<{ id: number }>(replies[1]);
+    expect(a.id).toBe(b.id);
+    expect(
+      (await request('/chat', 'POST', { ...payload, body: 'Different' }))
+        .status,
+    ).toBe(409);
+    const db = await mf.getD1Database('DB');
+    expect(
+      await db
+        .prepare(
+          'SELECT count(*) AS count FROM chat_messages WHERE request_id=?',
+        )
+        .bind(payload.requestId)
+        .first('count'),
+    ).toBe(1);
+  });
+  it('rejects spoofed senders, invalid attachments, empty or excessive messages and cross-site writes', async () => {
+    for (const payload of [
+      { body: ' ' },
+      { body: 'x'.repeat(2001) },
+      { body: 'Hello', senderEmail: 'second@example.test' },
+      { productIds: ['missing'] },
+      { productIds: ['a', 'a'] },
+      { productIds: ['a', 'b', 'c', 'd'] },
+    ]) {
+      expect(
+        (
+          await request('/chat', 'POST', {
+            requestId: crypto.randomUUID(),
+            ...payload,
+          })
+        ).status,
+      ).toBe(422);
+    }
+    expect(
+      (
+        await request(
+          '/chat',
+          'POST',
+          { requestId: crypto.randomUUID(), body: 'Blocked' },
+          { Origin: 'https://other.test' },
+        )
+      ).status,
+    ).toBe(403);
+    const unauth = await mf.dispatchFetch('https://example.test/api/chat');
+    expect(unauth.status).toBe(503);
+  });
+  it('paginates a shared conversation without missing or duplicating teammate messages', async () => {
+    const db = await mf.getD1Database('DB');
+    await db.batch(
+      Array.from({ length: 55 }, (_, i) =>
+        db
+          .prepare(
+            'INSERT INTO chat_messages(request_id,sender_email,body,created_at) VALUES(?,?,?,?)',
+          )
+          .bind(
+            crypto.randomUUID(),
+            'second@example.test',
+            `Team message ${i}`,
+            new Date().toISOString(),
+          ),
+      ),
+    );
+    type Page = {
+      messages: { id: number; senderEmail: string; senderName: string }[];
+      hasMore: boolean;
+    };
+    const latest = await json<Page>(await request('/chat'));
+    expect(latest.messages).toHaveLength(50);
+    expect(latest.hasMore).toBe(true);
+    expect(latest.messages.at(-1)?.senderEmail).toBe('second@example.test');
+    expect(latest.messages.at(-1)?.senderName).toBe('วรดา ทดสอบ');
+    const older = await json<Page>(
+      await request(`/chat?before=${latest.messages[0].id}`),
+    );
+    expect(older.messages.every((m) => m.id < latest.messages[0].id)).toBe(
+      true,
+    );
+    const after = await json<Page>(
+      await request(`/chat?after=${latest.messages[0].id}`),
+    );
+    expect(after.messages.map((m) => m.id)).toEqual(
+      latest.messages.slice(1).map((m) => m.id),
+    );
+    expect((await request('/chat?after=-1')).status).toBe(422);
+    expect((await request('/chat?after=0&before=1')).status).toBe(422);
+  });
+});
