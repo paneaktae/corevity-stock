@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm';
 import { z, ZodError } from 'zod';
 import { auth, type AppEnv, type Bindings } from './auth';
+export { ChatRoom } from './chat-room';
 import { salespeopleRoutes } from './salespeople';
 import { chatRoutes } from './chat';
 import { lineRoutes } from './line-routes';

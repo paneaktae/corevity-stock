@@ -1331,9 +1331,17 @@ html[lang='th'] .nav-label {
   border-bottom: 1px solid var(--border);
   color: var(--brand-blue-dark);
 }
-.chat-heading small {
+.chat-connection {
   margin-left: auto;
   color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.chat-connection.connecting .status-dot,
+.chat-connection.reconnecting .status-dot {
+  background: #f59e0b;
 }
 .chat-feed {
   height: min(52vh, 580px);
@@ -1493,7 +1501,7 @@ a.chat-product:hover {
     flex-wrap: wrap;
     padding: 14px;
   }
-  .chat-heading small {
+  .chat-connection {
     width: 100%;
     margin-left: 0;
   }

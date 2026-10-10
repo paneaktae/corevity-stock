@@ -12,6 +12,12 @@
   "observability": {
     "enabled": true,
   },
+  "durable_objects": {
+    "bindings": [{ "name": "CHAT_ROOM", "class_name": "ChatRoom" }],
+  },
+  "migrations": [
+    { "tag": "chat-realtime-v1", "new_sqlite_classes": ["ChatRoom"] },
+  ],
   "preview_urls": false,
   "vars": {
     "ENVIRONMENT": "development",
@@ -43,6 +49,9 @@
       "workers_dev": true,
       "triggers": { "crons": ["*/5 * * * *"] },
       "preview_urls": false,
+      "durable_objects": {
+        "bindings": [{ "name": "CHAT_ROOM", "class_name": "ChatRoom" }],
+      },
       "vars": {
         "ENVIRONMENT": "production",
         "APP_URL": "https://fitness-equipment-manager.analyziie.workers.dev",

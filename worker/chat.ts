@@ -47,6 +47,13 @@ async function attachProducts(
   }));
 }
 export const chatRoutes = new Hono<AppEnv>();
+chatRoutes.get('/socket', async (c) => {
+  if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket')
+    return c.body('Expected WebSocket upgrade', 426);
+  return c.env.CHAT_ROOM.getByName('corevity-team', {
+    locationHint: 'apac',
+  }).fetch(c.req.raw);
+});
 chatRoutes.get('/', async (c) => {
   const { after, before } = pageInput.parse(c.req.query());
   const condition =
@@ -120,8 +127,19 @@ chatRoutes.post('/', async (c) => {
         'This message was already sent with different content. Refresh the chat.',
     });
   const { productIds: _productIds, ...message } = row;
-  return c.json(
-    (await attachProducts(c.env, [message]))[0],
-    existing ? 200 : 201,
+  const result = (await attachProducts(c.env, [message]))[0];
+  c.executionCtx.waitUntil(
+    c.env.CHAT_ROOM.getByName('corevity-team', { locationHint: 'apac' })
+      .broadcast(result)
+      .catch((error: unknown) =>
+        console.error(
+          JSON.stringify({
+            event: 'chat_broadcast_failed',
+            messageId: result.id,
+            type: error instanceof Error ? error.name : 'UnknownError',
+          }),
+        ),
+      ),
   );
+  return c.json(result, existing ? 200 : 201);
 });

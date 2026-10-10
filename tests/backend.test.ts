@@ -3,6 +3,7 @@ import { Miniflare, convertV4MiniflareOptions, FormData } from 'miniflare';
 import { build } from 'esbuild';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parseDescriptions } from '../worker/services/ai';
+import type { ChatMessage } from '../shared/schemas';
 let mf: Miniflare;
 beforeAll(async () => {
   const result = await build({
@@ -12,6 +13,7 @@ beforeAll(async () => {
     format: 'esm',
     platform: 'browser',
     target: 'es2022',
+    external: ['cloudflare:workers'],
     define: { 'import.meta.env.DEV': 'true' },
   });
   mf = new Miniflare(
@@ -21,6 +23,9 @@ beforeAll(async () => {
       compatibilityDate: '2026-10-09',
       compatibilityFlags: ['nodejs_compat'],
       d1Databases: { DB: 'test-db' },
+      durableObjects: {
+        CHAT_ROOM: { className: 'ChatRoom', useSQLite: true },
+      },
       r2Buckets: ['PRODUCT_IMAGES'],
       serviceBindings: {
         ASSETS: async () =>
@@ -558,6 +563,44 @@ describe('Salesperson profiles', () => {
 });
 
 describe('Private shared team chat', () => {
+  it('broadcasts persisted messages over an authenticated WebSocket', async () => {
+    expect((await request('/chat/socket')).status).toBe(426);
+    const response = await request('/chat/socket', 'GET', undefined, {
+      Upgrade: 'websocket',
+    });
+    expect(response.status).toBe(101);
+    const socket = response.webSocket;
+    expect(socket).not.toBeNull();
+    socket!.accept();
+    const received = new Promise<{ type: string; message: ChatMessage }>(
+      (resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error('Timed out waiting for chat broadcast')),
+          2_000,
+        );
+        socket!.addEventListener(
+          'message',
+          (event) => {
+            clearTimeout(timeout);
+            resolve(JSON.parse(String(event.data)));
+          },
+          { once: true },
+        );
+      },
+    );
+    const sent = await json<ChatMessage>(
+      await request('/chat', 'POST', {
+        requestId: crypto.randomUUID(),
+        body: 'Real-time message',
+      }),
+    );
+    const event = await received;
+    expect(event).toMatchObject({
+      type: 'chat.message',
+      message: { id: sent.id, body: 'Real-time message' },
+    });
+    socket!.close(1000, 'Test complete');
+  });
   it('stores authenticated messages and attached products, including attachment-only messages', async () => {
     const p = await product('Chat equipment');
     const sent = await request('/chat', 'POST', {

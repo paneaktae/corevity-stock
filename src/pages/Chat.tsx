@@ -105,6 +105,7 @@ function merge(current: ChatMessage[], incoming: ChatMessage[]) {
   incoming.forEach((m) => map.set(m.id, m));
   return [...map.values()].sort((a, b) => a.id - b.id);
 }
+type ConnectionState = 'connecting' | 'live' | 'reconnecting';
 export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [userEmail, setUserEmail] = useState('');
@@ -118,6 +119,7 @@ export function ChatPage() {
   const [picking, setPicking] = useState(false);
   const [sending, setSending] = useState(false);
   const [unseen, setUnseen] = useState(false);
+  const [connection, setConnection] = useState<ConnectionState>('connecting');
   const latest = useRef(0);
   const scroll = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
@@ -126,46 +128,113 @@ export function ChatPage() {
   const request = useRef<{ signature: string; id: string } | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    let initialized = false;
-    async function poll() {
-      let more = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let reconnectAttempts = 0;
+    let syncing = false;
+    let initialLoaded = false;
+    let stopped = false;
+
+    function addMessages(incoming: ChatMessage[]) {
+      if (!incoming.length) return;
+      latest.current = Math.max(
+        latest.current,
+        ...incoming.map((message) => message.id),
+      );
+      if (nearBottom.current) scrollNext.current = true;
+      else setUnseen(true);
+      setMessages((current) => merge(current, incoming));
+    }
+
+    async function sync(initial = false) {
+      if (syncing || document.hidden) return;
+      syncing = true;
+      const loadLatest = initial || !initialLoaded;
       try {
-        if (!document.hidden) {
+        for (let batch = 0; batch < 20; batch += 1) {
           const page = await api<ChatResult>(
-            initialized ? `/chat?after=${latest.current}` : '/chat',
+            loadLatest ? '/chat' : `/chat?after=${latest.current}`,
             { signal: controller.signal },
           );
           if (controller.signal.aborted) return;
           setUserEmail(page.userEmail);
           setSyncError('');
           setReady(true);
-          if (!initialized) {
+          if (loadLatest) {
             setHasOlder(page.hasMore);
             scrollNext.current = true;
-          } else more = page.hasMore;
-          if (page.messages.length) {
-            latest.current = Math.max(
-              latest.current,
-              ...page.messages.map((m) => m.id),
-            );
-            if (nearBottom.current) scrollNext.current = true;
-            else setUnseen(true);
-            setMessages((current) => merge(current, page.messages));
           }
-          initialized = true;
+          addMessages(page.messages);
+          initialLoaded = true;
+          if (loadLatest || !page.hasMore) break;
         }
       } catch (e) {
         if (!controller.signal.aborted) setSyncError((e as Error).message);
       } finally {
-        if (!controller.signal.aborted)
-          timer = setTimeout(() => void poll(), more ? 250 : 5000);
+        syncing = false;
       }
     }
-    void poll();
+
+    function connect() {
+      if (stopped || document.hidden) return;
+      setConnection(reconnectAttempts ? 'reconnecting' : 'connecting');
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      socket = new WebSocket(`${protocol}//${location.host}/api/chat/socket`);
+      socket.addEventListener('open', () => {
+        reconnectAttempts = 0;
+        setConnection('live');
+        void sync();
+      });
+      socket.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(String(event.data)) as {
+            type?: unknown;
+            message?: Partial<ChatMessage>;
+          };
+          if (
+            data.type === 'chat.message' &&
+            typeof data.message?.id === 'number' &&
+            typeof data.message.senderEmail === 'string' &&
+            typeof data.message.body === 'string' &&
+            Array.isArray(data.message.products)
+          )
+            addMessages([data.message as ChatMessage]);
+        } catch {
+          // Ignore malformed frames and keep the authenticated connection open.
+        }
+      });
+      socket.addEventListener('close', () => {
+        if (stopped || document.hidden) return;
+        setConnection('reconnecting');
+        const delay = Math.min(30_000, 1_000 * 2 ** reconnectAttempts);
+        reconnectAttempts += 1;
+        reconnectTimer = setTimeout(connect, delay);
+      });
+      socket.addEventListener('error', () => socket?.close());
+    }
+
+    function handleVisibility() {
+      if (document.hidden) {
+        socket?.close(1000, 'Page hidden');
+        clearTimeout(reconnectTimer);
+        return;
+      }
+      void sync();
+      if (!socket || socket.readyState >= WebSocket.CLOSING) connect();
+    }
+
+    void sync(true).then(connect);
+    const fallbackTimer = setInterval(() => {
+      if (socket?.readyState !== WebSocket.OPEN) void sync();
+    }, 5_000);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
+      stopped = true;
       controller.abort();
-      clearTimeout(timer);
+      clearTimeout(reconnectTimer);
+      clearInterval(fallbackTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      socket?.close(1000, 'Page closed');
     };
   }, []);
   useEffect(() => {
@@ -237,7 +306,16 @@ export function ChatPage() {
         <div className="chat-heading">
           <MessageCircle size={18} />
           <strong>{t('Corevity team')}</strong>
-          <small>{t('Updates automatically every 5 seconds')}</small>
+          <span className={`chat-connection ${connection}`}>
+            <span className="status-dot" />
+            {t(
+              connection === 'live'
+                ? 'Live'
+                : connection === 'connecting'
+                  ? 'Connecting…'
+                  : 'Reconnecting…',
+            )}
+          </span>
         </div>
         <ErrorBox message={syncError} />
         {!ready && !syncError && <Loading />}
