@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm';
 import { z, ZodError } from 'zod';
 import { auth, type AppEnv, type Bindings } from './auth';
+import { salespeopleRoutes } from './salespeople';
 import { lineRoutes } from './line-routes';
 import {
   allowedSales,
@@ -203,6 +204,7 @@ app.onError((error, c) => {
   );
 });
 app.route('/api/line', lineRoutes);
+app.route('/api/salespeople', salespeopleRoutes);
 app.get('/api/settings', async (c) => {
   const [row] = await db(c)
     .select()

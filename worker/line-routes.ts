@@ -1,12 +1,8 @@
+import { listSalespeople } from './salespeople';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from './auth';
-import {
-  allowedSales,
-  hashCode,
-  lineConfigured,
-  lineRequest,
-} from './services/line';
+import { hashCode, lineConfigured, lineRequest } from './services/line';
 export const lineRoutes = new Hono<AppEnv>();
 lineRoutes.get('/status', async (c) => {
   const account = await c.env.DB.prepare(
@@ -101,14 +97,6 @@ lineRoutes.delete('/link', async (c) => {
   ]);
   return c.json({ ok: true });
 });
-lineRoutes.get('/salespeople', async (c) => {
-  const rows = await c.env.DB.prepare(
-    'SELECT email,enabled FROM line_accounts',
-  ).all<{ email: string; enabled: number }>();
-  return c.json(
-    allowedSales(c.env).map((email) => ({
-      email,
-      lineReady: rows.results.some((r) => r.email === email && r.enabled === 1),
-    })),
-  );
-});
+lineRoutes.get('/salespeople', async (c) =>
+  c.json(await listSalespeople(c.env)),
+);

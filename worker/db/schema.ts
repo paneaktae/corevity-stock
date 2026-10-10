@@ -111,3 +111,11 @@ export const productSales = sqliteTable('product_sales', {
   sellingPrice: real('selling_price').notNull(),
   purchaseCost: real('purchase_cost').notNull(),
 });
+
+export const salespeople = sqliteTable('salespeople', {
+  email: text('email').primaryKey(),
+  firstName: text('first_name').notNull().default(''),
+  lastName: text('last_name').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  updatedAt: text('updated_at').notNull(),
+});

@@ -1,3 +1,4 @@
+import { SalespeopleSettings } from '../components/SalespeopleSettings';
 import { LineSettings } from '../components/LineSettings';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
@@ -29,6 +30,7 @@ export function SettingsPage() {
       />
       <ErrorBox message={error} />
       {saved && <div className="success">{t('Conditions saved.')}</div>}
+      <SalespeopleSettings />
       <LineSettings />
       <div className="detail-grid">
         <section className="panel">

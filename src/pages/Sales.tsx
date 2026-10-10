@@ -1,3 +1,5 @@
+import { SalespersonSelect } from '../components/SalespersonSelect';
+import { salespersonName, type Salesperson } from '../../shared/schemas';
 import { t, localized } from '../i18n';
 import { useEffect, useState, type FormEvent } from 'react';
 import {
@@ -36,6 +38,7 @@ import {
   Loading,
 } from '../components/ui';
 export function SalesPage() {
+  const { data: salespeople } = useData<Salesperson[]>('/salespeople');
   const { data, error } = useData<Lead[]>('/leads');
   const [view, setView] = useState('kanban');
   return (
@@ -82,6 +85,7 @@ export function SalesPage() {
                   <Link key={l.id} className="deal-card" to={`/sales/${l.id}`}>
                     <small>{l.customerName}</small>
                     <h3>{l.title}</h3>
+                    <small>{ownerName(l.assignedTo, salespeople)}</small>
                     <strong>{money(l.estimatedValue)}</strong>
                     <p>
                       {l.products?.map((p) => p.model).join(', ') ||
@@ -105,6 +109,7 @@ export function SalesPage() {
               <div className="grow">
                 <strong>{l.title}</strong>
                 <small>{l.customerName}</small>
+                <small>{ownerName(l.assignedTo, salespeople)}</small>
               </div>
               <strong>{money(l.estimatedValue)}</strong>
               <Badge value={l.status} />
@@ -138,8 +143,8 @@ export function LeadForm() {
   );
   const { data: customers } = useData<Customer[]>('/customers');
   const { data: products } = useData<Product[]>('/products');
-  const { data: salespeople } =
-    useData<{ email: string; lineReady: boolean }[]>('/line/salespeople');
+  const { data: salespeople, error: salesError } =
+    useData<Salesperson[]>('/salespeople');
   const [form, setForm] = useState<LeadFormValues>({
     ...blank,
     customerId: params.get('customerId') ?? '',
@@ -254,26 +259,12 @@ export function LeadForm() {
               label={t('Responsible salesperson')}
               error={fields.assignedTo}
             >
-              <select
+              <SalespersonSelect
                 value={form.assignedTo}
-                onChange={(e) =>
-                  setForm({ ...form, assignedTo: e.target.value })
-                }
-              >
-                <option value="">{t('Unassigned — no LINE reminder')}</option>
-                {salespeople?.map((sale) => (
-                  <option key={sale.email} value={sale.email}>
-                    {sale.email} ·{' '}
-                    {t(sale.lineReady ? 'LINE ready' : 'LINE not connected')}
-                  </option>
-                ))}
-                {form.assignedTo &&
-                  !salespeople?.some(
-                    (sale) => sale.email === form.assignedTo,
-                  ) && (
-                    <option value={form.assignedTo}>{form.assignedTo}</option>
-                  )}
-              </select>
+                onChange={(assignedTo) => setForm({ ...form, assignedTo })}
+                salespeople={salespeople}
+              />
+              <ErrorBox message={salesError} />
               <small>
                 {t(
                   'Only the assigned salesperson receives a reminder about 24 hours before the appointment.',
@@ -356,6 +347,9 @@ export function LeadForm() {
   );
 }
 export function LeadPage() {
+  const { data: salespeople, error: salesError } =
+    useData<Salesperson[]>('/salespeople');
+  const [assignedTo, setAssignedTo] = useState('');
   const { id } = useParams();
   const {
     data: d,
@@ -368,7 +362,10 @@ export function LeadPage() {
   const [sold, setSold] = useState<string[]>([]);
   const [followup, setFollowup] = useState('');
   useEffect(() => {
-    if (d) setFollowup(localDate(d.lead.nextFollowUpAt));
+    if (d) {
+      setFollowup(localDate(d.lead.nextFollowUpAt));
+      setAssignedTo(d.lead.assignedTo);
+    }
   }, [d]);
   async function action(path: string, body: unknown, method = 'PATCH') {
     setBusy(true);
@@ -509,7 +506,7 @@ export function LeadPage() {
           <h2>{t('Customer & follow-up')}</h2>
           <p>
             {t('Responsible salesperson')}:{' '}
-            {l.assignedTo || t('Unassigned — no LINE reminder')}
+            {ownerName(l.assignedTo, salespeople)}
           </p>
           <Link className="text-link" to={`/customers/${d.customer.id}`}>
             {d.customer.name}
@@ -527,9 +524,21 @@ export function LeadPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              void action(`/leads/${id}`, { nextFollowUpAt: toISO(followup) });
+              void action(`/leads/${id}`, {
+                nextFollowUpAt: toISO(followup),
+                assignedTo,
+              });
             }}
           >
+            <Field label={t('Responsible salesperson')}>
+              <SalespersonSelect
+                value={assignedTo}
+                onChange={setAssignedTo}
+                salespeople={salespeople}
+                disabled={busy || ['WON', 'LOST'].includes(l.status)}
+              />
+              <ErrorBox message={salesError} />
+            </Field>
             <Field label={t('Next follow-up')}>
               <input
                 type="datetime-local"
@@ -587,6 +596,7 @@ export function LeadPage() {
   );
 }
 export function FollowupsPage() {
+  const { data: salespeople } = useData<Salesperson[]>('/salespeople');
   const {
     data,
     error: loadError,
@@ -635,6 +645,10 @@ export function FollowupsPage() {
                         .join(', ') || t('No equipment linked')}
                     </p>
                     <strong>{money(l.estimatedValue)}</strong>
+                    <small>
+                      {t('Responsible salesperson')}:{' '}
+                      {ownerName(l.assignedTo, salespeople)}
+                    </small>
                     <small>
                       {t('Last contact:')}
                       {date(l.lastContactAt)}
@@ -693,4 +707,11 @@ export function FollowupsPage() {
       )}
     </>
   );
+}
+
+function ownerName(email: string, salespeople: Salesperson[] | undefined) {
+  const sale = salespeople?.find((s) => s.email === email);
+  return sale
+    ? salespersonName(sale)
+    : email || t('Unassigned — no LINE reminder');
 }

@@ -33,7 +33,7 @@ beforeAll(async () => {
         LOCAL_MOCK_EMAIL: 'tester@example.test',
         ACCESS_TEAM_DOMAIN: '',
         ACCESS_AUD: '',
-        ALLOWED_EMAILS: '',
+        ALLOWED_EMAILS: 'tester@example.test,second@example.test',
         AI_MODEL: '',
         AI_BASE_URL: '',
         MAX_UPLOAD_MB: '10',
@@ -448,5 +448,111 @@ describe('AI response validation', () => {
     expect(() =>
       parseDescriptions(JSON.stringify({ ...valid, secret: 'unwanted' })),
     ).toThrow();
+  });
+});
+
+describe('Salesperson profiles', () => {
+  it('persists Thai profiles, retains email identity and LINE mapping, and records the editor', async () => {
+    const before = await json<{ email: string; firstName: string }[]>(
+      await request('/salespeople'),
+    );
+    expect(before.map((s) => s.email)).toContain('second@example.test');
+    const db = await mf.getD1Database('DB');
+    await db
+      .prepare(
+        'INSERT INTO line_accounts(email,line_user_id,enabled,linked_at) VALUES(?,?,1,?)',
+      )
+      .bind(
+        'second@example.test',
+        'U' + 'a'.repeat(32),
+        new Date().toISOString(),
+      )
+      .run();
+    const c = await customer();
+    const created = await request('/leads', 'POST', {
+      customerId: c.id,
+      title: 'Assigned lead',
+      assignedTo: 'second@example.test',
+    });
+    expect(created.status).toBe(201);
+    const lead = await json<{ id: string }>(created);
+    const r = await request('/salespeople/second%40example.test', 'PUT', {
+      firstName: '  วรดา  ',
+      lastName: 'ทดสอบ',
+      phone: '0812345678',
+    });
+    expect(r.status).toBe(200);
+    const after = await json<
+      {
+        email: string;
+        firstName: string;
+        lastName: string;
+        phone: string;
+        lineReady: boolean;
+      }[]
+    >(await request('/salespeople'));
+    expect(after.find((s) => s.email === 'second@example.test')).toMatchObject({
+      firstName: 'วรดา',
+      lastName: 'ทดสอบ',
+      phone: '0812345678',
+      lineReady: true,
+    });
+    expect(
+      await db
+        .prepare('SELECT assigned_to FROM leads WHERE id=?')
+        .bind(lead.id)
+        .first('assigned_to'),
+    ).toBe('second@example.test');
+    expect(
+      await db
+        .prepare(
+          "SELECT user_email FROM activities WHERE entity_type='salesperson' AND entity_id='second@example.test'",
+        )
+        .first('user_email'),
+    ).toBe('tester@example.test');
+    const legacy = await json<{ email: string; firstName: string }[]>(
+      await request('/line/salespeople'),
+    );
+    expect(
+      legacy.find((s) => s.email === 'second@example.test')?.firstName,
+    ).toBe('วรดา');
+  });
+  it('rejects blank or excessive names, unknown fields and accounts without access', async () => {
+    for (const body of [
+      { firstName: ' ', lastName: 'Valid' },
+      { firstName: 'x'.repeat(101), lastName: 'Valid' },
+      { firstName: 'Valid', lastName: 'Name', email: 'new@example.test' },
+    ]) {
+      expect(
+        (await request('/salespeople/tester%40example.test', 'PUT', body))
+          .status,
+      ).toBe(422);
+    }
+    expect(
+      (
+        await request('/salespeople/outsider%40example.test', 'PUT', {
+          firstName: 'Not',
+          lastName: 'Allowed',
+        })
+      ).status,
+    ).toBe(422);
+    expect(
+      (
+        await request(
+          '/salespeople/tester%40example.test',
+          'PUT',
+          { firstName: 'Valid', lastName: 'Name' },
+          { Origin: 'https://other.test' },
+        )
+      ).status,
+    ).toBe(403);
+    const db = await mf.getD1Database('DB');
+    expect(
+      await db
+        .prepare(
+          "SELECT email FROM salespeople WHERE email='outsider@example.test'",
+        )
+        .first(),
+    ).toBeNull();
   });
 });

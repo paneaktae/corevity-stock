@@ -170,3 +170,21 @@ export type Dashboard = {
   followups: Lead[];
   recentSales: Product[];
 };
+
+export const salespersonInput = z
+  .object({
+    firstName: z.string().trim().min(1).max(100),
+    lastName: z.string().trim().min(1).max(100),
+    phone: z.string().trim().max(50).default(''),
+  })
+  .strict();
+export type SalespersonInput = z.infer<typeof salespersonInput>;
+export type Salesperson = SalespersonInput & {
+  email: string;
+  lineReady: boolean;
+};
+export function salespersonName(sale: Salesperson) {
+  return (
+    [sale.firstName, sale.lastName].filter(Boolean).join(' ') || sale.email
+  );
+}

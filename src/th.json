@@ -313,5 +313,16 @@
   "Choose an authorized salesperson.": "กรุณาเลือกเซลส์ที่มีสิทธิ์เข้าใช้งาน",
   "LINE access token is invalid. Ask your administrator to update it.": "Channel access token ไม่ถูกต้อง กรุณาให้ผู้ดูแลแก้ไข",
   "Could not verify LINE configuration. Please try again.": "ตรวจสอบการตั้งค่า LINE ไม่สำเร็จ กรุณาลองใหม่",
-  "LINE webhook must be enabled by your administrator before linking.": "ผู้ดูแลต้องเปิด Webhook ของ LINE ก่อนเชื่อมบัญชี"
+  "LINE webhook must be enabled by your administrator before linking.": "ผู้ดูแลต้องเปิด Webhook ของ LINE ก่อนเชื่อมบัญชี",
+  "Sales team": "ทีมเซลส์",
+  "Manage names and contact details for your authorized sales accounts. Select these people when assigning leads and follow-ups.": "จัดการชื่อและข้อมูลติดต่อของเซลส์ที่มีสิทธิ์ใช้งาน เพื่อเลือกผู้รับผิดชอบในงานขายและนัดติดตามลูกค้า",
+  "First name *": "ชื่อ *",
+  "Last name *": "นามสกุล *",
+  "Save salesperson": "บันทึกข้อมูลเซลส์",
+  "Salesperson saved.": "บันทึกข้อมูลเซลส์แล้ว",
+  "Name not set": "ยังไม่ได้กรอกชื่อ",
+  "Edit profile": "แก้ไขข้อมูล",
+  "New accounts must be granted workspace access before they appear here.": "บัญชีใหม่จะปรากฏที่นี่หลังจากได้รับสิทธิ์เข้าใช้งานระบบ",
+  "Loading sales team…": "กำลังโหลดรายชื่อเซลส์…",
+  "This salesperson does not have workspace access.": "เซลส์รายนี้ยังไม่มีสิทธิ์เข้าใช้งานระบบ"
 }
