@@ -57,17 +57,70 @@ export function InventoryPage() {
     condition: '',
     sort: 'newest',
   });
-  const { data, error } = useData<Product[]>(
+  const { data, error, reload } = useData<Product[]>(
     `/products?${new URLSearchParams({ q, ...filters })}`,
   );
-  const { data: all } = useData<Product[]>('/products');
+  const { data: all, reload: reloadAll } = useData<Product[]>('/products');
+  const [importError, setImportError] = useState('');
+  const [importNotice, setImportNotice] = useState('');
+  const [importing, setImporting] = useState(false);
+  async function importProducts(file: File | undefined) {
+    if (!file) return;
+    setImportError('');
+    setImportNotice('');
+    setImporting(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const result = await api<{ created: number }>('/products/import', {
+        method: 'POST',
+        body: form,
+      });
+      setImportNotice(
+        localized(
+          `${result.created} products imported from Excel.`,
+          `นำเข้าสินค้าจาก Excel แล้ว ${result.created} รายการ`,
+        ),
+      );
+      reload();
+      reloadAll();
+    } catch (error) {
+      setImportError((error as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  }
   return (
     <>
       <Header
         title={t('Equipment inventory')}
         subtitle={t('Everything on hand. Every detail in one place.')}
-        action={<AddLink to="/inventory/new">{t('Add equipment')}</AddLink>}
+        action={
+          <div className="header-actions">
+            <label className={`button${importing ? ' disabled' : ''}`}>
+              <Upload size={17} />
+              {importing ? t('Importing…') : t('Import Excel')}
+              <input
+                hidden
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                disabled={importing}
+                onChange={(event) => {
+                  void importProducts(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
+              />
+            </label>
+            <AddLink to="/inventory/new">{t('Add equipment')}</AddLink>
+          </div>
+        }
       />
+      {importNotice && (
+        <div className="success" role="status">
+          {importNotice}
+        </div>
+      )}
+      <ErrorBox message={importError} />
       <div className="toolbar panel">
         <label className="search">
           <Search size={18} />

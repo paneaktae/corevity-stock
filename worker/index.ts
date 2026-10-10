@@ -15,6 +15,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import { z, ZodError } from 'zod';
+import readXlsxFile from 'read-excel-file/web-worker';
 import { auth, type AppEnv, type Bindings } from './auth';
 export { ChatRoom } from './chat-room';
 import { salespeopleRoutes } from './salespeople';
@@ -49,6 +50,68 @@ const fail = (status: 400 | 404 | 409 | 422, message: string): never => {
   throw new HTTPException(status, { message });
 };
 const db = (c: Parameters<typeof auth>[0]) => drizzle(c.env.DB);
+const spreadsheetHeaders: Record<string, string[]> = {
+  brand: ['brand', 'แบรนด์', 'ยี่ห้อ'],
+  model: ['model', 'รุ่น'],
+  sku: ['sku', 'รหัสสินค้า'],
+  category: ['category', 'หมวดหมู่'],
+  serialNumber: ['serialnumber', 'serial', 'หมายเลขเครื่อง'],
+  condition: ['condition', 'สภาพ'],
+  purchaseCost: ['purchasecost', 'ต้นทุน', 'ต้นทุนซื้อ'],
+  sellingPrice: ['sellingprice', 'ราคาขาย'],
+  status: ['status', 'สถานะ'],
+  location: ['location', 'สถานที่', 'สถานที่จัดเก็บ'],
+  notes: ['notes', 'หมายเหตุ', 'หมายเหตุภายใน'],
+};
+const normalizeSpreadsheetHeader = (value: unknown) =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]/g, '');
+const spreadsheetValue = (row: Record<string, unknown>, field: string) => {
+  const names = spreadsheetHeaders[field] ?? [field];
+  const key = Object.keys(row).find((candidate) =>
+    names.some(
+      (name) =>
+        normalizeSpreadsheetHeader(candidate) ===
+        normalizeSpreadsheetHeader(name),
+    ),
+  );
+  return key === undefined ? '' : row[key];
+};
+const spreadsheetText = (value: unknown) => String(value ?? '').trim();
+const spreadsheetMoney = (value: unknown) => {
+  const text = spreadsheetText(value).replace(/,/g, '');
+  if (!text) return 0;
+  const number = Number(text);
+  if (!Number.isFinite(number)) throw new Error('must be a valid number');
+  return number;
+};
+const spreadsheetStatus = (value: unknown) => {
+  const thai: Record<string, 'AVAILABLE' | 'RESERVED' | 'SOLD'> = {
+    พร้อมขาย: 'AVAILABLE',
+    จองแล้ว: 'RESERVED',
+    ขายแล้ว: 'SOLD',
+  };
+  return (
+    (thai[spreadsheetText(value)] ?? spreadsheetText(value).toUpperCase()) ||
+    'AVAILABLE'
+  );
+};
+async function generatedSkus(c: Parameters<typeof auth>[0], count: number) {
+  if (!count) return [];
+  const year = new Date().getFullYear();
+  const sequence = await c.env.DB.prepare(
+    'INSERT INTO sku_sequences(year,value) VALUES (?,?) ON CONFLICT(year) DO UPDATE SET value=value+excluded.value RETURNING value',
+  )
+    .bind(year, count)
+    .first<{ value: number }>();
+  const first = sequence!.value - count + 1;
+  return Array.from(
+    { length: count },
+    (_, index) => `EQ-${year}-${String(first + index).padStart(4, '0')}`,
+  );
+}
 function parseProductBullets(value: string | null): string[] {
   try {
     const parsed: unknown = JSON.parse(value || '[]');
@@ -367,13 +430,8 @@ app.post('/api/products', async (c) => {
     fail(422, 'Save the equipment first, then reserve it for a customer.');
   const productId = id(),
     time = now();
-  const year = new Date().getFullYear();
-  const seq = await c.env.DB.prepare(
-    'INSERT INTO sku_sequences(year,value) VALUES (?,1) ON CONFLICT(year) DO UPDATE SET value=value+1 RETURNING value',
-  )
-    .bind(year)
-    .first<{ value: number }>();
-  const sku = data.sku || `EQ-${year}-${String(seq!.value).padStart(4, '0')}`;
+  const [generatedSku] = await generatedSkus(c, data.sku ? 0 : 1);
+  const sku = data.sku || generatedSku;
   await db(c).batch([
     db(c)
       .insert(s.products)
@@ -394,6 +452,122 @@ app.post('/api/products', async (c) => {
     ),
   ]);
   return c.json(await getProduct(c, productId), 201);
+});
+app.post('/api/products/import', async (c) => {
+  const form = await c.req.formData();
+  const file = form.get('file');
+  if (!file || typeof file === 'string')
+    fail(422, 'Choose an Excel (.xlsx) file.');
+  const upload = file as File;
+  if (!upload.name.toLowerCase().endsWith('.xlsx'))
+    fail(422, 'Choose an Excel (.xlsx) file.');
+  if (upload.size > 5 * 1024 * 1024)
+    fail(422, 'Excel file must be 5 MB or smaller.');
+  let rows: Record<string, unknown>[] = [];
+  try {
+    const [headers = [], ...dataRows] = await readXlsxFile(
+      await upload.arrayBuffer(),
+    );
+    rows = dataRows
+      .filter((row) => row.some((cell) => cell !== null && cell !== ''))
+      .map((row) =>
+        Object.fromEntries(
+          headers.map((header, index) => [
+            String(header ?? ''),
+            row[index] ?? '',
+          ]),
+        ),
+      );
+  } catch {
+    fail(422, 'The Excel file could not be read.');
+  }
+  if (!rows.length) fail(422, 'The Excel file has no product rows.');
+  if (rows.length > 200)
+    fail(422, 'Excel import supports up to 200 products at a time.');
+  const issues: string[] = [];
+  const parsed = rows.flatMap((row, index) => {
+    const rowNumber = index + 2;
+    try {
+      const status = spreadsheetStatus(spreadsheetValue(row, 'status'));
+      if (status === 'RESERVED')
+        throw new Error(
+          'reserved status requires a customer and cannot be imported',
+        );
+      return [
+        productInput.parse({
+          brand: spreadsheetText(spreadsheetValue(row, 'brand')),
+          model: spreadsheetText(spreadsheetValue(row, 'model')),
+          sku: spreadsheetText(spreadsheetValue(row, 'sku')) || undefined,
+          category: spreadsheetText(spreadsheetValue(row, 'category')),
+          serialNumber: spreadsheetText(spreadsheetValue(row, 'serialNumber')),
+          condition: spreadsheetText(spreadsheetValue(row, 'condition')),
+          purchaseCost: spreadsheetMoney(spreadsheetValue(row, 'purchaseCost')),
+          sellingPrice: spreadsheetMoney(spreadsheetValue(row, 'sellingPrice')),
+          status,
+          location: spreadsheetText(spreadsheetValue(row, 'location')),
+          notes: spreadsheetText(spreadsheetValue(row, 'notes')),
+        }),
+      ];
+    } catch (error) {
+      const message =
+        error instanceof ZodError
+          ? error.issues.map((issue) => issue.message).join(', ')
+          : error instanceof Error
+            ? error.message
+            : 'is invalid';
+      issues.push(`Row ${rowNumber}: ${message}`);
+      return [];
+    }
+  });
+  const suppliedSkus = parsed.flatMap((product) =>
+    product.sku ? [product.sku] : [],
+  );
+  if (new Set(suppliedSkus).size !== suppliedSkus.length)
+    issues.push('SKU values must be unique within the Excel file.');
+  if (issues.length)
+    fail(
+      422,
+      `Fix the Excel file before importing. ${issues.slice(0, 8).join(' ')}`,
+    );
+  if (suppliedSkus.length) {
+    const existing = await db(c)
+      .select({ sku: s.products.sku })
+      .from(s.products)
+      .where(inArray(s.products.sku, suppliedSkus));
+    if (existing.length)
+      fail(
+        409,
+        `SKU already exists: ${existing.map((product) => product.sku).join(', ')}`,
+      );
+  }
+  const generated = await generatedSkus(
+    c,
+    parsed.filter((product) => !product.sku).length,
+  );
+  let generatedIndex = 0;
+  const time = now();
+  const products = parsed.map((data) => ({
+    ...data,
+    sku: data.sku || generated[generatedIndex++],
+    id: id(),
+    createdAt: time,
+    updatedAt: time,
+    soldAt: data.status === 'SOLD' ? time : null,
+  }));
+  const operations = products.flatMap((product) => [
+    db(c).insert(s.products).values(product),
+    activity(
+      c,
+      'product',
+      product.id,
+      'created',
+      `${product.brand} ${product.model} imported from Excel`,
+    ),
+  ]);
+  await db(c).batch(
+    operations as [(typeof operations)[number], ...typeof operations],
+  );
+  return c.json({ created: products.length }, 201);
 });
 app.get('/api/products/:id', async (c) => {
   const product = await getProduct(c, c.req.param('id'));
@@ -584,6 +758,43 @@ app.patch('/api/customers/:id', async (c) => {
     activity(c, 'customer', customer.id, 'updated', 'Customer details updated'),
   ]);
   return c.json(await getCustomer(c, customer.id));
+});
+app.delete('/api/customers/:id', async (c) => {
+  const customer = await getCustomer(c, c.req.param('id'));
+  const [lead, reservation, sale] = await Promise.all([
+    db(c)
+      .select({ id: s.leads.id })
+      .from(s.leads)
+      .where(eq(s.leads.customerId, customer.id))
+      .limit(1),
+    db(c)
+      .select({ id: s.reservations.id })
+      .from(s.reservations)
+      .where(eq(s.reservations.customerId, customer.id))
+      .limit(1),
+    db(c)
+      .select({ productId: s.productSales.productId })
+      .from(s.productSales)
+      .where(eq(s.productSales.customerId, customer.id))
+      .limit(1),
+  ]);
+  if (lead.length || reservation.length || sale.length)
+    fail(
+      409,
+      'Cannot delete a customer with sales, reservations, or deal history.',
+    );
+  await db(c).batch([
+    db(c)
+      .delete(s.activities)
+      .where(
+        and(
+          eq(s.activities.entityType, 'customer'),
+          eq(s.activities.entityId, customer.id),
+        ),
+      ),
+    db(c).delete(s.customers).where(eq(s.customers.id, customer.id)),
+  ]);
+  return c.body(null, 204);
 });
 async function leadList(c: Parameters<typeof auth>[0]): Promise<Lead[]> {
   const rows = await db(c)

@@ -109,6 +109,36 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/products/${p.id}`, 'DELETE')).status).toBe(200);
     expect((await request(`/products/${p.id}`)).status).toBe(404);
   });
+  it('rejects invalid Excel imports before changing inventory', async () => {
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob(['not an Excel workbook'], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+      'products.xlsx',
+    );
+    const response = await mf.dispatchFetch(
+      'http://localhost/api/products/import',
+      { method: 'POST', body: form },
+    );
+    expect(response.status).toBe(422);
+  });
+  it('deletes customers without history and protects customer history', async () => {
+    const removable = await customer();
+    expect((await request(`/customers/${removable.id}`, 'DELETE')).status).toBe(
+      204,
+    );
+    expect((await request(`/customers/${removable.id}`)).status).toBe(404);
+    const retained = await customer();
+    await request('/leads', 'POST', {
+      customerId: retained.id,
+      title: 'Keep this history',
+    });
+    expect((await request(`/customers/${retained.id}`, 'DELETE')).status).toBe(
+      409,
+    );
+  });
   it('partial updates preserve omitted fields and linked products', async () => {
     const p = await product(),
       c = await customer();

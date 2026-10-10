@@ -1,7 +1,7 @@
 import { t } from '../i18n';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Search, ArrowUpRight, Users } from 'lucide-react';
+import { Search, ArrowUpRight, Users, Trash2 } from 'lucide-react';
 import type {
   Customer,
   CustomerDetail,
@@ -199,7 +199,10 @@ export function CustomerForm() {
 }
 export function CustomerPage() {
   const { id } = useParams();
+  const nav = useNavigate();
   const { data: d, error } = useData<CustomerDetail>(`/customers/${id}`);
+  const [actionError, setActionError] = useState('');
+  const [deleting, setDeleting] = useState(false);
   if (!d)
     return (
       <>
@@ -218,11 +221,35 @@ export function CustomerPage() {
         title={c.name}
         subtitle={c.companyName || t('Individual customer')}
         action={
-          <Link className="button" to={`/customers/${id}/edit`}>
-            {t('Edit customer')}
-          </Link>
+          <div className="header-actions">
+            <Link className="button" to={`/customers/${id}/edit`}>
+              {t('Edit customer')}
+            </Link>
+            <button
+              className="danger"
+              disabled={deleting}
+              onClick={async () => {
+                if (!confirm(t('Delete this customer? This cannot be undone.')))
+                  return;
+                setActionError('');
+                setDeleting(true);
+                try {
+                  await api(`/customers/${id}`, { method: 'DELETE' });
+                  nav('/customers');
+                } catch (error) {
+                  setActionError((error as Error).message);
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              <Trash2 size={17} />
+              {t('Delete customer')}
+            </button>
+          </div>
         }
       />
+      <ErrorBox message={actionError} />
       <div className="detail-grid">
         <section className="panel">
           <h2>{t('Contact & interests')}</h2>

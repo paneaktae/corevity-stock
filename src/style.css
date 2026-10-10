@@ -286,6 +286,11 @@ main {
   font-size: 13px;
   margin: 8px 0 0;
 }
+.header-actions {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
 .panel {
   background: #fff;
   border: 1px solid #dee2e8;
