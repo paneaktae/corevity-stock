@@ -273,6 +273,46 @@ const descriptions = [
   ['shortDescription', 'Short description'],
   ['facebookCaption', 'Facebook caption'],
 ] as const;
+const ratings = [
+  ['priceRating', 'Price'],
+  ['designRating', 'Design'],
+  ['qualityPerformanceRating', 'Quality & performance'],
+] as const;
+type RatingValues = Partial<Record<(typeof ratings)[number][0], number | null>>;
+function RatingCards({ values }: { values: RatingValues }) {
+  return (
+    <div className="rating-grid">
+      {ratings.map(([key, title]) => {
+        const score = values[key];
+        const value =
+          typeof score === 'number' && Number.isFinite(score)
+            ? Math.min(10, Math.max(0, score))
+            : null;
+        return (
+          <div className="rating-card" key={key}>
+            <span>{t(title)}</span>
+            <strong>{value == null ? '—' : value.toFixed(1)}</strong>
+            <small>{t('out of 10')}</small>
+            <div
+              className="rating-track"
+              {...(value == null
+                ? {}
+                : {
+                    role: 'meter',
+                    'aria-label': t(title),
+                    'aria-valuemin': 0,
+                    'aria-valuemax': 10,
+                    'aria-valuenow': value,
+                  })}
+            >
+              <span style={{ width: `${(value ?? 0) * 10}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 export function ProductForm() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -512,6 +552,9 @@ export function ProductPage() {
       </>
     );
   const p = d.product;
+  const hasRating = ratings.some(
+    ([key]) => typeof p[key] === 'number' && Number.isFinite(p[key]),
+  );
   const main = d.images.find((i) => i.isPrimary) ?? d.images[0];
   const profit = p.sellingPrice - p.purchaseCost;
   async function order(imageIds: string[], primaryId: string) {
@@ -835,6 +878,8 @@ export function ProductPage() {
                 'Check accuracy before saving. Existing saved text is unchanged.',
               )}
             </p>
+            <h4>{t('AI rating')}</h4>
+            <RatingCards values={draft} />
             {descriptions
               .filter(([key]) => draft[key] !== undefined)
               .map(([key, title]) => (
@@ -888,6 +933,21 @@ export function ProductPage() {
             </div>
           </div>
         )}
+        <div className="product-ratings">
+          <div className="section-heading">
+            <div>
+              <h3>{t('AI rating')}</h3>
+              <p className="muted">
+                {t(
+                  hasRating
+                    ? 'AI scores are estimates based on the saved product details.'
+                    : 'No AI rating yet. Generate a description to create scores.',
+                )}
+              </p>
+            </div>
+          </div>
+          <RatingCards values={p} />
+        </div>
         {descriptions.map(([key, title]) => (
           <div className="description" key={key}>
             <div className="section-heading">

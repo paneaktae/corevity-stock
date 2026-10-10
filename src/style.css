@@ -778,6 +778,56 @@ td small {
   color: #61738b;
   font-size: 12px;
 }
+.ai-draft h4 {
+  margin: 20px 0 10px;
+}
+.product-ratings {
+  border-top: 1px solid #dfe4ea;
+  margin-top: 22px;
+  padding-top: 20px;
+}
+.rating-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 4px;
+}
+.rating-card {
+  background: #f7faff;
+  border: 1px solid #cbdcf7;
+  border-radius: 10px;
+  padding: 15px;
+  color: var(--brand-blue-dark);
+}
+.rating-card > span,
+.rating-card small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+}
+.rating-card strong {
+  display: inline-block;
+  margin: 7px 5px 3px 0;
+  color: var(--brand-blue);
+  font-size: 26px;
+  line-height: 1;
+}
+.rating-card small {
+  display: inline;
+}
+.rating-track {
+  height: 5px;
+  overflow: hidden;
+  margin-top: 11px;
+  border-radius: 999px;
+  background: #dbe7f8;
+}
+.rating-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-blue);
+}
 .activity {
   display: flex;
   gap: 12px;
@@ -1497,6 +1547,9 @@ a.chat-product:hover {
   color: #64748b;
 }
 @media (max-width: 760px) {
+  .rating-grid {
+    grid-template-columns: 1fr;
+  }
   .chat-heading {
     flex-wrap: wrap;
     padding: 14px;

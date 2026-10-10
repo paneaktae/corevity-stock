@@ -28,6 +28,7 @@ import {
 import * as s from './db/schema';
 import {
   productInput,
+  productUpdateInput,
   customerInput,
   leadInput,
   generateInput,
@@ -352,7 +353,7 @@ app.get('/api/products/:id', async (c) => {
 app.patch('/api/products/:id', async (c) => {
   const p = await getProduct(c, c.req.param('id'));
   const raw = await c.req.json();
-  const data = provided(productInput.partial().parse(raw), raw);
+  const data = provided(productUpdateInput.parse(raw), raw);
   if (data.status && data.status !== p.status)
     fail(
       422,
@@ -738,7 +739,16 @@ app.post('/api/products/:id/generate-description', async (c) => {
       'ai_generated',
       'AI draft generated for review; not saved',
     );
-    return c.json(target === 'all' ? output : { [target]: output[target] });
+    return c.json(
+      target === 'all'
+        ? output
+        : {
+            [target]: output[target],
+            priceRating: output.priceRating,
+            designRating: output.designRating,
+            qualityPerformanceRating: output.qualityPerformanceRating,
+          },
+    );
   } catch (error) {
     const unconfigured =
       error instanceof Error && error.message === 'AI_NOT_CONFIGURED';

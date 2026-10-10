@@ -135,6 +135,33 @@ describe('D1-backed inventory and sales', () => {
     expect(updated.lead.estimatedValue).toBe(150);
     expect(updated.lead.productIds).toEqual([p.id]);
   });
+  it('stores only valid AI ratings from zero to ten', async () => {
+    const p = await product();
+    const initial = await json<{
+      product: { priceRating: number | null };
+    }>(await request(`/products/${p.id}`));
+    expect(initial.product.priceRating).toBeNull();
+    const saved = await json<{
+      priceRating: number;
+      designRating: number;
+      qualityPerformanceRating: number;
+    }>(
+      await request(`/products/${p.id}`, 'PATCH', {
+        priceRating: 8.5,
+        designRating: 7,
+        qualityPerformanceRating: 9.25,
+      }),
+    );
+    expect(saved).toMatchObject({
+      priceRating: 8.5,
+      designRating: 7,
+      qualityPerformanceRating: 9.25,
+    });
+    expect(
+      (await request(`/products/${p.id}`, 'PATCH', { priceRating: 10.1 }))
+        .status,
+    ).toBe(422);
+  });
   it('rejects a sale reserved for another customer and rolls the whole win back', async () => {
     const a = await product(),
       b = await product(),
@@ -438,6 +465,9 @@ describe('AI response validation', () => {
     descriptionEn: 'Fitness equipment',
     shortDescription: 'Used equipment',
     facebookCaption: 'อุปกรณ์พร้อมขาย',
+    priceRating: 8.5,
+    designRating: 7,
+    qualityPerformanceRating: 9,
   };
   it('accepts valid structured JSON and fenced JSON', () => {
     expect(parseDescriptions(JSON.stringify(valid))).toEqual(valid);
@@ -452,6 +482,9 @@ describe('AI response validation', () => {
     ).toThrow();
     expect(() =>
       parseDescriptions(JSON.stringify({ ...valid, secret: 'unwanted' })),
+    ).toThrow();
+    expect(() =>
+      parseDescriptions(JSON.stringify({ ...valid, priceRating: 11 })),
     ).toThrow();
   });
 });
