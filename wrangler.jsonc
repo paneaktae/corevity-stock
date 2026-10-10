@@ -48,7 +48,7 @@
         "APP_URL": "https://fitness-equipment-manager.analyziie.workers.dev",
         "ACCESS_TEAM_DOMAIN": "noisy-night-ad63.cloudflareaccess.com",
         "ACCESS_AUD": "f00b66a557481fac37222bf27af3e99649c5cd45fa260401d7b2f9b39b2ba58e",
-        "ALLOWED_EMAILS": "analyziie@gmail.com,vorada.chun@gmail.com",
+        "ALLOWED_EMAILS": "analyziie@gmail.com,vorada.chun@gmail.com,ketsalyn.p@gmail.com",
         "AI_MODEL": "gpt-4.1-mini",
         "AI_BASE_URL": "https://api.openai.com/v1",
         "MAX_UPLOAD_MB": "10",
