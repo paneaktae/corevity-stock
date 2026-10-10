@@ -1,0 +1,3 @@
+ALTER TABLE products ADD COLUMN features TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE products ADD COLUMN analysis_sources TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE products ADD COLUMN rating_reasons TEXT NOT NULL DEFAULT '{}';

@@ -37,15 +37,33 @@ export const productInput = z.object({
   notes: text,
 });
 const rating = z.number().finite().min(0).max(10).nullable();
-const bulletList = z
-  .array(z.string().trim().min(1).max(500))
-  .max(8);
+const bulletList = z.array(z.string().trim().min(1).max(500)).max(8);
+const sourceList = z
+  .array(
+    z
+      .object({
+        title: z.string().trim().min(1).max(300),
+        url: z.string().url().max(2000),
+      })
+      .strict(),
+  )
+  .max(10);
+const ratingReasons = z
+  .object({
+    price: z.string().trim().max(1000),
+    design: z.string().trim().max(1000),
+    qualityPerformance: z.string().trim().max(1000),
+  })
+  .strict();
 export const productUpdateInput = productInput.partial().extend({
   priceRating: rating.optional(),
   designRating: rating.optional(),
   qualityPerformanceRating: rating.optional(),
+  features: bulletList.optional(),
   strengths: bulletList.optional(),
   weaknesses: bulletList.optional(),
+  analysisSources: sourceList.optional(),
+  ratingReasons: ratingReasons.optional(),
 });
 export const customerInput = z.object({
   name: z.string().trim().min(1).max(200),
@@ -75,11 +93,18 @@ export const descriptionSchema = z
     descriptionEn: z.string().max(10000),
     shortDescription: z.string().max(2000),
     facebookCaption: z.string().max(10000),
-    priceRating: rating.unwrap(),
-    designRating: rating.unwrap(),
-    qualityPerformanceRating: rating.unwrap(),
+    priceRating: rating,
+    designRating: rating,
+    qualityPerformanceRating: rating,
+    features: bulletList.default([]),
     strengths: bulletList,
     weaknesses: bulletList,
+    analysisSources: sourceList.default([]),
+    ratingReasons: ratingReasons.default({
+      price: '',
+      design: '',
+      qualityPerformance: '',
+    }),
   })
   .strict();
 export const generateInput = z.object({
@@ -107,8 +132,15 @@ export type Product = ProductInput & {
   priceRating: number | null;
   designRating: number | null;
   qualityPerformanceRating: number | null;
+  features: string[];
   strengths: string[];
   weaknesses: string[];
+  analysisSources: { title: string; url: string }[];
+  ratingReasons: {
+    price: string;
+    design: string;
+    qualityPerformance: string;
+  };
   primaryImageId?: string | null;
   reservedCustomerName?: string | null;
 };

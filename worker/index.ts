@@ -59,13 +59,60 @@ function parseProductBullets(value: string | null): string[] {
     return [];
   }
 }
-function productResponse<T extends { strengths: string; weaknesses: string }>(
-  product: T,
-) {
+function parseProductSources(value: string | null) {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]');
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item): item is { title: string; url: string } =>
+            !!item &&
+            typeof item === 'object' &&
+            typeof (item as { title?: unknown }).title === 'string' &&
+            typeof (item as { url?: unknown }).url === 'string',
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+function parseProductRatingReasons(value: string | null): {
+  price: string;
+  design: string;
+  qualityPerformance: string;
+} {
+  try {
+    const parsed: unknown = JSON.parse(value || '{}');
+    if (!parsed || typeof parsed !== 'object')
+      return { price: '', design: '', qualityPerformance: '' };
+    const item = parsed as Record<string, unknown>;
+    return {
+      price: typeof item.price === 'string' ? item.price : '',
+      design: typeof item.design === 'string' ? item.design : '',
+      qualityPerformance:
+        typeof item.qualityPerformance === 'string'
+          ? item.qualityPerformance
+          : '',
+    };
+  } catch {
+    return { price: '', design: '', qualityPerformance: '' };
+  }
+}
+function productResponse<
+  T extends {
+    features: string;
+    strengths: string;
+    weaknesses: string;
+    analysisSources: string;
+    ratingReasons: string;
+  },
+>(product: T) {
   return {
     ...product,
+    features: parseProductBullets(product.features),
     strengths: parseProductBullets(product.strengths),
     weaknesses: parseProductBullets(product.weaknesses),
+    analysisSources: parseProductSources(product.analysisSources),
+    ratingReasons: parseProductRatingReasons(product.ratingReasons),
   };
 }
 const activity = (
@@ -374,13 +421,29 @@ app.patch('/api/products/:id', async (c) => {
   const p = await getProduct(c, c.req.param('id'));
   const raw = await c.req.json();
   const data = provided(productUpdateInput.parse(raw), raw);
-  const { strengths, weaknesses, ...fields } = data;
+  const {
+    features,
+    strengths,
+    weaknesses,
+    analysisSources,
+    ratingReasons,
+    ...fields
+  } = data;
   const dbData = {
     ...fields,
-    ...(strengths === undefined ? {} : { strengths: JSON.stringify(strengths) }),
+    ...(features === undefined ? {} : { features: JSON.stringify(features) }),
+    ...(strengths === undefined
+      ? {}
+      : { strengths: JSON.stringify(strengths) }),
     ...(weaknesses === undefined
       ? {}
       : { weaknesses: JSON.stringify(weaknesses) }),
+    ...(analysisSources === undefined
+      ? {}
+      : { analysisSources: JSON.stringify(analysisSources) }),
+    ...(ratingReasons === undefined
+      ? {}
+      : { ratingReasons: JSON.stringify(ratingReasons) }),
   };
   if (data.status && data.status !== p.status)
     fail(
@@ -778,8 +841,11 @@ app.post('/api/products/:id/generate-description', async (c) => {
             priceRating: output.priceRating,
             designRating: output.designRating,
             qualityPerformanceRating: output.qualityPerformanceRating,
+            features: output.features,
             strengths: output.strengths,
             weaknesses: output.weaknesses,
+            analysisSources: output.analysisSources,
+            ratingReasons: output.ratingReasons,
           },
     );
   } catch (error) {

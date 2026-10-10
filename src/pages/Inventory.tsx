@@ -279,6 +279,7 @@ const ratings = [
   ['qualityPerformanceRating', 'Quality & performance'],
 ] as const;
 const analysisLists = [
+  ['features', 'Verified features & functions'],
   ['strengths', 'Strengths'],
   ['weaknesses', 'Weaknesses / considerations'],
 ] as const;
@@ -286,7 +287,16 @@ type RatingValues = Partial<Record<(typeof ratings)[number][0], number | null>>;
 type AnalysisValues = Partial<
   Record<(typeof analysisLists)[number][0], string[]>
 >;
-function RatingCards({ values }: { values: RatingValues }) {
+type RatingReasons = Partial<
+  Record<'price' | 'design' | 'qualityPerformance', string>
+>;
+function RatingCards({
+  values,
+  reasons,
+}: {
+  values: RatingValues;
+  reasons?: RatingReasons;
+}) {
   return (
     <div className="rating-grid">
       {ratings.map(([key, title]) => {
@@ -300,6 +310,25 @@ function RatingCards({ values }: { values: RatingValues }) {
             <span>{t(title)}</span>
             <strong>{value == null ? '—' : value.toFixed(1)}</strong>
             <small>{t('out of 10')}</small>
+            {reasons?.[
+              key === 'priceRating'
+                ? 'price'
+                : key === 'designRating'
+                  ? 'design'
+                  : 'qualityPerformance'
+            ] && (
+              <p className="muted rating-reason">
+                {
+                  reasons[
+                    key === 'priceRating'
+                      ? 'price'
+                      : key === 'designRating'
+                        ? 'design'
+                        : 'qualityPerformance'
+                  ]
+                }
+              </p>
+            )}
             <div
               className="rating-track"
               {...(value == null
@@ -337,6 +366,27 @@ function AnalysisLists({ values }: { values: AnalysisValues }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+function AnalysisSources({
+  values,
+}: {
+  values?: { title: string; url: string }[];
+}) {
+  if (!values?.length) return null;
+  return (
+    <div className="analysis-sources">
+      <h4>{t('Sources used')}</h4>
+      <ul>
+        {values.map((source, index) => (
+          <li key={`${source.url}-${index}`}>
+            <a href={source.url} target="_blank" rel="noreferrer">
+              {source.title}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -906,7 +956,7 @@ export function ProductPage() {
               )}
             </p>
             <h4>{t('AI rating')}</h4>
-            <RatingCards values={draft} />
+            <RatingCards values={draft} reasons={draft.ratingReasons} />
             {analysisLists.map(([key, title]) => (
               <Field label={title} key={key}>
                 <textarea
@@ -925,6 +975,7 @@ export function ProductPage() {
                 />
               </Field>
             ))}
+            <AnalysisSources values={draft.analysisSources} />
             {descriptions
               .filter(([key]) => draft[key] !== undefined)
               .map(([key, title]) => (
@@ -991,8 +1042,9 @@ export function ProductPage() {
               </p>
             </div>
           </div>
-          <RatingCards values={p} />
+          <RatingCards values={p} reasons={p.ratingReasons} />
           <AnalysisLists values={p} />
+          <AnalysisSources values={p.analysisSources} />
         </div>
         {descriptions.map(([key, title]) => (
           <div className="description" key={key}>
