@@ -1,4 +1,5 @@
 import { t, localized } from '../i18n';
+import { UsdPrice, ExchangeRateNote } from '../components/UsdPrice';
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   Link,
@@ -128,6 +129,7 @@ export function InventoryPage() {
         </div>
       )}
       <ErrorBox message={importError} />
+      <ExchangeRateNote />
       <div className="toolbar panel">
         <label className="search">
           <Search size={18} />
@@ -233,9 +235,13 @@ export function InventoryPage() {
                       {p.category || '—'}
                       <small>{t(p.condition) || t('Not specified')}</small>
                     </td>
-                    <td>{money(p.purchaseCost)}</td>
+                    <td>
+                      {money(p.purchaseCost)}
+                      <UsdPrice amount={p.purchaseCost} />
+                    </td>
                     <td>
                       <strong>{money(p.sellingPrice)}</strong>
+                      <UsdPrice amount={p.sellingPrice} />
                     </td>
                     <td>
                       <Badge value={p.status} />
@@ -274,6 +280,7 @@ export function InventoryPage() {
                   <h3>{p.brand}</h3>
                   <p>{p.model}</p>
                   <strong>{money(p.sellingPrice)}</strong>
+                  <UsdPrice amount={p.sellingPrice} />
                   <Badge value={p.status} />
                   {p.reservedCustomerName && (
                     <small>
@@ -850,14 +857,18 @@ export function ProductPage() {
         <section className="panel">
           <Badge value={p.status} />
           <div className="detail-price">{money(p.sellingPrice)}</div>
+          <UsdPrice amount={p.sellingPrice} />
+          <ExchangeRateNote />
           <div className="facts">
             <div>
               <span>{t('Purchase cost')}</span>
               <strong>{money(p.purchaseCost)}</strong>
+              <UsdPrice amount={p.purchaseCost} />
             </div>
             <div>
               <span>{t('Estimated gross profit')}</span>
               <strong>{money(profit)}</strong>
+              <UsdPrice amount={profit} />
             </div>
             <div>
               <span>{t('Estimated margin')}</span>

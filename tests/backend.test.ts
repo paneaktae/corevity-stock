@@ -3,6 +3,7 @@ import { Miniflare, convertV4MiniflareOptions, FormData } from 'miniflare';
 import { build } from 'esbuild';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parseDescriptions } from '../worker/services/ai';
+import { exchangeRate } from '../worker/services/exchange-rate';
 import type { ChatMessage } from '../shared/schemas';
 let mf: Miniflare;
 beforeAll(async () => {
@@ -87,6 +88,58 @@ async function customer() {
   return json<{ id: string }>(r);
 }
 describe('D1-backed inventory and sales', () => {
+  it('refreshes FX once per Bangkok day and retains valid rates on source failure', async () => {
+    const db = await mf.getD1Database('DB');
+    let calls = 0;
+    const fetcher: typeof fetch = async () => {
+      calls++;
+      return new Response(
+        JSON.stringify({
+          base: 'USD',
+          quote: 'THB',
+          rate: 35,
+          date: '2026-10-10',
+        }),
+      );
+    };
+    const first = await exchangeRate(
+      db,
+      fetcher,
+      new Date('2026-10-10T16:00:00Z'),
+    );
+    expect(first.rate).toBe(35);
+    expect(3500 / first.rate!).toBe(100);
+    await exchangeRate(db, fetcher, new Date('2026-10-10T16:59:00Z'));
+    expect(calls).toBe(1);
+    const failed: typeof fetch = async () => {
+      calls++;
+      return new Response('{}', { status: 503 });
+    };
+    const fallback = await exchangeRate(
+      db,
+      failed,
+      new Date('2026-10-10T17:01:00Z'),
+    );
+    expect(fallback).toMatchObject({
+      rate: 35,
+      stale: true,
+      date: '2026-10-10',
+    });
+    await exchangeRate(db, failed, new Date('2026-10-10T17:02:00Z'));
+    expect(calls).toBe(2);
+    const invalid: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          base: 'USD',
+          quote: 'THB',
+          rate: 0,
+          date: '2026-10-10',
+        }),
+      );
+    expect(
+      (await exchangeRate(db, invalid, new Date('2026-10-10T18:00:00Z'))).rate,
+    ).toBe(35);
+  });
   it('serves bound static assets with security headers', async () => {
     const response = await mf.dispatchFetch('http://localhost/');
     expect(response.status).toBe(200);

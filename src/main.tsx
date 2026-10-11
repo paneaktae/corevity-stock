@@ -17,6 +17,7 @@ import { CustomersPage, CustomerPage, CustomerForm } from './pages/Customers';
 import { SalesPage, LeadPage, LeadForm, FollowupsPage } from './pages/Sales';
 import { ChatPage } from './pages/Chat';
 import { ChatBadge } from './components/ChatBadge';
+import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
 import './style.css';
 const navigation = [
@@ -105,4 +106,8 @@ function App() {
     </BrowserRouter>
   );
 }
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <ExchangeRateProvider>
+    <App />
+  </ExchangeRateProvider>,
+);

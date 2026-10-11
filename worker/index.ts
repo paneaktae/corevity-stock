@@ -37,6 +37,7 @@ import {
   type Product,
 } from '../shared/schemas';
 import { createDescriptionProvider } from './services/ai';
+import { exchangeRate } from './services/exchange-rate';
 const app = new Hono<AppEnv>();
 const now = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
@@ -338,6 +339,9 @@ app.onError((error, c) => {
 app.route('/api/line', lineRoutes);
 app.route('/api/chat', chatRoutes);
 app.route('/api/salespeople', salespeopleRoutes);
+app.get('/api/exchange-rate', async (c) =>
+  c.json(await exchangeRate(c.env.DB)),
+);
 app.get('/api/settings', async (c) => {
   const [row] = await db(c)
     .select()
@@ -1241,6 +1245,6 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Bindings) {
-    await processLineReminders(env);
+    await Promise.all([processLineReminders(env), exchangeRate(env.DB)]);
   },
 };

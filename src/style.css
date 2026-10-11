@@ -291,6 +291,22 @@ main {
   gap: 9px;
   flex-wrap: wrap;
 }
+.usd-price {
+  display: block;
+  font-size: 12px;
+  color: #526983;
+  font-weight: 400;
+  margin-top: 3px;
+}
+.fx-note {
+  font-size: 12px;
+  color: #526983;
+  margin: 12px 0 20px;
+  line-height: 1.7;
+}
+.fx-note a {
+  text-decoration: underline;
+}
 .panel {
   background: #fff;
   border: 1px solid #dee2e8;
