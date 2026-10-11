@@ -334,6 +334,32 @@ const textFields = [
   ['serialNumber', 'Serial number'],
   ['location', 'Location'],
 ] as const;
+const productCategories = [
+  'Treadmills',
+  'Skill Mill',
+  'ClimbMill',
+  'Recumbent Bike',
+  'Upright Bike',
+  'Spinning Bike',
+  'Air Bike',
+  'Arm Bike',
+  'Rowwing',
+  'Elliptical',
+  'Machine Pin',
+  'Plate Load',
+  'Pilatis',
+  'Dumbbell',
+  'Dumbbell+Rack',
+  'Barbell+Rack',
+  'Rack',
+  'Station/Cable/Smith',
+  'Bench',
+  'Accessories',
+  'Plate',
+  'Ski',
+  'Stepper',
+  'Other',
+];
 const descriptions = [
   ['descriptionTh', 'Thai description'],
   ['descriptionEn', 'English description'],
@@ -513,11 +539,31 @@ export function ProductForm() {
           <div className="form-grid">
             {textFields.map(([k, title]) => (
               <Field key={k} label={title} error={fields[k]}>
-                <input
-                  required={k === 'brand' || k === 'model'}
-                  value={form[k]}
-                  onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-                />
+                {k === 'category' ? (
+                  <select
+                    value={form.category}
+                    onChange={(e) =>
+                      setForm({ ...form, category: e.target.value })
+                    }
+                  >
+                    <option value="">{t('Select category')}</option>
+                    {form.category &&
+                      !productCategories.includes(form.category) && (
+                        <option value={form.category}>{form.category}</option>
+                      )}
+                    {productCategories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    required={k === 'brand' || k === 'model'}
+                    value={form[k]}
+                    onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                  />
+                )}
               </Field>
             ))}
             <Field label={t('Condition')} error={fields.condition}>
