@@ -115,6 +115,8 @@
   "Brand *": "แบรนด์ *",
   "Model *": "รุ่น *",
   "Category": "หมวดหมู่",
+  "Generated automatically when saved": "สร้าง SKU อัตโนมัติเมื่อบันทึก",
+  "SKU is assigned when saved. The final number may change if another user adds a product first.": "ระบบกำหนด SKU เมื่อบันทึก เลขอาจเปลี่ยนหากมีผู้ใช้เพิ่มสินค้าก่อนหน้า",
   "Equipment brands": "แบรนด์สินค้า",
   "One brand per line. Existing equipment keeps its saved brand.": "ใส่หนึ่งแบรนด์ต่อบรรทัด สินค้าเดิมจะยังคงแบรนด์ที่บันทึกไว้",
   "Brands saved.": "บันทึกแบรนด์แล้ว",

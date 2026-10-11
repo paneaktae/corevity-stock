@@ -17,6 +17,7 @@ import {
 import { z, ZodError } from 'zod';
 import readXlsxFile from 'read-excel-file/web-worker';
 import { importCategory } from './services/import-category';
+import { generateSkus, nextSku } from './services/sku';
 import { auth, type AppEnv, type Bindings } from './auth';
 export { ChatRoom } from './chat-room';
 import { salespeopleRoutes } from './salespeople';
@@ -101,18 +102,7 @@ const spreadsheetStatus = (value: unknown) => {
   );
 };
 async function generatedSkus(c: Parameters<typeof auth>[0], count: number) {
-  if (!count) return [];
-  const year = new Date().getFullYear();
-  const sequence = await c.env.DB.prepare(
-    'INSERT INTO sku_sequences(year,value) VALUES (?,?) ON CONFLICT(year) DO UPDATE SET value=value+excluded.value RETURNING value',
-  )
-    .bind(year, count)
-    .first<{ value: number }>();
-  const first = sequence!.value - count + 1;
-  return Array.from(
-    { length: count },
-    (_, index) => `EQ-${year}-${String(first + index).padStart(4, '0')}`,
-  );
+  return generateSkus(c.env.DB, count);
 }
 function parseProductBullets(value: string | null): string[] {
   try {
@@ -463,6 +453,9 @@ async function productList(c: Parameters<typeof auth>[0]) {
     .then((rows) => rows.map(productResponse));
 }
 app.get('/api/products', async (c) => c.json(await productList(c)));
+app.get('/api/products/next-sku', async (c) =>
+  c.json({ sku: await nextSku(c.env.DB) }),
+);
 app.post('/api/products', async (c) => {
   const data = productInput.parse(await c.req.json());
   if (data.status === 'RESERVED')

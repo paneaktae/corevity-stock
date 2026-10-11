@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { readFileSync, readdirSync } from 'node:fs';
 import { parseDescriptions } from '../worker/services/ai';
 import { exchangeRate } from '../worker/services/exchange-rate';
+import { generateSkus, nextSku } from '../worker/services/sku';
 import type { ChatMessage } from '../shared/schemas';
 let mf: Miniflare;
 beforeAll(async () => {
@@ -235,7 +236,7 @@ describe('D1-backed inventory and sales', () => {
   });
   it('creates, reads, searches, updates and archives equipment', async () => {
     const p = await product('Cybex');
-    expect(p.sku).toMatch(/^EQ-\d{4}-\d{4}$/);
+    expect(p.sku).toMatch(/^\d{6}\d{3,}$/);
     expect((await request(`/products/${p.id}`)).status).toBe(200);
     const found = await json<{ id: string }[]>(
       await request('/products?q=Cybex'),
@@ -290,6 +291,48 @@ describe('D1-backed inventory and sales', () => {
     expect(
       (await json<{ brands: string[] }>(await request('/settings'))).brands,
     ).toEqual([]);
+  });
+  it('allocates annual SKU sequences atomically with Bangkok month and year boundaries', async () => {
+    const db = await mf.getD1Database('DB');
+    const january = new Date('2090-01-01T00:00:00Z');
+    expect(await nextSku(db, january)).toBe('209001001');
+    expect(await nextSku(db, january)).toBe('209001001');
+    const batches = await Promise.all([
+      generateSkus(db, 2, january),
+      generateSkus(db, 2, january),
+    ]);
+    expect(batches.flat().sort()).toEqual([
+      '209001001',
+      '209001002',
+      '209001003',
+      '209001004',
+    ]);
+    expect(await generateSkus(db, 1, new Date('2090-01-31T17:00:00Z'))).toEqual(
+      ['209002005'],
+    );
+    expect(await generateSkus(db, 1, new Date('2090-12-31T16:59:59Z'))).toEqual(
+      ['209012006'],
+    );
+    expect(await generateSkus(db, 1, new Date('2090-12-31T17:00:00Z'))).toEqual(
+      ['209101001'],
+    );
+    await db
+      .prepare('UPDATE sku_sequences SET value=999 WHERE year=2091')
+      .run();
+    expect(await generateSkus(db, 1, new Date('2091-02-01T00:00:00Z'))).toEqual(
+      ['2091021000'],
+    );
+    const before = await db
+      .prepare('SELECT value FROM sku_sequences WHERE year=2091')
+      .first();
+    expect(await generateSkus(db, 0, new Date('2091-02-01T00:00:00Z'))).toEqual(
+      [],
+    );
+    expect(
+      await db
+        .prepare('SELECT value FROM sku_sequences WHERE year=2091')
+        .first(),
+    ).toEqual(before);
   });
   it('rejects invalid Excel imports before changing inventory', async () => {
     const form = new FormData();

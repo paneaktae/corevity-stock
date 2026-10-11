@@ -330,7 +330,7 @@ const blank: ProductFormValues = {
 const textFields = [
   ['brand', 'Brand *'],
   ['model', 'Model *'],
-  ['sku', 'SKU (generated if empty)'],
+  ['sku', 'SKU'],
   ['category', 'Category'],
   ['serialNumber', 'Serial number'],
   ['location', 'Location'],
@@ -460,6 +460,9 @@ function AnalysisSources({
 }
 export function ProductForm() {
   const { id } = useParams();
+  const { data: nextSku, error: skuError } = useData<{ sku: string }>(
+    id ? null : '/products/next-sku',
+  );
   const nav = useNavigate();
   const { data: detail, error: loadError } = useData<ProductDetail>(
     id ? `/products/${id}` : null,
@@ -482,6 +485,7 @@ export function ProductForm() {
         method: id ? 'PATCH' : 'POST',
         body: JSON.stringify({
           ...form,
+          sku: id ? form.sku : undefined,
           purchaseCost: Number(form.purchaseCost),
           sellingPrice: Number(form.sellingPrice),
         }),
@@ -514,7 +518,23 @@ export function ProductForm() {
           <div className="form-grid">
             {textFields.map(([k, title]) => (
               <Field key={k} label={title} error={fields[k]}>
-                {k === 'brand' ? (
+                {k === 'sku' && !id ? (
+                  <>
+                    <input
+                      readOnly
+                      value={nextSku?.sku ?? ''}
+                      placeholder={t('Generated automatically when saved')}
+                    />
+                    <small>
+                      {t(
+                        'SKU is assigned when saved. The final number may change if another user adds a product first.',
+                      )}
+                    </small>
+                    {skuError && (
+                      <small>{t('Generated automatically when saved')}</small>
+                    )}
+                  </>
+                ) : k === 'brand' ? (
                   <>
                     <select
                       required
