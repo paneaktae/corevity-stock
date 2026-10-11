@@ -49,6 +49,12 @@ Use the language selector in the top bar to switch between Thai and English. The
 
 ## Local development
 
+### USD reference prices
+
+Inventory USD amounts divide the THB price by the Bank of Thailand daily weighted-average interbank USD/THB rate. Subscribe to Exchange Rates at https://portal.api.bot.or.th/ and store the token as the Worker secret `BOT_API_KEY`. The server calls `https://gateway.api.bot.or.th/Stat-ReferenceRate/v2/DAILY_REF_RATE/` with the `Authorization` header; the key is never sent to the browser.
+
+The existing five-minute scheduler checks whether a refresh is due. The daily refresh window starts at 18:15 Bangkok time, after BOT's 18:00 business-day publication. A 30-day lookback selects the latest published date, including over holidays. Failed refreshes retry after 30 minutes and retain the previous rate with its original source label and a stale notice. The API also refreshes on authenticated page requests when due. These are indicative prices, not a bank's executable buying/selling quote.
+
 Use Node.js 22.12+ (Node 24 LTS recommended) and npm. Commands run from the repository root.
 
 ```sh

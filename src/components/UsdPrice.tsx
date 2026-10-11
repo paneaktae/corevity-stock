@@ -59,13 +59,26 @@ export function ExchangeRateNote() {
         <>
           {`1 USD = ${fx.rate.toFixed(4)} THB · `}
           {localized('Rate date', 'เรตวันที่')} {fx.date} ·{' '}
-          <a href="https://frankfurter.dev" target="_blank" rel="noreferrer">
-            Frankfurter
+          <a
+            href={
+              fx.source === 'BOT'
+                ? 'https://www.bot.or.th/th/statistics/exchange-rate.html'
+                : 'https://frankfurter.dev'
+            }
+            target="_blank"
+            rel="noreferrer"
+          >
+            {fx.source === 'BOT'
+              ? localized(
+                  'Bank of Thailand (BOT)',
+                  'ธนาคารแห่งประเทศไทย (ธปท.)',
+                )
+              : 'Frankfurter'}
           </a>
           {' · '}
           {localized(
-            'Updated daily. Reference conversion, not a bank quote.',
-            'อัปเดตรายวัน เป็นราคาอ้างอิง ไม่ใช่เรตซื้อขายของธนาคาร',
+            'Daily reference rate. Latest published rate is used on holidays; actual bank quotes may differ.',
+            'เรทอ้างอิงรายวัน วันหยุดใช้เรทล่าสุดที่เผยแพร่ เรทซื้อขายจริงของธนาคารอาจแตกต่างกัน',
           )}
           {fx.stale && (
             <strong>

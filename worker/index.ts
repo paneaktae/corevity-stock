@@ -340,7 +340,7 @@ app.route('/api/line', lineRoutes);
 app.route('/api/chat', chatRoutes);
 app.route('/api/salespeople', salespeopleRoutes);
 app.get('/api/exchange-rate', async (c) =>
-  c.json(await exchangeRate(c.env.DB)),
+  c.json(await exchangeRate(c.env.DB, fetch, new Date(), c.env.BOT_API_KEY)),
 );
 app.get('/api/settings', async (c) => {
   const [row] = await db(c)
@@ -1245,6 +1245,9 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Bindings) {
-    await Promise.all([processLineReminders(env), exchangeRate(env.DB)]);
+    await Promise.all([
+      processLineReminders(env),
+      exchangeRate(env.DB, fetch, new Date(), env.BOT_API_KEY),
+    ]);
   },
 };

@@ -88,17 +88,27 @@ async function customer() {
   return json<{ id: string }>(r);
 }
 describe('D1-backed inventory and sales', () => {
-  it('refreshes FX once per Bangkok day and retains valid rates on source failure', async () => {
+  it('refreshes BOT FX after publication and retains valid rates on source failure', async () => {
     const db = await mf.getD1Database('DB');
     let calls = 0;
-    const fetcher: typeof fetch = async () => {
+    const fetcher: typeof fetch = async (url, options) => {
+      expect(String(url)).toContain(
+        'gateway.api.bot.or.th/Stat-ReferenceRate/v2/DAILY_REF_RATE/',
+      );
+      expect(new Headers(options?.headers).get('Authorization')).toBe(
+        'test-key',
+      );
       calls++;
       return new Response(
         JSON.stringify({
-          base: 'USD',
-          quote: 'THB',
-          rate: 35,
-          date: '2026-10-10',
+          result: {
+            data: {
+              data_detail: [
+                { period: '2026-10-09', rate: '34.9' },
+                { period: '2026-10-10', rate: '35.0000' },
+              ],
+            },
+          },
         }),
       );
     };
@@ -106,10 +116,17 @@ describe('D1-backed inventory and sales', () => {
       db,
       fetcher,
       new Date('2026-10-10T16:00:00Z'),
+      'test-key',
     );
     expect(first.rate).toBe(35);
     expect(3500 / first.rate!).toBe(100);
-    await exchangeRate(db, fetcher, new Date('2026-10-10T16:59:00Z'));
+    expect(first.source).toBe('BOT');
+    await exchangeRate(
+      db,
+      fetcher,
+      new Date('2026-10-11T11:14:00Z'),
+      'test-key',
+    );
     expect(calls).toBe(1);
     const failed: typeof fetch = async () => {
       calls++;
@@ -118,27 +135,96 @@ describe('D1-backed inventory and sales', () => {
     const fallback = await exchangeRate(
       db,
       failed,
-      new Date('2026-10-10T17:01:00Z'),
+      new Date('2026-10-11T11:15:00Z'),
+      'test-key',
     );
     expect(fallback).toMatchObject({
       rate: 35,
       stale: true,
       date: '2026-10-10',
     });
-    await exchangeRate(db, failed, new Date('2026-10-10T17:02:00Z'));
+    await exchangeRate(
+      db,
+      failed,
+      new Date('2026-10-11T11:16:00Z'),
+      'test-key',
+    );
     expect(calls).toBe(2);
     const invalid: typeof fetch = async () =>
       new Response(
         JSON.stringify({
-          base: 'USD',
-          quote: 'THB',
-          rate: 0,
-          date: '2026-10-10',
+          result: {
+            data: { data_detail: [{ period: '2026-10-11', rate: '0' }] },
+          },
         }),
       );
     expect(
-      (await exchangeRate(db, invalid, new Date('2026-10-10T18:00:00Z'))).rate,
+      (
+        await exchangeRate(
+          db,
+          invalid,
+          new Date('2026-10-11T12:00:00Z'),
+          'test-key',
+        )
+      ).rate,
     ).toBe(35);
+  });
+  it('keeps the old source label until BOT succeeds and accepts the latest published holiday rate', async () => {
+    const db = await mf.getD1Database('DB');
+    await db
+      .prepare(
+        "DELETE FROM settings WHERE key IN ('fx_usd_thb','fx_refresh_lock')",
+      )
+      .run();
+    await db
+      .prepare("INSERT INTO settings(key,value) VALUES('fx_usd_thb',?)")
+      .bind(
+        JSON.stringify({
+          base: 'USD',
+          quote: 'THB',
+          rate: 33.589,
+          date: '2026-10-10',
+          checkedAt: '2026-10-11T03:00:00Z',
+        }),
+      )
+      .run();
+    const unused: typeof fetch = async () => {
+      throw new Error('Must not fetch without a key');
+    };
+    expect(
+      await exchangeRate(db, unused, new Date('2026-10-11T04:00:00Z')),
+    ).toMatchObject({ source: 'Frankfurter', rate: 33.589, stale: true });
+    const empty: typeof fetch = async () =>
+      new Response(JSON.stringify({ result: { data: { data_detail: [] } } }));
+    expect(
+      await exchangeRate(
+        db,
+        empty,
+        new Date('2026-10-11T04:00:00Z'),
+        'test-key',
+      ),
+    ).toMatchObject({ source: 'Frankfurter', rate: 33.589, stale: true });
+    const published: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          result: {
+            data: { data_detail: [{ period: '2026-10-09', rate: '33.1' }] },
+          },
+        }),
+      );
+    expect(
+      await exchangeRate(
+        db,
+        published,
+        new Date('2026-10-11T04:31:00Z'),
+        'test-key',
+      ),
+    ).toMatchObject({
+      source: 'BOT',
+      rate: 33.1,
+      date: '2026-10-09',
+      stale: false,
+    });
   });
   it('serves bound static assets with security headers', async () => {
     const response = await mf.dispatchFetch('http://localhost/');

@@ -3,6 +3,7 @@ import type { MiddlewareHandler } from 'hono';
 export type Bindings = Env & {
   LOCAL_MOCK_EMAIL?: string;
   AI_API_KEY?: string;
+  BOT_API_KEY?: string;
   LINE_CHANNEL_ACCESS_TOKEN?: string;
   LINE_CHANNEL_SECRET?: string;
   APP_URL?: string;
