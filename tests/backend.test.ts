@@ -248,6 +248,49 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/products/${p.id}`, 'DELETE')).status).toBe(200);
     expect((await request(`/products/${p.id}`)).status).toBe(404);
   });
+  it('manages brand choices independently of conditions and preserves existing product brands', async () => {
+    const p = await product('Legacy Brand');
+    const initial = await json<{ brands: string[]; conditions: string[] }>(
+      await request('/settings'),
+    );
+    expect(initial.brands).toContain('Legacy Brand');
+    expect(
+      (
+        await request('/settings', 'PATCH', {
+          brands: [' Brand A ', 'Brand B'],
+        })
+      ).status,
+    ).toBe(200);
+    const updated = await json<{ brands: string[]; conditions: string[] }>(
+      await request('/settings'),
+    );
+    expect(updated.brands).toEqual(['Brand A', 'Brand B']);
+    expect(updated.conditions).toEqual(initial.conditions);
+    expect(
+      (await request('/settings', 'PATCH', { brands: ['Brand A', 'brand a'] }))
+        .status,
+    ).toBe(422);
+    expect(
+      (await request('/settings', 'PATCH', { conditions: initial.conditions }))
+        .status,
+    ).toBe(200);
+    expect(
+      (await json<{ brands: string[] }>(await request('/settings'))).brands,
+    ).toEqual(updated.brands);
+    expect(
+      (
+        await json<{ product: { brand: string } }>(
+          await request(`/products/${p.id}`),
+        )
+      ).product.brand,
+    ).toBe('Legacy Brand');
+    expect((await request('/settings', 'PATCH', { brands: [] })).status).toBe(
+      200,
+    );
+    expect(
+      (await json<{ brands: string[] }>(await request('/settings'))).brands,
+    ).toEqual([]);
+  });
   it('rejects invalid Excel imports before changing inventory', async () => {
     const form = new FormData();
     form.append(

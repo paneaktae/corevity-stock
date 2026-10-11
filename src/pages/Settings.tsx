@@ -1,4 +1,5 @@
 import { SalespeopleSettings } from '../components/SalespeopleSettings';
+import { BrandSettings } from '../components/BrandSettings';
 import { LineSettings } from '../components/LineSettings';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
@@ -32,6 +33,7 @@ export function SettingsPage() {
       {saved && <div className="success">{t('Conditions saved.')}</div>}
       <SalespeopleSettings />
       <LineSettings />
+      <BrandSettings brands={data.brands} />
       <div className="detail-grid">
         <section className="panel">
           <h2>{t('Equipment conditions')}</h2>

@@ -344,11 +344,27 @@ app.get('/api/exchange-rate', async (c) =>
   c.json(await exchangeRate(c.env.DB, fetch, new Date(), c.env.BOT_API_KEY)),
 );
 app.get('/api/settings', async (c) => {
+  const [brandSetting] = await db(c)
+    .select()
+    .from(s.settings)
+    .where(eq(s.settings.key, 'brands'));
+  const brands = brandSetting
+    ? JSON.parse(brandSetting.value)
+    : (
+        await db(c)
+          .selectDistinct({ brand: s.products.brand })
+          .from(s.products)
+          .where(isNull(s.products.archivedAt))
+          .orderBy(s.products.brand)
+      )
+        .map((row) => row.brand)
+        .filter(Boolean);
   const [row] = await db(c)
     .select()
     .from(s.settings)
     .where(eq(s.settings.key, 'conditions'));
   return c.json({
+    brands,
     conditions: JSON.parse(row.value),
     userEmail: c.get('email'),
     environment: c.env.ENVIRONMENT,
@@ -367,22 +383,40 @@ app.patch('/api/settings', async (c) => {
         .refine(
           (v) => new Set(v).size === v.length,
           'Conditions must be unique',
-        ),
+        )
+        .optional(),
+      brands: z
+        .array(z.string().trim().min(1).max(120))
+        .max(200)
+        .refine(
+          (v) =>
+            new Set(v.map((brand) => brand.toLowerCase())).size === v.length,
+          'Brands must be unique',
+        )
+        .optional(),
     })
+    .refine(
+      (data) => data.conditions !== undefined || data.brands !== undefined,
+      'Choose a setting to update',
+    )
     .parse(await c.req.json());
-  await db(c).batch([
-    db(c)
-      .update(s.settings)
-      .set({ value: JSON.stringify(data.conditions) })
-      .where(eq(s.settings.key, 'conditions')),
-    activity(
-      c,
-      'settings',
-      'conditions',
-      'updated',
-      'Equipment conditions updated',
-    ),
-  ]);
+  const operations = (['conditions', 'brands'] as const).flatMap((key) =>
+    data[key] === undefined
+      ? []
+      : [
+          db(c)
+            .insert(s.settings)
+            .values({ key, value: JSON.stringify(data[key]) })
+            .onConflictDoUpdate({
+              target: s.settings.key,
+              set: { value: JSON.stringify(data[key]) },
+            }),
+          activity(c, 'settings', key, 'updated', `Equipment ${key} updated`),
+        ],
+  );
+  await db(c).batch(
+    operations as [(typeof operations)[number], ...typeof operations],
+  );
   return c.json(data);
 });
 async function productList(c: Parameters<typeof auth>[0]) {

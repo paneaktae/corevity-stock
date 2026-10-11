@@ -514,7 +514,35 @@ export function ProductForm() {
           <div className="form-grid">
             {textFields.map(([k, title]) => (
               <Field key={k} label={title} error={fields[k]}>
-                {k === 'category' ? (
+                {k === 'brand' ? (
+                  <>
+                    <select
+                      required
+                      value={form.brand}
+                      onChange={(e) =>
+                        setForm({ ...form, brand: e.target.value })
+                      }
+                    >
+                      <option value="">{t('Select brand')}</option>
+                      {[
+                        ...new Set(
+                          [...(settings?.brands ?? []), form.brand].filter(
+                            Boolean,
+                          ),
+                        ),
+                      ].map((brand) => (
+                        <option key={brand} value={brand}>
+                          {brand}
+                        </option>
+                      ))}
+                    </select>
+                    <small>
+                      <Link to="/settings">
+                        {t('Manage brands in Settings')}
+                      </Link>
+                    </small>
+                  </>
+                ) : k === 'category' ? (
                   <select
                     value={form.category}
                     onChange={(e) =>
@@ -534,7 +562,7 @@ export function ProductForm() {
                   </select>
                 ) : (
                   <input
-                    required={k === 'brand' || k === 'model'}
+                    required={k === 'model'}
                     value={form[k]}
                     onChange={(e) => setForm({ ...form, [k]: e.target.value })}
                   />

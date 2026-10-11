@@ -187,6 +187,7 @@ export type Reservation = {
   customerName?: string;
 };
 export type Settings = {
+  brands: string[];
   conditions: string[];
   userEmail: string;
   environment: string;
