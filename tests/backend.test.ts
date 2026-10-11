@@ -263,6 +263,40 @@ describe('D1-backed inventory and sales', () => {
     );
     expect(response.status).toBe(422);
   });
+  it('imports the downloadable template and rejects invalid categories atomically with Excel row numbers', async () => {
+    const db = await mf.getD1Database('DB');
+    const count = () =>
+      db.prepare('SELECT COUNT(*) AS n FROM products').first<{ n: number }>();
+    const upload = async (path: string) => {
+      const form = new FormData();
+      form.append('file', new Blob([readFileSync(path)]), 'products.xlsx');
+      return mf.dispatchFetch('http://localhost/api/products/import', {
+        method: 'POST',
+        body: form,
+      });
+    };
+    const before = (await count())!.n;
+    const invalid = await upload('tests/fixtures/invalid-category.xlsx');
+    expect(invalid.status).toBe(422);
+    expect(await invalid.text()).toContain('Row 5: Category');
+    expect((await count())!.n).toBe(before);
+    const valid = await upload(
+      'public/downloads/Corevity-Product-Import-Example.xlsx',
+    );
+    expect(valid.status).toBe(201);
+    expect(await valid.json()).toMatchObject({ created: 3 });
+    expect((await count())!.n).toBe(before + 3);
+    const saved = await db
+      .prepare(
+        "SELECT category FROM products WHERE brand='Example Brand' ORDER BY model",
+      )
+      .all<{ category: string }>();
+    expect(saved.results.map((row) => row.category)).toEqual([
+      'Upright Bike',
+      'Rowwing',
+      'Treadmills',
+    ]);
+  });
   it('deletes customers without history and protects customer history', async () => {
     const removable = await customer();
     expect((await request(`/customers/${removable.id}`, 'DELETE')).status).toBe(

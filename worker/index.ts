@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm';
 import { z, ZodError } from 'zod';
 import readXlsxFile from 'read-excel-file/web-worker';
+import { importCategory } from './services/import-category';
 import { auth, type AppEnv, type Bindings } from './auth';
 export { ChatRoom } from './chat-room';
 import { salespeopleRoutes } from './salespeople';
@@ -467,21 +468,25 @@ app.post('/api/products/import', async (c) => {
     fail(422, 'Choose an Excel (.xlsx) file.');
   if (upload.size > 5 * 1024 * 1024)
     fail(422, 'Excel file must be 5 MB or smaller.');
-  let rows: Record<string, unknown>[] = [];
+  let rows: { rowNumber: number; values: Record<string, unknown> }[] = [];
   try {
     const [headers = [], ...dataRows] = await readXlsxFile(
       await upload.arrayBuffer(),
     );
     rows = dataRows
-      .filter((row) => row.some((cell) => cell !== null && cell !== ''))
-      .map((row) =>
-        Object.fromEntries(
+      .map((row, index) => ({ row, rowNumber: index + 2 }))
+      .filter(({ row }) =>
+        row.some((cell) => cell !== null && String(cell).trim() !== ''),
+      )
+      .map(({ row, rowNumber }) => ({
+        rowNumber,
+        values: Object.fromEntries(
           headers.map((header, index) => [
             String(header ?? ''),
             row[index] ?? '',
           ]),
         ),
-      );
+      }));
   } catch {
     fail(422, 'The Excel file could not be read.');
   }
@@ -489,8 +494,7 @@ app.post('/api/products/import', async (c) => {
   if (rows.length > 200)
     fail(422, 'Excel import supports up to 200 products at a time.');
   const issues: string[] = [];
-  const parsed = rows.flatMap((row, index) => {
-    const rowNumber = index + 2;
+  const parsed = rows.flatMap(({ values: row, rowNumber }) => {
     try {
       const status = spreadsheetStatus(spreadsheetValue(row, 'status'));
       if (status === 'RESERVED')
@@ -502,7 +506,7 @@ app.post('/api/products/import', async (c) => {
           brand: spreadsheetText(spreadsheetValue(row, 'brand')),
           model: spreadsheetText(spreadsheetValue(row, 'model')),
           sku: spreadsheetText(spreadsheetValue(row, 'sku')) || undefined,
-          category: spreadsheetText(spreadsheetValue(row, 'category')),
+          category: importCategory(spreadsheetValue(row, 'category')),
           serialNumber: spreadsheetText(spreadsheetValue(row, 'serialNumber')),
           condition: spreadsheetText(spreadsheetValue(row, 'condition')),
           purchaseCost: spreadsheetMoney(spreadsheetValue(row, 'purchaseCost')),

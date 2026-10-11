@@ -1,4 +1,5 @@
 import { t, localized } from '../i18n';
+import productCategories from '../../shared/product-categories.json';
 import { UsdPrice, ExchangeRateNote } from '../components/UsdPrice';
 import { useEffect, useState, type FormEvent } from 'react';
 import {
@@ -334,32 +335,6 @@ const textFields = [
   ['serialNumber', 'Serial number'],
   ['location', 'Location'],
 ] as const;
-const productCategories = [
-  'Treadmills',
-  'Skill Mill',
-  'ClimbMill',
-  'Recumbent Bike',
-  'Upright Bike',
-  'Spinning Bike',
-  'Air Bike',
-  'Arm Bike',
-  'Rowwing',
-  'Elliptical',
-  'Machine Pin',
-  'Plate Load',
-  'Pilatis',
-  'Dumbbell',
-  'Dumbbell+Rack',
-  'Barbell+Rack',
-  'Rack',
-  'Station/Cable/Smith',
-  'Bench',
-  'Accessories',
-  'Plate',
-  'Ski',
-  'Stepper',
-  'Other',
-];
 const descriptions = [
   ['descriptionTh', 'Thai description'],
   ['descriptionEn', 'English description'],
