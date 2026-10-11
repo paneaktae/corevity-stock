@@ -70,6 +70,8 @@
   "A clear view of your equipment, customers, and next steps.": "ดูภาพรวมสินค้า ลูกค้า และงานที่ต้องทำต่อ",
   "Add equipment": "เพิ่มสินค้า",
   "Import Excel": "นำเข้า Excel",
+  "Download Excel example": "ดาวน์โหลดตัวอย่าง Excel",
+  "Enter to send · Shift+Enter for a new line": "Enter เพื่อส่ง · Shift+Enter เพื่อขึ้นบรรทัดใหม่",
   "Importing…": "กำลังนำเข้า…",
   "Choose an Excel (.xlsx) file.": "กรุณาเลือกไฟล์ Excel (.xlsx)",
   "Excel file must be 5 MB or smaller.": "ไฟล์ Excel ต้องมีขนาดไม่เกิน 5 MB",

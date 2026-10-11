@@ -97,6 +97,13 @@ export function InventoryPage() {
         subtitle={t('Everything on hand. Every detail in one place.')}
         action={
           <div className="header-actions">
+            <a
+              className="button"
+              href="/downloads/Corevity-Product-Import-Example.xlsx"
+              download
+            >
+              {t('Download Excel example')}
+            </a>
             <label className={`button${importing ? ' disabled' : ''}`}>
               <Upload size={17} />
               {importing ? t('Importing…') : t('Import Excel')}

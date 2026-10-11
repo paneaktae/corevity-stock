@@ -427,9 +427,22 @@ export function ChatPage() {
               disabled={sending}
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key !== 'Enter' ||
+                  e.shiftKey ||
+                  e.nativeEvent.isComposing ||
+                  e.keyCode === 229
+                )
+                  return;
+                e.preventDefault();
+                if (ready && !sending && !e.repeat)
+                  e.currentTarget.form?.requestSubmit();
+              }}
               placeholder={t('Write to your team…')}
             />
           </label>
+          <small>{t('Enter to send · Shift+Enter for a new line')}</small>
           <div className="chat-actions">
             <button
               type="button"
