@@ -536,6 +536,46 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/products/${p.id}`, 'DELETE')).status).toBe(200);
     expect((await request(`/products/${p.id}`)).status).toBe(404);
   });
+  it('creates a duplicate with generated SKU, blank serial and copied analysis', async () => {
+    const response = await request('/products', 'POST', {
+      brand: 'Duplicate Brand',
+      model: 'Duplicate Model',
+      purchaseCost: 100,
+      sellingPrice: 200,
+      serialNumber: '',
+      status: 'AVAILABLE',
+      descriptionTh: 'คำอธิบายภาษาไทย',
+      shortDescription: 'Short copy',
+      priceRating: 8,
+      features: ['Verified feature'],
+      ratingReasons: {
+        price: 'Price evidence',
+        design: '',
+        qualityPerformance: '',
+      },
+    });
+    expect(response.status).toBe(201);
+    const created = await json<{
+      sku: string;
+      serialNumber: string;
+      notes: string;
+      descriptionTh: string;
+      shortDescription: string;
+      priceRating: number | null;
+      features: string[];
+      ratingReasons: { price: string };
+    }>(response);
+    expect(created).toMatchObject({
+      sku: expect.stringMatching(/^\d{9,}$/),
+      serialNumber: '',
+      notes: '',
+      descriptionTh: 'คำอธิบายภาษาไทย',
+      shortDescription: 'Short copy',
+      priceRating: 8,
+      features: ['Verified feature'],
+      ratingReasons: { price: 'Price evidence' },
+    });
+  });
   it('manages brand and category choices independently of conditions', async () => {
     const p = await product('Legacy Brand');
     const initial = await json<{

@@ -504,7 +504,9 @@ app.get('/api/products/next-sku', async (c) =>
   c.json({ sku: await nextSku(c.env.DB) }),
 );
 app.post('/api/products', async (c) => {
-  const data = productInput.parse(await c.req.json());
+  const raw = await c.req.json();
+  const data = productInput.parse(raw);
+  const analysis = productUpdateInput.parse(raw);
   if (data.status === 'RESERVED')
     fail(422, 'Save the equipment first, then reserve it for a customer.');
   const productId = id(),
@@ -516,6 +518,20 @@ app.post('/api/products', async (c) => {
       .insert(s.products)
       .values({
         ...data,
+        priceRating: analysis.priceRating ?? null,
+        designRating: analysis.designRating ?? null,
+        qualityPerformanceRating: analysis.qualityPerformanceRating ?? null,
+        features: JSON.stringify(analysis.features ?? []),
+        strengths: JSON.stringify(analysis.strengths ?? []),
+        weaknesses: JSON.stringify(analysis.weaknesses ?? []),
+        analysisSources: JSON.stringify(analysis.analysisSources ?? []),
+        ratingReasons: JSON.stringify(
+          analysis.ratingReasons ?? {
+            price: '',
+            design: '',
+            qualityPerformance: '',
+          },
+        ),
         sku,
         id: productId,
         createdAt: time,

@@ -882,7 +882,14 @@ export function ProductPage() {
           descriptionEn: p.descriptionEn,
           shortDescription: p.shortDescription,
           facebookCaption: p.facebookCaption,
-          notes: p.notes,
+          priceRating: p.priceRating,
+          designRating: p.designRating,
+          qualityPerformanceRating: p.qualityPerformanceRating,
+          features: p.features,
+          strengths: p.strengths,
+          weaknesses: p.weaknesses,
+          analysisSources: p.analysisSources,
+          ratingReasons: p.ratingReasons,
         }),
       });
       nav(`/inventory/${copy.id}/edit`);
