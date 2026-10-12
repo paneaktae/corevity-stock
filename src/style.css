@@ -873,6 +873,17 @@ td small {
   text-align: right;
   overflow-wrap: anywhere;
 }
+.fact-value {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  min-width: 0;
+}
+.fact-value .usd-price {
+  margin-top: 0;
+  color: var(--muted-text);
+  font-size: 11px;
+}
 .stack {
   display: grid;
   gap: 10px;

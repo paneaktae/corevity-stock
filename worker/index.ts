@@ -1063,7 +1063,12 @@ app.get('/api/followups', async (c) => {
   });
 });
 app.get('/api/dashboard', async (c) => {
-  const all = await db(c).select().from(s.products);
+  const all = await db(c)
+    .select({
+      ...getTableColumns(s.products),
+      primaryImageId: sql<string | null>`(SELECT id FROM product_images WHERE product_id=products.id ORDER BY is_primary DESC,sort_order LIMIT 1)`,
+    })
+    .from(s.products);
   const products = all.filter((p) => !p.archivedAt).map(productResponse);
   const allProducts = all.map(productResponse);
   const leads = await leadList(c);

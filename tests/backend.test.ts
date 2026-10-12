@@ -760,6 +760,34 @@ describe('D1-backed inventory and sales', () => {
     expect(sold.inventoryCostValue).toBe(before.inventoryCostValue);
     expect(sold.soldThisMonth).toBe(before.soldThisMonth + 1);
   });
+  it('includes the primary photo id for recent products on the dashboard', async () => {
+    const item = await product('Dashboard photo');
+    const db = await mf.getD1Database('DB');
+    const imageId = crypto.randomUUID();
+    await db
+      .prepare(
+        'INSERT INTO product_images(id,product_id,r2_key,file_name,mime_type,file_size,sort_order,is_primary,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+      )
+      .bind(
+        imageId,
+        item.id,
+        `products/${item.id}/thumb.jpg`,
+        'thumb.jpg',
+        'image/jpeg',
+        128,
+        0,
+        1,
+        new Date().toISOString(),
+      )
+      .run();
+    const dashboard = await json<{
+      recentProducts: { id: string; primaryImageId: string | null }[];
+    }>(await request('/dashboard'));
+    expect(
+      dashboard.recentProducts.find((recent) => recent.id === item.id)
+        ?.primaryImageId,
+    ).toBe(imageId);
+  });
   it('groups due follow-ups and clears contacted tasks without downgrading a quoted lead', async () => {
     const c = await customer();
     const l = await json<{ id: string }>(

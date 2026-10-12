@@ -977,13 +977,17 @@ export function ProductPage() {
           <div className="facts">
             <div>
               <span>{t('Purchase cost')}</span>
-              <strong>{money(p.purchaseCost)}</strong>
-              <UsdPrice amount={p.purchaseCost} />
+              <div className="fact-value">
+                <strong>{money(p.purchaseCost)}</strong>
+                <UsdPrice amount={p.purchaseCost} />
+              </div>
             </div>
             <div>
               <span>{t('Estimated gross profit')}</span>
-              <strong>{money(profit)}</strong>
-              <UsdPrice amount={profit} />
+              <div className="fact-value">
+                <strong>{money(profit)}</strong>
+                <UsdPrice amount={profit} />
+              </div>
             </div>
             <div>
               <span>{t('Estimated margin')}</span>
