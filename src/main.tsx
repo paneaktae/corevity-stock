@@ -105,16 +105,26 @@ function App() {
                   <option value="en">English</option>
                 </select>
               </label>
-              <button
-                className="theme-toggle"
-                type="button"
-                aria-label={t(theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode')}
-                title={t(theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode')}
-                onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
-              >
-                {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-                {t(theme === 'light' ? 'Dark mode' : 'Light mode')}
-              </button>
+              <div className="theme-toggle" role="group" aria-label={t('Theme')}>
+                <button
+                  className={theme === 'light' ? 'theme-option active' : 'theme-option'}
+                  type="button"
+                  aria-pressed={theme === 'light'}
+                  onClick={() => setTheme('light')}
+                >
+                  <Sun size={16} />
+                  {t('Light mode')}
+                </button>
+                <button
+                  className={theme === 'dark' ? 'theme-option active' : 'theme-option'}
+                  type="button"
+                  aria-pressed={theme === 'dark'}
+                  onClick={() => setTheme('dark')}
+                >
+                  <Moon size={16} />
+                  {t('Dark mode')}
+                </button>
+              </div>
               <span className="workspace-tag">
                 <span className="status-dot" /> {t('Corevity Operations')}
               </span>
