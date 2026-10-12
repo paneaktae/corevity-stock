@@ -163,6 +163,7 @@
   "AI scores are estimates based on the saved product details.": "คะแนนจาก AI เป็นการประเมินจากรายละเอียดสินค้าที่บันทึกไว้",
   "Edit equipment": "แก้ไขสินค้า",
   "Duplicate equipment": "ทำสำเนาสินค้า",
+  "This copy is not saved until you save this form. Internal notes are blank.": "สำเนานี้ยังไม่เข้าคลังจนกว่าจะกดบันทึก หมายเหตุภายในเว้นว่างไว้",
   "Start with a brand and model. Add photos after saving.": "เริ่มจากแบรนด์และรุ่น แล้วเพิ่มรูปภาพหลังบันทึก",
   "Equipment details": "รายละเอียดสินค้า",
   "Condition": "สภาพสินค้า",

@@ -496,12 +496,20 @@ function AnalysisSources({
 }
 export function ProductForm() {
   const { id } = useParams();
+  const [params] = useSearchParams();
+  const duplicateId = params.get('duplicate');
   const { data: nextSku, error: skuError } = useData<{ sku: string }>(
     id ? null : '/products/next-sku',
   );
   const nav = useNavigate();
   const { data: detail, error: loadError } = useData<ProductDetail>(
     id ? `/products/${id}` : null,
+  );
+  const {
+    data: duplicateDetail,
+    error: duplicateError,
+  } = useData<ProductDetail>(
+    !id && duplicateId ? `/products/${duplicateId}` : null,
   );
   const { data: settings } = useData<Settings>('/settings');
   const [form, setForm] = useState<ProductFormValues>(blank);
@@ -511,6 +519,17 @@ export function ProductForm() {
   useEffect(() => {
     if (id && detail) setForm(detail.product);
   }, [id, detail]);
+  useEffect(() => {
+    if (!id && duplicateDetail) {
+      setForm({
+        ...duplicateDetail.product,
+        sku: '',
+        serialNumber: '',
+        status: 'AVAILABLE',
+        notes: '',
+      });
+    }
+  }, [id, duplicateDetail]);
   async function save(e: FormEvent, stay: boolean) {
     e.preventDefault();
     setBusy(true);
@@ -534,21 +553,34 @@ export function ProductForm() {
       setBusy(false);
     }
   }
-  if (id && !detail)
+  if ((id && !detail) || (!id && duplicateId && !duplicateDetail))
     return (
       <>
-        <ErrorBox message={loadError} />
-        {!loadError && <Loading />}
+        <ErrorBox message={loadError || duplicateError} />
+        {!loadError && !duplicateError && <Loading />}
       </>
     );
   return (
     <>
       <Header
-        title={id ? t('Edit equipment') : t('Add equipment')}
+        title={
+          id
+            ? t('Edit equipment')
+            : duplicateId
+              ? t('Duplicate equipment')
+              : t('Add equipment')
+        }
         subtitle={t('Start with a brand and model. Add photos after saving.')}
       />
       <form onSubmit={(e) => void save(e, false)}>
         <ErrorBox message={error} />
+        {duplicateId && (
+          <div className="success" role="status">
+            {t(
+              'This copy is not saved until you save this form. Internal notes are blank.',
+            )}
+          </div>
+        )}
         <section className="panel">
           <h2>{t('Equipment details')}</h2>
           <div className="form-grid">
@@ -863,41 +895,7 @@ export function ProductPage() {
   }
   async function duplicateProduct() {
     if (!d?.product) return;
-    setBusy(true);
-    setError('');
-    try {
-      const copy = await api<Product>('/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          brand: p.brand,
-          model: p.model,
-          category: p.category,
-          serialNumber: '',
-          condition: p.condition,
-          purchaseCost: p.purchaseCost,
-          sellingPrice: p.sellingPrice,
-          status: 'AVAILABLE',
-          location: p.location,
-          descriptionTh: p.descriptionTh,
-          descriptionEn: p.descriptionEn,
-          shortDescription: p.shortDescription,
-          facebookCaption: p.facebookCaption,
-          priceRating: p.priceRating,
-          designRating: p.designRating,
-          qualityPerformanceRating: p.qualityPerformanceRating,
-          features: p.features,
-          strengths: p.strengths,
-          weaknesses: p.weaknesses,
-          analysisSources: p.analysisSources,
-          ratingReasons: p.ratingReasons,
-        }),
-      });
-      nav(`/inventory/${copy.id}/edit`);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    nav(`/inventory/new?duplicate=${encodeURIComponent(d.product.id)}`);
   }
   if (!d)
     return (
