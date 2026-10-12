@@ -121,6 +121,15 @@ textarea {
   min-height: 44px;
   color: var(--text);
 }
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371849c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 15px;
+}
 /* Monetary amounts are typed directly, without browser stepper controls. */
 input[type='number'] {
   appearance: textfield;
@@ -208,7 +217,7 @@ select:disabled {
   display: flex;
   align-items: center;
   gap: 13px;
-  padding: 13px 15px;
+  padding: 13px 18px 13px 15px;
   border-radius: 8px;
   font-size: 13px;
 }
@@ -222,6 +231,8 @@ select:disabled {
 }
 .nav-arrow {
   margin-left: auto;
+  margin-right: 2px;
+  flex-shrink: 0;
   opacity: 0;
 }
 .active .nav-arrow {
@@ -1473,7 +1484,7 @@ td small {
 .language-picker select {
   width: auto;
   min-height: 36px;
-  padding: 5px 9px;
+  padding: 5px 38px 5px 9px;
 }
 html[lang='th'] {
   line-height: 1.65;
@@ -1759,6 +1770,9 @@ html[data-theme='dark'] .theme-toggle {
 html[data-theme='dark'] input:disabled,
 html[data-theme='dark'] select:disabled {
   background: #1c2939;
+}
+html[data-theme='dark'] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a6b6ca' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 .chat-connection {
   margin-left: auto;
