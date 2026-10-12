@@ -550,6 +550,8 @@
   "Expiration date (optional)": "วันหมดอายุ (ไม่บังคับ)",
   "Search published products": "ค้นหาสินค้าที่เผยแพร่แล้ว",
   "Search brand, model, or category": "ค้นหาแบรนด์ รุ่น หรือหมวดหมู่",
+  "Search brand, model, SKU, or category": "ค้นหาแบรนด์ รุ่น SKU หรือหมวดหมู่",
+  "No published products match your search.": "ไม่พบสินค้าที่เผยแพร่ตรงกับคำค้นหา",
   "Selected products": "สินค้าที่เลือก",
   "Catalog display price": "ราคาที่แสดงในแคตตาล็อก",
   "Remove product": "นำสินค้าออก",

@@ -216,9 +216,10 @@ export function CatalogsPage() {
     (product) =>
       product.isPublished &&
       product.publicSlug &&
-      `${product.brand} ${product.model} ${product.category}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
+      `${product.brand} ${product.model} ${product.sku} ${product.category}`
+        .normalize('NFKC')
+        .toLocaleLowerCase()
+        .includes(query.trim().normalize('NFKC').toLocaleLowerCase()),
   );
   const catalogProducts = new Map(
     (products ?? []).map((product) => [product.id, product]),
@@ -311,7 +312,7 @@ export function CatalogsPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('Search brand, model, or category')}
+                placeholder={t('Search brand, model, SKU, or category')}
               />
             </Field>
             <div className="catalog-product-picker">
@@ -350,7 +351,9 @@ export function CatalogsPage() {
               {!eligibleProducts.length && (
                 <p className="muted">
                   {t(
-                    'Publish products from their detail page before adding them to a shareable catalog.',
+                    query
+                      ? 'No published products match your search.'
+                      : 'Publish products from their detail page before adding them to a shareable catalog.',
                   )}
                 </p>
               )}
