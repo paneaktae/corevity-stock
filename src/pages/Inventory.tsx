@@ -536,14 +536,16 @@ export function ProductForm() {
                   </>
                 ) : k === 'brand' ? (
                   <>
-                    <select
+                    <input
+                      list="product-brand-options"
                       required
                       value={form.brand}
+                      placeholder={t('Search or type a brand')}
                       onChange={(e) =>
                         setForm({ ...form, brand: e.target.value })
                       }
-                    >
-                      <option value="">{t('Select brand')}</option>
+                    />
+                    <datalist id="product-brand-options">
                       {[
                         ...new Set(
                           [...(settings?.brands ?? []), form.brand].filter(
@@ -551,11 +553,9 @@ export function ProductForm() {
                           ),
                         ),
                       ].map((brand) => (
-                        <option key={brand} value={brand}>
-                          {brand}
-                        </option>
+                        <option key={brand} value={brand} />
                       ))}
-                    </select>
+                    </datalist>
                     <small>
                       <Link to="/settings">
                         {t('Manage brands in Settings')}
@@ -563,23 +563,25 @@ export function ProductForm() {
                     </small>
                   </>
                 ) : k === 'category' ? (
-                  <select
-                    value={form.category}
-                    onChange={(e) =>
-                      setForm({ ...form, category: e.target.value })
-                    }
-                  >
-                    <option value="">{t('Select category')}</option>
-                    {form.category &&
-                      !productCategories.includes(form.category) && (
-                        <option value={form.category}>{form.category}</option>
-                      )}
-                    {productCategories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <input
+                      list="product-category-options"
+                      value={form.category}
+                      placeholder={t('Search or type a category')}
+                      onChange={(e) =>
+                        setForm({ ...form, category: e.target.value })
+                      }
+                    />
+                    <datalist id="product-category-options">
+                      {[
+                        ...new Set(
+                          [...productCategories, form.category].filter(Boolean),
+                        ),
+                      ].map((category) => (
+                        <option key={category} value={category} />
+                      ))}
+                    </datalist>
+                  </>
                 ) : (
                   <input
                     required={k === 'model'}
