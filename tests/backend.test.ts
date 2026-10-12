@@ -183,6 +183,14 @@ describe('D1-backed inventory and sales', () => {
         (product) => product.slug === productRow.publicSlug,
       ),
     ).toHaveProperty('price', null);
+    const skuSearch = await publicCatalogWorker.fetch(
+      new Request(`http://catalog.test/catalog?q=${encodeURIComponent(item.sku)}`),
+      { DB: database, PRODUCT_IMAGES: bucket },
+      ctx,
+    );
+    const skuSearchHtml = await skuSearch.text();
+    expect(skuSearchHtml).toContain('1 products');
+    expect(skuSearchHtml).toContain('Public boundary Test model');
 
     const unpublish = await request(`/products/${item.id}/unpublish`, 'POST');
     expect(unpublish.status).toBe(200);

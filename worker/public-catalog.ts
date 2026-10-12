@@ -278,8 +278,15 @@ app.get('/catalog', async (c) => {
   const filters = ['is_published=1', 'archived_at IS NULL', "status!='SOLD'"];
   const values: (string | number)[] = [];
   if (query) {
-    filters.push('(brand LIKE ? OR model LIKE ?)');
-    values.push(`%${query}%`, `%${query}%`);
+    filters.push(
+      '(brand LIKE ? OR model LIKE ? OR sku LIKE ? OR category LIKE ?)',
+    );
+    values.push(
+      `%${query}%`,
+      `%${query}%`,
+      `%${query}%`,
+      `%${query}%`,
+    );
   }
   if (brand) {
     filters.push('brand=?');
@@ -319,7 +326,11 @@ app.get('/catalog', async (c) => {
   ]);
   await logEvent(c.env.DB, 'PUBLIC', 'catalog', 'PAGE_VIEW');
   const labels = {
-    search: text(language, 'Search brand or model', 'ค้นหาแบรนด์หรือรุ่น'),
+    search: text(
+      language,
+      'Search brand, model, SKU, or category',
+      'ค้นหาแบรนด์ รุ่น SKU หรือหมวดหมู่',
+    ),
     brand: text(language, 'All brands', 'ทุกแบรนด์'),
     category: text(language, 'All categories', 'ทุกหมวดหมู่'),
     condition: text(language, 'All conditions', 'ทุกสภาพ'),
