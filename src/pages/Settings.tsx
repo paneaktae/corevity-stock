@@ -72,9 +72,6 @@ export function SettingsPage() {
           >
             <Icon size={17} />
             <span className="settings-tab-title">{t(title)}</span>
-            <span className="settings-tab-state" aria-hidden="true">
-              {t(tab === key ? 'Active' : 'Inactive')}
-            </span>
           </button>
         ))}
       </div>

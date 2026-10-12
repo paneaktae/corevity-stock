@@ -465,19 +465,6 @@ main {
   background: var(--brand-blue-dark);
   color: #fff;
 }
-.settings-tab-state {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--muted-text) 12%, var(--surface));
-  color: var(--muted-text);
-  font-size: 10px;
-  font-weight: 650;
-  line-height: 1.5;
-}
-.settings-tab.active .settings-tab-state {
-  background: rgb(255 255 255 / 20%);
-  color: #fff;
-}
 .settings-tab:focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 2px;
@@ -2184,10 +2171,6 @@ html[data-theme='dark'] .settings-tab:not(.active) {
   color: #aabbd1;
   background: #101b2c;
   border-color: #34465f;
-}
-html[data-theme='dark'] .settings-tab:not(.active) .settings-tab-state {
-  color: #9eafc4;
-  background: #1b2a40;
 }
 html[data-theme='dark'] .metric-top,
 html[data-theme='dark'] .metric-top svg,
