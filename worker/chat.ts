@@ -98,7 +98,7 @@ chatRoutes.post('/assistant', async (c) => {
   const input = inventoryAssistantInput.parse(await c.req.json());
   const email = c.get('email');
   const previous = await c.env.DB.prepare(
-    `SELECT role,body AS content FROM (SELECT role,body,id FROM assistant_messages WHERE user_email=? ORDER BY id DESC LIMIT 8) ORDER BY id ASC`,
+    `SELECT role,substr(body,1,300) AS content FROM (SELECT role,body,id FROM assistant_messages WHERE user_email=? ORDER BY id DESC LIMIT 4) ORDER BY id ASC`,
   )
     .bind(email)
     .all<{ role: 'user' | 'assistant'; content: string }>();
@@ -172,11 +172,11 @@ chatRoutes.post('/assistant', async (c) => {
   const inventory = await c.env.DB.prepare(
     `SELECT id,sku,brand,model,status,selling_price AS sellingPrice,
     (SELECT id FROM product_images WHERE product_id=products.id ORDER BY is_primary DESC,sort_order LIMIT 1) AS primaryImageId,
-    archived_at AS archivedAt,category,condition,substr(description_th,1,600) AS descriptionTh,
-    substr(description_en,1,600) AS descriptionEn
+    archived_at AS archivedAt,category,condition,substr(description_th,1,240) AS descriptionTh,
+    substr(description_en,1,240) AS descriptionEn
     FROM products WHERE ${clauses.join(' AND ')}
     ORDER BY CASE status WHEN 'AVAILABLE' THEN 0 WHEN 'RESERVED' THEN 1 WHEN 'NOT_AVAILABLE' THEN 2 ELSE 3 END,
-    selling_price ASC LIMIT 100`,
+    selling_price ASC LIMIT 20`,
   )
     .bind(...bindings)
     .all<

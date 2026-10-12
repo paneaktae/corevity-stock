@@ -6,23 +6,24 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('inventory assistant', () => {
   it('only attaches products returned from the inventory search', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              reply: 'This item matches your request.',
+              productIds: [
+                'real-product',
+                'invented-product',
+                'real-product',
+              ],
+            }),
+          }),
+        ),
+    );
     vi.stubGlobal(
       'fetch',
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              output_text: JSON.stringify({
-                reply: 'This item matches your request.',
-                productIds: [
-                  'real-product',
-                  'invented-product',
-                  'real-product',
-                ],
-              }),
-            }),
-          ),
-      ),
+      fetchMock,
     );
     const input: InventoryAssistantInput = {
       message: 'Find a treadmill',
@@ -62,5 +63,9 @@ describe('inventory assistant', () => {
       },
     );
     expect(result.products).toEqual([product]);
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as {
+      max_output_tokens: number;
+    };
+    expect(body.max_output_tokens).toBe(320);
   });
 });
