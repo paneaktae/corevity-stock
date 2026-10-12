@@ -158,6 +158,7 @@
   "Selling price (THB)": "ราคาขาย (บาท)",
   "Internal notes": "หมายเหตุภายใน",
   "Descriptions & sales copy": "คำบรรยายและข้อความขาย",
+  "Generating product description…": "กำลังให้ AI สร้างคำอธิบายสินค้า กรุณารอสักครู่…",
   "AI draft generation is available from the equipment detail page after saving.": "หลังบันทึก สามารถสร้างฉบับร่างด้วย AI ได้จากหน้ารายละเอียดสินค้า",
   "Save & continue editing": "บันทึกและแก้ไขต่อ",
   "Save equipment": "บันทึกสินค้า",

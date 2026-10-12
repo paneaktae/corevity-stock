@@ -761,6 +761,7 @@ export function ProductPage() {
   const { data: customers } = useData<Customer[]>('/customers');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [reserve, setReserve] = useState(false);
   const [customerId, setCustomerId] = useState('');
   const [expires, setExpires] = useState('');
@@ -785,6 +786,7 @@ export function ProductPage() {
   }
   async function generate(target: string) {
     setBusy(true);
+    setGenerating(true);
     setError('');
     try {
       setDraft(
@@ -796,6 +798,7 @@ export function ProductPage() {
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      setGenerating(false);
       setBusy(false);
     }
   }
@@ -1130,6 +1133,15 @@ export function ProductPage() {
             </button>
           ))}
         </div>
+        {generating && (
+          <div className="ai-generating" role="status" aria-live="polite">
+            <Sparkles size={18} className="ai-generating-icon" />
+            <span>{t('Generating product description…')}</span>
+            <span className="ai-generating-dots" aria-hidden="true">
+              …
+            </span>
+          </div>
+        )}
         {draft && (
           <div className="ai-draft">
             <h3>{t('Review AI draft')}</h3>

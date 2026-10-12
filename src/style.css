@@ -837,6 +837,30 @@ td small {
 .button-row .button {
   font-size: 12px;
 }
+.ai-generating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #c9def6;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand-blue-dark);
+  font-weight: 600;
+}
+.ai-generating-icon {
+  flex: 0 0 auto;
+  animation: ai-generate-pulse 1.2s ease-in-out infinite;
+}
+.ai-generating-dots {
+  animation: ai-generate-pulse 1s ease-in-out infinite;
+}
+@keyframes ai-generate-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
 .description {
   border-top: 1px solid #dfe4ea;
   margin-top: 22px;
