@@ -456,13 +456,15 @@ main {
   color: var(--text);
 }
 .settings-tab.active {
-  border-color: var(--brand-blue);
-  background: var(--brand-blue);
+  border: 2px solid #0348b6;
+  background: #075fe4;
   color: #fff;
-  box-shadow: 0 3px 10px rgb(23 105 210 / 18%);
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgb(7 95 228 / 34%);
+  transform: translateY(-1px);
 }
 .settings-tab.active:hover {
-  background: var(--brand-blue-dark);
+  background: #034dbd;
   color: #fff;
 }
 .settings-tab:focus-visible {
@@ -2164,8 +2166,9 @@ html[data-theme='dark'] .chat-picker-results button {
 html[data-theme='dark'] .settings-tab.active,
 html[data-theme='dark'] .mine .chat-bubble {
   color: #fff;
-  background: var(--brand-blue-dark);
-  border-color: #4388df;
+  background: #1674ff;
+  border-color: #83b5ff;
+  box-shadow: 0 0 0 2px rgb(22 116 255 / 22%), 0 5px 18px rgb(22 116 255 / 36%);
 }
 html[data-theme='dark'] .settings-tab:not(.active) {
   color: #aabbd1;
