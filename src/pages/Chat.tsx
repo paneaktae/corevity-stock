@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Paperclip, Send, X, Package } from 'lucide-react';
+import {
+  MessageCircle,
+  Paperclip,
+  Send,
+  X,
+  Package,
+  RadioTower,
+} from 'lucide-react';
 import type {
   ChatMessage,
   ChatPage as ChatResult,
@@ -334,18 +341,22 @@ export function ChatPage() {
       />
       <section className="panel chat-panel">
         <div className="chat-heading">
-          <MessageCircle size={18} />
-          <strong>{t('Corevity team')}</strong>
-          <span className={`chat-connection ${connection}`}>
-            <span className="status-dot" />
-            {t(
-              connection === 'live'
-                ? 'Live'
-                : connection === 'connecting'
-                  ? 'Connecting…'
-                  : 'Reconnecting…',
-            )}
-          </span>
+          <div className="chat-heading-main">
+            <MessageCircle size={20} />
+            <strong>{t('Corevity team')}</strong>
+            <span className={`chat-connection ${connection}`}>
+              <RadioTower size={16} aria-hidden="true" />
+              <span>
+                {t(
+                  connection === 'live'
+                    ? 'Live'
+                    : connection === 'connecting'
+                      ? 'Connecting…'
+                      : 'Reconnecting…',
+                )}
+              </span>
+            </span>
+          </div>
           <div className="chat-presence" aria-label={t('Online now')}>
             <span className="chat-presence-label">
               <span className="status-dot" />
