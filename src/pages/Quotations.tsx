@@ -242,8 +242,8 @@ export function QuotationForm() {
           </>}
         </section>
         <section className="panel quotation-section"><h2>{t('Quotation information')}</h2><div className="form-grid">
-          <Field label={t('Issue date')}><input type="date" required value={form.issueDate} onChange={(e)=>setForm({...form,issueDate:e.target.value})}/></Field>
-          <Field label={t('Valid until')}><input type="date" min={form.issueDate} required value={form.validUntil} onChange={(e)=>setForm({...form,validUntil:e.target.value})}/></Field>
+          <Field label={t('Issue date')}><input className="quotation-date-input" type="date" required value={form.issueDate} onChange={(e)=>setForm({...form,issueDate:e.target.value})}/></Field>
+          <Field label={t('Valid until')}><input className="quotation-date-input" type="date" min={form.issueDate} required value={form.validUntil} onChange={(e)=>setForm({...form,validUntil:e.target.value})}/></Field>
           <Field label={t('Currency')}><select value={form.currency} onChange={(e)=>setForm({...form,currency:e.target.value as 'THB'|'USD'})}><option value="THB">THB · Thai baht</option><option value="USD">USD · US dollar</option></select></Field>
         </div></section>
         <section className="panel quotation-section"><div className="section-heading"><h2>{t('Products')}</h2><span>{form.items.length} / 100</span></div>

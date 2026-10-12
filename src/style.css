@@ -2585,13 +2585,14 @@ html[data-theme='dark'] .guide-category:hover {
   min-width: 0;
   max-width: 100%;
 }
-.quotation-section input[type='date'] {
+.quotation-section input.quotation-date-input {
   display: block;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding-inline: 8px;
+  margin: 0;
+  padding-inline: 10px 6px;
   font-size: 16px;
 }
 .quotation-section > h2, .quotation-summary > h2 { margin-bottom: 16px; }
@@ -2661,6 +2662,24 @@ html[data-theme='dark'] .quotation-table th { background: #15243a; }
 }
 @media (max-width: 760px) {
   .quotation-toolbar, .quotation-editor-layout, .quotation-detail-layout { display: grid; grid-template-columns: 1fr; }
+  .quotation-section .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .quotation-section .field { width: 100%; }
+  .quotation-section input.quotation-date-input {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .quotation-section input.quotation-date-input::-webkit-date-and-time-value {
+    min-width: 0;
+    text-align: left;
+  }
+  .quotation-section input.quotation-date-input::-webkit-calendar-picker-indicator {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0;
+  }
   .quotation-toolbar select { width: 100%; }
   .quotation-summary { position: static; }
   .quotation-table { display: none; }
