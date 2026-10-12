@@ -534,5 +534,7 @@
   "Download PDF": "ดาวน์โหลด PDF",
   "Create a customer": "เพิ่มลูกค้า",
   "This product is sold.": "สินค้านี้ขายแล้ว",
-  "This product is reserved.": "สินค้านี้ถูกจองแล้ว"
+  "This product is reserved.": "สินค้านี้ถูกจองแล้ว",
+  "Active": "กำลังใช้งาน",
+  "Inactive": "ไม่ได้เลือก"
 }
