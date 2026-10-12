@@ -1169,7 +1169,7 @@ describe('D1-backed inventory and sales', () => {
     );
     expect(detail.product.descriptionEn).toBe('');
   });
-  it('uploads to R2, serves an authenticated image and deletes it', async () => {
+  it('accepts valid image bytes despite a nonstandard MIME and stores the canonical type', async () => {
     const p = await product();
     const form = new FormData();
     form.append(
@@ -1181,7 +1181,7 @@ describe('D1-backed inventory and sales', () => {
             'base64',
           ),
         ],
-        { type: 'image/png' },
+        { type: 'application/octet-stream' },
       ),
       'photo.png',
     );
@@ -1195,6 +1195,7 @@ describe('D1-backed inventory and sales', () => {
       await mf.getR2Bucket('PRODUCT_IMAGES')
     ).get(images[0].r2Key);
     expect(object).not.toBeNull();
+    expect(object?.httpMetadata?.contentType).toBe('image/png');
     const served = await request(`/images/${images[0].id}`);
     expect(served.status).toBe(200);
     expect(served.headers.get('Content-Type')).toBe('image/png');

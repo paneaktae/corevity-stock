@@ -1243,7 +1243,7 @@ app.post('/api/products/:id/images', async (c) => {
   const files = form.getAll('files');
   if (!files.length || files.length > 5)
     fail(422, 'Upload between one and five images at a time.');
-  const validated: { file: File; bytes: ArrayBuffer }[] = [];
+  const validated: { file: File; bytes: ArrayBuffer; mimeType: string }[] = [];
   for (const f of files) {
     if (typeof f === 'string') fail(422, 'Choose image files.');
     const file = f as File;
@@ -1253,12 +1253,13 @@ app.post('/api/products/:id/images', async (c) => {
     )
       fail(422, `Each photo must be under ${c.env.MAX_UPLOAD_MB} MB.`);
     const bytes = await file.arrayBuffer();
-    if (
-      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
-      imageMime(new Uint8Array(bytes)) !== file.type
-    )
+    // Browsers and operating systems do not always report the same MIME type
+    // for a valid image (for example, image/jpg or application/octet-stream).
+    // Trust the file signature and use its canonical MIME type when storing it.
+    const mimeType =
+      imageMime(new Uint8Array(bytes)) ??
       fail(422, 'Only valid JPEG, PNG, and WEBP images are supported.');
-    validated.push({ file, bytes });
+    validated.push({ file, bytes, mimeType });
   }
   const old = await db(c)
     .select()
@@ -1269,11 +1270,11 @@ app.post('/api/products/:id/images', async (c) => {
   const uploaded: string[] = [];
   try {
     const records = [];
-    for (const [i, { file, bytes }] of validated.entries()) {
+    for (const [i, { file, bytes, mimeType }] of validated.entries()) {
       const imageId = id(),
         key = `products/${p.id}/${imageId}`;
       await c.env.PRODUCT_IMAGES.put(key, bytes, {
-        httpMetadata: { contentType: file.type },
+        httpMetadata: { contentType: mimeType },
       });
       uploaded.push(key);
       records.push({
@@ -1281,7 +1282,7 @@ app.post('/api/products/:id/images', async (c) => {
         productId: p.id,
         r2Key: key,
         fileName: file.name.slice(0, 250),
-        mimeType: file.type,
+        mimeType,
         fileSize: file.size,
         sortOrder: Math.max(-1, ...old.map((v) => v.sortOrder)) + 1 + i,
         isPrimary: old.length === 0 && i === 0,

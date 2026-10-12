@@ -313,7 +313,14 @@ type ProductFormValues = Omit<ProductInput, 'purchaseCost' | 'sellingPrice'> & {
 };
 const maxProductPhotoDimension = 1920;
 async function compressProductPhoto(file: File): Promise<File> {
-  const bitmap = await createImageBitmap(file);
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    // Some browsers cannot decode an otherwise valid image for compression.
+    // Let the server validate its actual bytes and accept the original file.
+    return file;
+  }
   try {
     const scale = Math.min(
       1,
