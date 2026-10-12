@@ -232,9 +232,22 @@ chatRoutes.post('/assistant', async (c) => {
 chatRoutes.get('/socket', async (c) => {
   if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket')
     return c.body('Expected WebSocket upgrade', 426);
+  const email = c.get('email');
+  const salesperson = await c.env.DB.prepare(
+    'SELECT first_name AS firstName,last_name AS lastName FROM salespeople WHERE email=?',
+  )
+    .bind(email)
+    .first<{ firstName: string; lastName: string }>();
+  const displayName =
+    [salesperson?.firstName, salesperson?.lastName]
+      .filter((part) => part?.trim())
+      .join(' ') || email;
+  const headers = new Headers(c.req.raw.headers);
+  headers.set('X-Chat-User-Email', email);
+  headers.set('X-Chat-User-Name', displayName);
   return c.env.CHAT_ROOM.getByName('corevity-team', {
     locationHint: 'apac',
-  }).fetch(c.req.raw);
+  }).fetch(new Request(c.req.raw, { headers }));
 });
 chatRoutes.get('/', async (c) => {
   const { after, before } = pageInput.parse(c.req.query());

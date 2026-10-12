@@ -1838,6 +1838,45 @@ html[data-theme='dark'] select {
 .chat-connection.reconnecting .status-dot {
   background: #f59e0b;
 }
+.chat-presence {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding-left: 28px;
+  color: #64748b;
+  font-size: 12px;
+}
+.chat-presence-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chat-presence-label .status-dot {
+  background: #22c55e;
+}
+.chat-presence-users {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chat-presence-user {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.2;
+}
+html[data-theme='dark'] .chat-presence {
+  color: var(--muted-text);
+}
 .chat-feed {
   height: min(52vh, 580px);
   min-height: 260px;

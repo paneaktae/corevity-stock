@@ -106,6 +106,7 @@ function merge(current: ChatMessage[], incoming: ChatMessage[]) {
   return [...map.values()].sort((a, b) => a.id - b.id);
 }
 type ConnectionState = 'connecting' | 'live' | 'reconnecting';
+type OnlineUser = { email: string; name: string };
 function asChatProduct(p: Product): ChatProduct {
   return {
     id: p.id,
@@ -132,6 +133,7 @@ export function ChatPage() {
   const [sending, setSending] = useState(false);
   const [unseen, setUnseen] = useState(false);
   const [connection, setConnection] = useState<ConnectionState>('connecting');
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const latest = useRef(0);
   const scroll = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
@@ -202,7 +204,22 @@ export function ChatPage() {
           const data = JSON.parse(String(event.data)) as {
             type?: unknown;
             message?: Partial<ChatMessage>;
+            users?: unknown;
           };
+          if (
+            data.type === 'chat.presence' &&
+            Array.isArray(data.users) &&
+            data.users.every(
+              (user) =>
+                user &&
+                typeof user === 'object' &&
+                'email' in user &&
+                typeof user.email === 'string' &&
+                'name' in user &&
+                typeof user.name === 'string',
+            )
+          )
+            setOnlineUsers(data.users as OnlineUser[]);
           if (
             data.type === 'chat.message' &&
             typeof data.message?.id === 'number' &&
@@ -216,6 +233,7 @@ export function ChatPage() {
         }
       });
       socket.addEventListener('close', () => {
+        setOnlineUsers([]);
         if (stopped || document.hidden) return;
         setConnection('reconnecting');
         const delay = Math.min(30_000, 1_000 * 2 ** reconnectAttempts);
@@ -328,6 +346,23 @@ export function ChatPage() {
                   : 'Reconnecting…',
             )}
           </span>
+          <div className="chat-presence" aria-label={t('Online now')}>
+            <span className="chat-presence-label">
+              <span className="status-dot" />
+              {t('Online now')} · {onlineUsers.length}
+            </span>
+            <div className="chat-presence-users">
+              {onlineUsers.map((user) => (
+                <span
+                  className="chat-presence-user"
+                  key={user.email}
+                  title={user.email}
+                >
+                  {user.name}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
         <ErrorBox message={syncError} />
         {!ready && !syncError && <Loading />}

@@ -1087,6 +1087,22 @@ describe('Private shared team chat', () => {
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
     socket!.accept();
+    const receivedPresence = new Promise<{
+      type: string;
+      users: { email: string; name: string }[];
+    }>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('Timed out waiting for chat presence')),
+        2_000,
+      );
+      socket!.addEventListener('message', (event) => {
+        const data = JSON.parse(String(event.data));
+        if (data.type === 'chat.presence') {
+          clearTimeout(timeout);
+          resolve(data);
+        }
+      });
+    });
     const received = new Promise<{ type: string; message: ChatMessage }>(
       (resolve, reject) => {
         const timeout = setTimeout(
@@ -1096,13 +1112,19 @@ describe('Private shared team chat', () => {
         socket!.addEventListener(
           'message',
           (event) => {
+          const data = JSON.parse(String(event.data));
+          if (data.type === 'chat.message') {
             clearTimeout(timeout);
-            resolve(JSON.parse(String(event.data)));
-          },
-          { once: true },
+            resolve(data);
+          }
+        },
         );
       },
     );
+    await expect(receivedPresence).resolves.toMatchObject({
+      type: 'chat.presence',
+      users: [{ email: 'tester@example.test', name: 'tester@example.test' }],
+    });
     const sent = await json<ChatMessage>(
       await request('/chat', 'POST', {
         requestId: crypto.randomUUID(),
