@@ -620,7 +620,7 @@ export function FollowupsPage() {
       ) : (
         data &&
         (['overdue', 'today', 'upcoming'] as const).map((group) => (
-          <section className="followup-section" key={group}>
+          <section className="followup-section" id={group} key={group}>
             <div className="section-heading">
               <h2>
                 {label(group)}{' '}

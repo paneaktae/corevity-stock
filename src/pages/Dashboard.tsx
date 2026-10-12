@@ -30,26 +30,47 @@ export function DashboardPage() {
       </>
     );
   const metrics = [
-    [t('Available equipment'), d.available, Package, t('Ready for a new home')],
-    [t('Reserved equipment'), d.reserved, Clock, t('Held for your customers')],
+    [
+      t('Available equipment'),
+      d.available,
+      Package,
+      t('Ready for a new home'),
+      '/inventory?status=AVAILABLE',
+    ],
+    [
+      t('Reserved equipment'),
+      d.reserved,
+      Clock,
+      t('Held for your customers'),
+      '/inventory?status=RESERVED',
+    ],
     [
       t('Sold this month'),
       d.soldThisMonth,
       CheckCheck,
       t('Equipment put to work'),
+      '/inventory?status=SOLD',
     ],
     [
       t('Inventory cost value'),
       money(d.inventoryCostValue),
       Wallet,
       t('Available + reserved'),
+      '/inventory',
     ],
-    [t('Active leads'), d.activeLeads, Users, t('Conversations in progress')],
+    [
+      t('Active leads'),
+      d.activeLeads,
+      Users,
+      t('Conversations in progress'),
+      '/sales',
+    ],
     [
       t('Follow-ups today'),
       d.dueToday,
       CalendarClock,
       localized(`${d.overdue} overdue`, `เลยกำหนด ${d.overdue} รายการ`),
+      '/followups#today',
     ],
   ] as const;
   return (
@@ -78,15 +99,20 @@ export function DashboardPage() {
         </Link>
       )}
       <div className="metrics">
-        {metrics.map(([name, value, Icon, note]) => (
-          <div className="metric" key={name}>
+        {metrics.map(([name, value, Icon, note, href]) => (
+          <Link
+            className="metric"
+            to={href}
+            key={name}
+            aria-label={`${name}: ${value}`}
+          >
             <div className="metric-top">
               <span>{name}</span>
               <Icon size={19} />
             </div>
             <strong>{value}</strong>
             <small>{note}</small>
-          </div>
+          </Link>
         ))}
       </div>
       <div className="dashboard-grid">
