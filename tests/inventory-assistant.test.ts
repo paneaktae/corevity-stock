@@ -7,7 +7,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('inventory assistant', () => {
   it('only attaches products returned from the inventory search', async () => {
     const fetchMock = vi.fn(
-      async () =>
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
         new Response(
           JSON.stringify({
             output_text: JSON.stringify({
