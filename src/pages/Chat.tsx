@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Paperclip, Send, X, Package } from 'lucide-react';
+import {
+  MessageCircle,
+  Paperclip,
+  Send,
+  X,
+  Package,
+  Sparkles,
+} from 'lucide-react';
 import type {
   ChatMessage,
   ChatPage as ChatResult,
@@ -8,7 +15,7 @@ import type {
   Product,
 } from '../../shared/schemas';
 import { api, date, money, useData, useDebounce } from '../lib';
-import { t } from '../i18n';
+import { getLanguage, t } from '../i18n';
 import { Badge, ErrorBox, Header, Loading } from '../components/ui';
 
 function EquipmentCard({ product: p }: { product: ChatProduct }) {
@@ -44,7 +51,7 @@ function ProductPicker({
   onSelect,
   onClose,
 }: {
-  selected: Product[];
+  selected: Pick<ChatProduct, 'id'>[];
   onSelect: (p: Product) => void;
   onClose: () => void;
 }) {
@@ -106,6 +113,24 @@ function merge(current: ChatMessage[], incoming: ChatMessage[]) {
   return [...map.values()].sort((a, b) => a.id - b.id);
 }
 type ConnectionState = 'connecting' | 'live' | 'reconnecting';
+type AssistantTurn = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  products: ChatProduct[];
+};
+function asChatProduct(p: Product): ChatProduct {
+  return {
+    id: p.id,
+    sku: p.sku,
+    brand: p.brand,
+    model: p.model,
+    status: p.status,
+    sellingPrice: p.sellingPrice,
+    primaryImageId: p.primaryImageId,
+    archivedAt: p.archivedAt,
+  };
+}
 export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [userEmail, setUserEmail] = useState('');
@@ -115,8 +140,13 @@ export function ChatPage() {
   const [syncError, setSyncError] = useState('');
   const [sendError, setSendError] = useState('');
   const [body, setBody] = useState('');
-  const [selected, setSelected] = useState<Product[]>([]);
+  const [selected, setSelected] = useState<ChatProduct[]>([]);
   const [picking, setPicking] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantQuery, setAssistantQuery] = useState('');
+  const [assistantTurns, setAssistantTurns] = useState<AssistantTurn[]>([]);
+  const [assistantBusy, setAssistantBusy] = useState(false);
+  const [assistantError, setAssistantError] = useState('');
   const [sending, setSending] = useState(false);
   const [unseen, setUnseen] = useState(false);
   const [connection, setConnection] = useState<ConnectionState>('connecting');
@@ -264,6 +294,65 @@ export function ChatPage() {
       setLoadingOlder(false);
     }
   }
+  async function askAssistant(e: FormEvent) {
+    e.preventDefault();
+    const question = assistantQuery.trim();
+    if (!question || assistantBusy) return;
+    const history = assistantTurns
+      .slice(-8)
+      .map(({ role, content }) => ({ role, content }));
+    setAssistantQuery('');
+    setAssistantBusy(true);
+    setAssistantError('');
+    setAssistantTurns((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: question,
+        products: [],
+      },
+    ]);
+    try {
+      const answer = await api<{
+        reply: string;
+        products: ChatProduct[];
+      }>('/chat/assistant', {
+        method: 'POST',
+        body: JSON.stringify({
+          message: question,
+          history,
+          language: getLanguage(),
+        }),
+      });
+      setAssistantTurns((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: answer.reply,
+          products: answer.products,
+        },
+      ]);
+    } catch (error) {
+      setAssistantError((error as Error).message);
+    } finally {
+      setAssistantBusy(false);
+    }
+  }
+  function shareAssistantTurn(turn: AssistantTurn) {
+    setBody((current) =>
+      current.trim() ? `${current.trim()}\n\n${turn.content}` : turn.content,
+    );
+    setSelected((current) =>
+      [
+        ...new Map(
+          [...current, ...turn.products].map((p) => [p.id, p]),
+        ).values(),
+      ].slice(0, 3),
+    );
+    setAssistantOpen(false);
+  }
   async function send(e: FormEvent) {
     e.preventDefault();
     if (sendingRef.current || (!body.trim() && !selected.length)) return;
@@ -306,6 +395,14 @@ export function ChatPage() {
         <div className="chat-heading">
           <MessageCircle size={18} />
           <strong>{t('Corevity team')}</strong>
+          <button
+            type="button"
+            className={`chat-ai-toggle${assistantOpen ? ' active' : ''}`}
+            onClick={() => setAssistantOpen((open) => !open)}
+          >
+            <Sparkles size={16} />
+            {t('Ask AI')}
+          </button>
           <span className={`chat-connection ${connection}`}>
             <span className="status-dot" />
             {t(
@@ -317,6 +414,80 @@ export function ChatPage() {
             )}
           </span>
         </div>
+        {assistantOpen && (
+          <section
+            className="chat-assistant"
+            aria-label={t('AI inventory assistant')}
+          >
+            <div className="chat-assistant-heading">
+              <div>
+                <h3>{t('AI inventory assistant')}</h3>
+                <p>
+                  {t(
+                    'Ask about products in your inventory. AI will use saved product details.',
+                  )}
+                </p>
+              </div>
+              <Sparkles size={20} />
+            </div>
+            <div className="chat-assistant-feed" aria-live="polite">
+              {!assistantTurns.length && (
+                <p className="muted">
+                  {t('Try asking for a product by type, brand, or price.')}
+                </p>
+              )}
+              {assistantTurns.map((turn) => (
+                <article
+                  className={`assistant-turn ${turn.role}`}
+                  key={turn.id}
+                >
+                  <p>{turn.content}</p>
+                  {turn.products.map((product) => (
+                    <EquipmentCard product={product} key={product.id} />
+                  ))}
+                  {turn.role === 'assistant' && (
+                    <button
+                      type="button"
+                      className="assistant-share"
+                      onClick={() => shareAssistantTurn(turn)}
+                    >
+                      <Paperclip size={15} />
+                      {t('Add answer and products to team chat')}
+                    </button>
+                  )}
+                </article>
+              ))}
+              {assistantBusy && (
+                <div className="assistant-thinking" role="status">
+                  <span className="ai-generating-spinner" />
+                  {t('Searching inventory with AI…')}
+                </div>
+              )}
+            </div>
+            <ErrorBox message={assistantError} />
+            <form
+              className="assistant-composer"
+              onSubmit={(e) => void askAssistant(e)}
+            >
+              <input
+                autoFocus
+                value={assistantQuery}
+                disabled={assistantBusy}
+                onChange={(e) => setAssistantQuery(e.target.value)}
+                placeholder={t('Ask about your equipment…')}
+                aria-label={t('Ask about your equipment…')}
+                maxLength={1000}
+              />
+              <button
+                className="primary"
+                disabled={assistantBusy || !assistantQuery.trim()}
+              >
+                <Send size={16} />
+                {t('Ask AI')}
+              </button>
+            </form>
+          </section>
+        )}
         <ErrorBox message={syncError} />
         {!ready && !syncError && <Loading />}
         <div
@@ -409,12 +580,13 @@ export function ChatPage() {
             <ProductPicker
               selected={selected}
               onSelect={(p) =>
-                setSelected((current) =>
-                  current.length >= 3 ||
-                  current.some((item) => item.id === p.id)
+                setSelected((current) => {
+                  const product = asChatProduct(p);
+                  return current.length >= 3 ||
+                    current.some((item) => item.id === product.id)
                     ? current
-                    : [...current, p],
-                )
+                    : [...current, product];
+                })
               }
               onClose={() => setPicking(false)}
             />

@@ -261,6 +261,24 @@ export const chatInput = z
   .refine((v) => new Set(v.productIds).size === v.productIds.length, {
     message: 'Each equipment item can only be attached once.',
   });
+export const inventoryAssistantInput = z
+  .object({
+    message: z.string().trim().min(1).max(1000),
+    language: z.enum(['th', 'en']),
+    history: z
+      .array(
+        z
+          .object({
+            role: z.enum(['user', 'assistant']),
+            content: z.string().trim().min(1).max(1000),
+          })
+          .strict(),
+      )
+      .max(8)
+      .default([]),
+  })
+  .strict();
+export type InventoryAssistantInput = z.infer<typeof inventoryAssistantInput>;
 export type ChatProduct = Pick<
   Product,
   | 'id'

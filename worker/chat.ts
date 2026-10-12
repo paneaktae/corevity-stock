@@ -4,9 +4,14 @@ import { z } from 'zod';
 import type { AppEnv, Bindings } from './auth';
 import {
   chatInput,
+  inventoryAssistantInput,
   type ChatMessage,
   type ChatProduct,
 } from '../shared/schemas';
+import {
+  answerInventoryQuestion,
+  createInventorySearchPlan,
+} from './services/inventory-assistant';
 
 const pageInput = z
   .object({
@@ -47,6 +52,103 @@ async function attachProducts(
   }));
 }
 export const chatRoutes = new Hono<AppEnv>();
+chatRoutes.post('/assistant', async (c) => {
+  const input = inventoryAssistantInput.parse(await c.req.json());
+  let plan: Awaited<ReturnType<typeof createInventorySearchPlan>>;
+  try {
+    plan = await createInventorySearchPlan(input.message, input.history, c.env);
+  } catch (error) {
+    const notConfigured =
+      error instanceof Error && error.message === 'AI_NOT_CONFIGURED';
+    throw new HTTPException(notConfigured ? 503 : 502, {
+      message: notConfigured
+        ? 'Configure AI_API_KEY, AI_MODEL and AI_BASE_URL on the Worker.'
+        : 'AI could not answer this inventory search. Please retry.',
+    });
+  }
+  const clauses = ['archived_at IS NULL'];
+  const bindings: (string | number)[] = [];
+  if (plan.brand) {
+    clauses.push('brand LIKE ?');
+    bindings.push(`%${plan.brand}%`);
+  }
+  if (plan.model) {
+    clauses.push('model LIKE ?');
+    bindings.push(`%${plan.model}%`);
+  }
+  if (plan.category) {
+    clauses.push('category LIKE ?');
+    bindings.push(`%${plan.category}%`);
+  }
+  if (plan.minPrice !== null) {
+    clauses.push('selling_price>=?');
+    bindings.push(plan.minPrice);
+  }
+  if (plan.maxPrice !== null) {
+    clauses.push('selling_price<=?');
+    bindings.push(plan.maxPrice);
+  }
+  if (plan.statuses.length) {
+    clauses.push(`status IN (${plan.statuses.map(() => '?').join(',')})`);
+    bindings.push(...plan.statuses);
+  } else {
+    clauses.push("status!='SOLD'");
+  }
+  const terms = plan.terms
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (terms.length) {
+    clauses.push(
+      `(${terms
+        .flatMap(() =>
+          [
+            'sku',
+            'brand',
+            'model',
+            'category',
+            'description_th',
+            'description_en',
+            'short_description',
+          ].map((column) => `${column} LIKE ?`),
+        )
+        .join(' OR ')})`,
+    );
+    for (const term of terms)
+      for (let i = 0; i < 7; i++) bindings.push(`%${term}%`);
+  }
+  const inventory = await c.env.DB.prepare(
+    `SELECT id,sku,brand,model,status,selling_price AS sellingPrice,
+    (SELECT id FROM product_images WHERE product_id=products.id ORDER BY is_primary DESC,sort_order LIMIT 1) AS primaryImageId,
+    archived_at AS archivedAt,category,condition,substr(description_th,1,600) AS descriptionTh,
+    substr(description_en,1,600) AS descriptionEn
+    FROM products WHERE ${clauses.join(' AND ')}
+    ORDER BY CASE status WHEN 'AVAILABLE' THEN 0 WHEN 'RESERVED' THEN 1 WHEN 'NOT_AVAILABLE' THEN 2 ELSE 3 END,
+    selling_price ASC LIMIT 100`,
+  )
+    .bind(...bindings)
+    .all<
+      ChatProduct & {
+        category: string;
+        condition: string;
+        descriptionTh: string;
+        descriptionEn: string;
+      }
+    >();
+  try {
+    return c.json(
+      await answerInventoryQuestion(input, plan, inventory.results, c.env),
+    );
+  } catch (error) {
+    const notConfigured =
+      error instanceof Error && error.message === 'AI_NOT_CONFIGURED';
+    throw new HTTPException(notConfigured ? 503 : 502, {
+      message: notConfigured
+        ? 'Configure AI_API_KEY, AI_MODEL and AI_BASE_URL on the Worker.'
+        : 'AI could not answer this inventory search. Please retry.',
+    });
+  }
+});
 chatRoutes.get('/socket', async (c) => {
   if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket')
     return c.body('Expected WebSocket upgrade', 426);

@@ -1531,6 +1531,92 @@ html[lang='th'] .nav-label {
   border-bottom: 1px solid var(--border);
   color: var(--brand-blue-dark);
 }
+.chat-ai-toggle {
+  min-height: 36px;
+  padding: 6px 11px;
+  border-color: #c9def6;
+  color: var(--brand-blue-dark);
+  font-size: 12px;
+}
+.chat-ai-toggle.active {
+  background: var(--brand-soft);
+  border-color: var(--brand-blue);
+}
+.chat-assistant {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  background: #fbfdff;
+}
+.chat-assistant-heading,
+.assistant-thinking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--brand-blue-dark);
+}
+.chat-assistant-heading {
+  justify-content: space-between;
+}
+.chat-assistant-heading h3,
+.chat-assistant-heading p {
+  margin: 0;
+}
+.chat-assistant-heading p {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+.chat-assistant-feed {
+  display: grid;
+  gap: 10px;
+  max-height: 340px;
+  overflow-y: auto;
+  margin: 14px 0;
+  padding: 2px;
+}
+.chat-assistant-feed > .muted {
+  margin: 0;
+  font-size: 13px;
+}
+.assistant-turn {
+  max-width: min(760px, 96%);
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+}
+.assistant-turn.user {
+  justify-self: end;
+  background: var(--brand-soft);
+  border-color: #c9def6;
+}
+.assistant-turn p {
+  white-space: pre-wrap;
+  margin: 0;
+}
+.assistant-turn .chat-product {
+  min-width: 0;
+}
+.assistant-share {
+  min-height: 36px;
+  margin-top: 10px;
+  color: var(--brand-blue-dark);
+  font-size: 12px;
+}
+.assistant-thinking {
+  width: fit-content;
+  color: #52677f;
+  font-size: 13px;
+}
+.assistant-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.assistant-composer input {
+  flex: 1;
+  min-width: 0;
+}
 .chat-connection {
   margin-left: auto;
   color: #64748b;
@@ -1704,6 +1790,12 @@ a.chat-product:hover {
   .chat-heading {
     flex-wrap: wrap;
     padding: 14px;
+  }
+  .chat-assistant {
+    padding: 15px;
+  }
+  .assistant-composer {
+    align-items: stretch;
   }
   .chat-connection {
     width: 100%;
