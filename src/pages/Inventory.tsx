@@ -861,6 +861,37 @@ export function ProductPage() {
       setError(t('Could not copy the link.'));
     }
   }
+  async function duplicateProduct() {
+    if (!d?.product) return;
+    setBusy(true);
+    setError('');
+    try {
+      const copy = await api<Product>('/products', {
+        method: 'POST',
+        body: JSON.stringify({
+          brand: p.brand,
+          model: p.model,
+          category: p.category,
+          serialNumber: '',
+          condition: p.condition,
+          purchaseCost: p.purchaseCost,
+          sellingPrice: p.sellingPrice,
+          status: 'AVAILABLE',
+          location: p.location,
+          descriptionTh: p.descriptionTh,
+          descriptionEn: p.descriptionEn,
+          shortDescription: p.shortDescription,
+          facebookCaption: p.facebookCaption,
+          notes: p.notes,
+        }),
+      });
+      nav(`/inventory/${copy.id}/edit`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   if (!d)
     return (
       <>
@@ -891,6 +922,13 @@ export function ProductPage() {
             <Link className="button" to={`/inventory/${id}/edit`}>
               {t('Edit equipment')}
             </Link>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void duplicateProduct()}
+            >
+              <Copy size={15} /> {t('Duplicate equipment')}
+            </button>
             <Link className="button" to={`/quotations/new?productId=${id}`}>
               {t('Create quotation')}
             </Link>
