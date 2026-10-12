@@ -1135,7 +1135,7 @@ export function ProductPage() {
         </div>
         {generating && (
           <div className="ai-generating" role="status" aria-live="polite">
-            <Sparkles size={18} className="ai-generating-icon" />
+            <span className="ai-generating-spinner" aria-hidden="true" />
             <span>{t('Generating product description…')}</span>
             <span className="ai-generating-dots" aria-hidden="true">
               …

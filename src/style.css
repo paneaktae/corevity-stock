@@ -849,9 +849,14 @@ td small {
   color: var(--brand-blue-dark);
   font-weight: 600;
 }
-.ai-generating-icon {
+.ai-generating-spinner {
   flex: 0 0 auto;
-  animation: ai-generate-pulse 1.2s ease-in-out infinite;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #b8d2f0;
+  border-top-color: var(--brand-blue);
+  border-radius: 50%;
+  animation: ai-generate-spin 0.75s linear infinite;
 }
 .ai-generating-dots {
   animation: ai-generate-pulse 1s ease-in-out infinite;
@@ -859,6 +864,11 @@ td small {
 @keyframes ai-generate-pulse {
   50% {
     opacity: 0.35;
+  }
+}
+@keyframes ai-generate-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 .description {
