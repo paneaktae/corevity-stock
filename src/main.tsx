@@ -16,6 +16,7 @@ import {
   Sun,
   BookOpenText,
   FileText,
+  Share2,
 } from 'lucide-react';
 import { DashboardPage } from './pages/Dashboard';
 import { InventoryPage, ProductPage, ProductForm } from './pages/Inventory';
@@ -28,10 +29,12 @@ import { ChatBadge } from './components/ChatBadge';
 import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
 import { QuotationsPage, QuotationForm, QuotationPage } from './pages/Quotations';
+import { CatalogsPage } from './pages/Catalogs';
 import './style.css';
 const navigation = [
   ['/', 'Dashboard', LayoutDashboard],
   ['/inventory', 'Inventory', Dumbbell],
+  ['/catalogs', 'Catalogs', Share2],
   ['/equipment-guide', 'Equipment guide', BookOpenText],
   ['/customers', 'Customers', Users],
   ['/sales', 'Sales', Kanban],
@@ -134,6 +137,7 @@ function App() {
             <Routes>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/catalogs" element={<CatalogsPage />} />
               <Route path="/equipment-guide" element={<EquipmentGuidePage />} />
               <Route path="/inventory/new" element={<ProductForm />} />
               <Route path="/inventory/:id" element={<ProductPage />} />

@@ -7,6 +7,7 @@ export type Bindings = Env & {
   LINE_CHANNEL_ACCESS_TOKEN?: string;
   LINE_CHANNEL_SECRET?: string;
   APP_URL?: string;
+  PUBLIC_CATALOG_BASE_URL?: string;
 };
 export type AppEnv = { Bindings: Bindings; Variables: { email: string } };
 export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {

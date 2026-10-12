@@ -8,6 +8,17 @@ import { generateSkus, nextSku } from '../worker/services/sku';
 import type { ChatMessage } from '../shared/schemas';
 import type { Quotation } from '../shared/quotations';
 let mf: Miniflare;
+let publicCatalogWorker: {
+  fetch: (
+    request: Request,
+    env: unknown,
+    ctx: unknown,
+  ) => Promise<{
+    status: number;
+    text: () => Promise<string>;
+    json: () => Promise<unknown>;
+  }>;
+};
 beforeAll(async () => {
   const result = await build({
     entryPoints: ['worker/index.ts'],
@@ -55,6 +66,19 @@ beforeAll(async () => {
     .map((file) => readFileSync(`drizzle/migrations/${file}`, 'utf8'))
     .join('\n');
   await db.exec(migration.replace(/^--.*$/gm, '').replace(/\n/g, ' '));
+  const publicBuild = await build({
+    entryPoints: ['worker/public-catalog.ts'],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2022',
+  });
+  const publicModule = (await import(
+    `data:text/javascript;base64,${Buffer.from(publicBuild.outputFiles[0].text).toString('base64')}`
+  )) as { default: typeof publicCatalogWorker };
+  publicCatalogWorker =
+    publicModule.default as unknown as typeof publicCatalogWorker;
 });
 afterAll(async () => {
   await mf?.dispose();
@@ -90,6 +114,259 @@ async function customer() {
   return json<{ id: string }>(r);
 }
 describe('D1-backed inventory and sales', () => {
+  it('keeps unpublished products private and exposes only approved public fields', async () => {
+    const item = await product('Public boundary');
+    const database = await mf.getD1Database('DB');
+    await database
+      .prepare("UPDATE products SET notes='confidential test note' WHERE id=?")
+      .bind(item.id)
+      .run();
+    const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
+    const ctx = {
+      waitUntil: (promise: Promise<unknown>) => void promise,
+    } as ExecutionContext;
+    const url = `http://catalog.test/catalog/products/${item.sku}`;
+    const privateResponse = await publicCatalogWorker.fetch(
+      new Request(url),
+      { DB: database, PRODUCT_IMAGES: bucket },
+      ctx,
+    );
+    expect(privateResponse.status).toBe(404);
+    expect(await privateResponse.text()).toContain('Product unavailable');
+
+    const publish = await request(`/products/${item.id}/publish`, 'POST', {
+      showPrice: false,
+      publicDescriptionEn: 'Reviewed public description',
+    });
+    expect(publish.status).toBe(200);
+    const storedPublicProduct = await database
+      .prepare('SELECT public_slug,is_published FROM products WHERE id=?')
+      .bind(item.id)
+      .first<{ public_slug: string; is_published: number }>();
+    expect(storedPublicProduct?.is_published).toBe(1);
+    const { product: productRow } = await json<{
+      product: { publicSlug: string };
+    }>(await request(`/products/${item.id}`));
+    const publicResponse = await publicCatalogWorker.fetch(
+      new Request(
+        `http://catalog.test/api/public/products/${productRow.publicSlug}`,
+      ),
+      { DB: database, PRODUCT_IMAGES: bucket },
+      ctx,
+    );
+    const payload = (await publicResponse.json()) as {
+      product: Record<string, unknown>;
+    };
+    expect(payload).toMatchObject({ product: { slug: expect.any(String) } });
+    expect(publicResponse.status).toBe(200);
+    expect(payload.product).toMatchObject({
+      slug: productRow.publicSlug,
+      showPrice: false,
+      description: 'Reviewed public description',
+    });
+    expect(payload.product).not.toHaveProperty('price');
+    expect(payload.product).not.toHaveProperty('purchaseCost');
+    expect(payload.product).not.toHaveProperty('notes');
+    const publicList = await publicCatalogWorker.fetch(
+      new Request('http://catalog.test/api/public/catalog'),
+      { DB: database, PRODUCT_IMAGES: bucket },
+      ctx,
+    );
+    const listPayload = (await publicList.json()) as {
+      products: Array<{ slug: string; price?: number }>;
+    };
+    expect(listPayload.products.map((product) => product.slug)).toContain(
+      productRow.publicSlug,
+    );
+    expect(
+      listPayload.products.find(
+        (product) => product.slug === productRow.publicSlug,
+      ),
+    ).toHaveProperty('price', null);
+
+    const unpublish = await request(`/products/${item.id}/unpublish`, 'POST');
+    expect(unpublish.status).toBe(200);
+    const listAfterUnpublish = await publicCatalogWorker.fetch(
+      new Request('http://catalog.test/api/public/catalog'),
+      { DB: database, PRODUCT_IMAGES: bucket },
+      ctx,
+    );
+    const hiddenList = (await listAfterUnpublish.json()) as {
+      products: Array<{ slug: string }>;
+    };
+    expect(hiddenList.products.map((product) => product.slug)).not.toContain(
+      productRow.publicSlug,
+    );
+    const hiddenAgain = await publicCatalogWorker.fetch(
+      new Request(
+        `http://catalog.test/api/public/products/${productRow.publicSlug}`,
+      ),
+      { DB: database, PRODUCT_IMAGES: bucket },
+      ctx,
+    );
+    expect(hiddenAgain.status).toBe(404);
+  });
+  it('creates and duplicates CRM-linked catalogs with snapshot pricing, live availability, expiry, and share metadata', async () => {
+    const item = await product('Catalog snapshot');
+    const customerRecord = await customer();
+    expect(
+      (
+        await request(`/products/${item.id}/publish`, 'POST', {
+          showPrice: true,
+          publicDescriptionEn: 'Public item description',
+        })
+      ).status,
+    ).toBe(200);
+    const { product: published } = await json<{
+      product: { publicSlug: string };
+    }>(await request(`/products/${item.id}`));
+    const database = await mf.getD1Database('DB');
+    const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
+    const imageKey = `test-catalog/${item.id}.jpg`;
+    await bucket.put(imageKey, new Uint8Array([255, 216, 255, 217]), {
+      httpMetadata: { contentType: 'image/jpeg' },
+    });
+    await database
+      .prepare(
+        'INSERT INTO product_images(id,product_id,r2_key,file_name,mime_type,file_size,sort_order,is_primary,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+      )
+      .bind(
+        crypto.randomUUID(),
+        item.id,
+        imageKey,
+        'sample.jpg',
+        'image/jpeg',
+        4,
+        0,
+        1,
+        new Date().toISOString(),
+      )
+      .run();
+    const created = await request('/catalogs', 'POST', {
+      title: 'Snapshot collection',
+      description: 'Selected products for a customer',
+      customerId: customerRecord.id,
+      showPrices: true,
+      showSold: false,
+      expiresAt: '2099-12-31T23:59:59.999Z',
+      items: [
+        {
+          productId: item.id,
+          displayPrice: 12345,
+          description: 'Catalog-specific snapshot copy',
+        },
+      ],
+    });
+    expect(created.status).toBe(201);
+    const catalog = await json<{ id: string; slug: string }>(created);
+    const sharedCatalogs = await json<{
+      catalogs: Array<{ id: string; slug: string }>;
+      publicBaseUrl: string;
+    }>(await request(`/customers/${customerRecord.id}/catalogs`));
+    expect(sharedCatalogs.catalogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: catalog.id, slug: catalog.slug }),
+      ]),
+    );
+    await database
+      .prepare(
+        "UPDATE products SET brand='Renamed brand',model='Renamed model' WHERE id=?",
+      )
+      .bind(item.id)
+      .run();
+    const editedCatalog = await request(`/catalogs/${catalog.id}`, 'PATCH', {
+      title: 'Snapshot collection revised',
+      description: 'Selected products for a customer',
+      customerId: customerRecord.id,
+      showPrices: true,
+      showSold: false,
+      expiresAt: '2099-12-31T23:59:59.999Z',
+      items: [{ productId: item.id }],
+    });
+    expect(editedCatalog.status).toBe(200);
+    const ctx = {
+      waitUntil: (promise: Promise<unknown>) => void promise,
+    } as ExecutionContext;
+    const fetchPublic = (path: string) =>
+      publicCatalogWorker.fetch(
+        new Request(`http://catalog.test${path}`),
+        { DB: database, PRODUCT_IMAGES: bucket },
+        ctx,
+      );
+    const publicApi = await fetchPublic(`/api/public/catalogs/${catalog.slug}`);
+    const publicData = (await publicApi.json()) as {
+      products: Array<Record<string, unknown>>;
+    };
+    expect(publicApi.status).toBe(200);
+    expect(publicData.products[0]).toMatchObject({
+      slug: published.publicSlug,
+      brand: 'Catalog snapshot',
+      model: 'Test model',
+      description: 'Catalog-specific snapshot copy',
+      price: 12345,
+      availability: 'AVAILABLE',
+    });
+    expect(publicData.products[0]).not.toHaveProperty('productId');
+    expect(publicData.products[0]).not.toHaveProperty('purchaseCost');
+
+    const html = await fetchPublic(`/s/${catalog.slug}`);
+    const htmlText = await html.text();
+    expect(htmlText).toContain('property="og:title"');
+    expect(htmlText).toContain('property="og:description"');
+    expect(htmlText).toContain('property="og:image"');
+    expect(htmlText).toContain('/media/catalogs/');
+
+    const duplicated = await request(
+      `/catalogs/${catalog.id}/duplicate`,
+      'POST',
+    );
+    expect(duplicated.status).toBe(201);
+    const duplicate = await json<{ slug: string }>(duplicated);
+    const duplicatedApi = await fetchPublic(
+      `/api/public/catalogs/${duplicate.slug}`,
+    );
+    const duplicatedData = (await duplicatedApi.json()) as {
+      products: Array<Record<string, unknown>>;
+    };
+    expect(duplicatedData.products[0]).toMatchObject({ price: 12345 });
+
+    await database
+      .prepare("UPDATE products SET status='NOT_AVAILABLE' WHERE id=?")
+      .bind(item.id)
+      .run();
+    const updatedAvailability = await fetchPublic(
+      `/api/public/catalogs/${catalog.slug}`,
+    );
+    const updatedData = (await updatedAvailability.json()) as {
+      products: Array<Record<string, unknown>>;
+    };
+    expect(updatedData.products[0].availability).toBe('NOT_AVAILABLE');
+
+    await database
+      .prepare("UPDATE products SET status='SOLD' WHERE id=?")
+      .bind(item.id)
+      .run();
+    const soldProduct = await fetchPublic(
+      `/api/public/products/${published.publicSlug}`,
+    );
+    expect(soldProduct.status).toBe(404);
+    const hiddenSold = await fetchPublic(
+      `/api/public/catalogs/${catalog.slug}`,
+    );
+    const hiddenSoldData = (await hiddenSold.json()) as {
+      products: Array<Record<string, unknown>>;
+    };
+    expect(hiddenSoldData.products).toHaveLength(0);
+
+    await database
+      .prepare(
+        "UPDATE catalogs SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?",
+      )
+      .bind(catalog.id)
+      .run();
+    const expired = await fetchPublic(`/s/${catalog.slug}`);
+    expect(expired.status).toBe(404);
+  });
   it('refreshes BOT FX after publication and retains valid rates on source failure', async () => {
     const db = await mf.getD1Database('DB');
     let calls = 0;
@@ -947,8 +1224,13 @@ describe('D1-backed inventory and sales', () => {
 
 describe('quotation workflow', () => {
   it('protects quotation endpoints with Cloudflare Access authentication', async () => {
-    expect((await mf.dispatchFetch('https://example.test/api/quotations')).status).toBe(503);
-    expect((await mf.dispatchFetch('https://example.test/api/quotation-settings')).status).toBe(503);
+    expect(
+      (await mf.dispatchFetch('https://example.test/api/quotations')).status,
+    ).toBe(503);
+    expect(
+      (await mf.dispatchFetch('https://example.test/api/quotation-settings'))
+        .status,
+    ).toBe(503);
   });
 
   async function makeQuotation(customerId: string, productId: string) {
@@ -957,14 +1239,28 @@ describe('quotation workflow', () => {
       issueDate: '2026-10-12',
       validUntil: '2026-11-11',
       currency: 'THB',
-      items: [{
-        productId, imageId: null, displayName: 'Saved product name',
-        description: 'A snapshot description', quantity: 2,
-        unitPrice: 1000, discount: 100,
-      }],
-      discount: 50, deliveryFee: 100, installationFee: 10, otherCharges: 0,
-      vatEnabled: true, vatRate: 7, taxMode: 'EXCLUSIVE',
-      paymentTerms: '50% deposit', deliveryTerms: '', warrantyTerms: '', notes: '',
+      items: [
+        {
+          productId,
+          imageId: null,
+          displayName: 'Saved product name',
+          description: 'A snapshot description',
+          quantity: 2,
+          unitPrice: 1000,
+          discount: 100,
+        },
+      ],
+      discount: 50,
+      deliveryFee: 100,
+      installationFee: 10,
+      otherCharges: 0,
+      vatEnabled: true,
+      vatRate: 7,
+      taxMode: 'EXCLUSIVE',
+      paymentTerms: '50% deposit',
+      deliveryTerms: '',
+      warrantyTerms: '',
+      notes: '',
     });
     return response;
   }
@@ -985,9 +1281,17 @@ describe('quotation workflow', () => {
     expect(quote.items[0].brand).toBe('Snapshot Brand');
 
     const db = await mf.getD1Database('DB');
-    await db.prepare('UPDATE customers SET name=? WHERE id=?').bind('Changed customer', customerRecord.id).run();
-    await db.prepare('UPDATE products SET brand=?,model=? WHERE id=?').bind('Changed brand', 'Changed model', equipment.id).run();
-    const saved = await json<Quotation>(await request(`/quotations/${quote.id}`));
+    await db
+      .prepare('UPDATE customers SET name=? WHERE id=?')
+      .bind('Changed customer', customerRecord.id)
+      .run();
+    await db
+      .prepare('UPDATE products SET brand=?,model=? WHERE id=?')
+      .bind('Changed brand', 'Changed model', equipment.id)
+      .run();
+    const saved = await json<Quotation>(
+      await request(`/quotations/${quote.id}`),
+    );
     expect(saved.customer.name).toBe('Test customer');
     expect(saved.items[0].brand).toBe('Snapshot Brand');
     expect(saved.history.map((entry) => entry.toStatus)).toEqual(['DRAFT']);
@@ -996,15 +1300,52 @@ describe('quotation workflow', () => {
   it('locks sent quotes, records status history and duplicates into a new draft number', async () => {
     const customerRecord = await customer();
     const equipment = await product('Status Brand');
-    const quote = await json<Quotation>(await makeQuotation(customerRecord.id, equipment.id));
-    expect((await request(`/quotations/${quote.id}/status`, 'POST', { status: 'SENT' })).status).toBe(200);
-    expect((await request(`/quotations/${quote.id}`, 'PATCH', {
-      customerId: customerRecord.id, issueDate: '2026-10-12', validUntil: '2026-11-11',
-      currency: 'THB', items: [{ productId: equipment.id, imageId: null, displayName: 'No edit', description: '', quantity: 1, unitPrice: 1, discount: 0 }],
-      discount: 0, deliveryFee: 0, installationFee: 0, otherCharges: 0, vatEnabled: false,
-      vatRate: 7, taxMode: 'EXCLUSIVE', paymentTerms: '', deliveryTerms: '', warrantyTerms: '', notes: '',
-    })).status).toBe(409);
-    const copyResponse = await request(`/quotations/${quote.id}/duplicate`, 'POST');
+    const quote = await json<Quotation>(
+      await makeQuotation(customerRecord.id, equipment.id),
+    );
+    expect(
+      (
+        await request(`/quotations/${quote.id}/status`, 'POST', {
+          status: 'SENT',
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await request(`/quotations/${quote.id}`, 'PATCH', {
+          customerId: customerRecord.id,
+          issueDate: '2026-10-12',
+          validUntil: '2026-11-11',
+          currency: 'THB',
+          items: [
+            {
+              productId: equipment.id,
+              imageId: null,
+              displayName: 'No edit',
+              description: '',
+              quantity: 1,
+              unitPrice: 1,
+              discount: 0,
+            },
+          ],
+          discount: 0,
+          deliveryFee: 0,
+          installationFee: 0,
+          otherCharges: 0,
+          vatEnabled: false,
+          vatRate: 7,
+          taxMode: 'EXCLUSIVE',
+          paymentTerms: '',
+          deliveryTerms: '',
+          warrantyTerms: '',
+          notes: '',
+        })
+      ).status,
+    ).toBe(409);
+    const copyResponse = await request(
+      `/quotations/${quote.id}/duplicate`,
+      'POST',
+    );
     expect(copyResponse.status).toBe(201);
     const copy = await json<Quotation>(copyResponse);
     expect(copy.id).not.toBe(quote.id);
@@ -1023,7 +1364,10 @@ describe('quotation workflow', () => {
     ]);
     expect(first.status).toBe(201);
     expect(second.status).toBe(201);
-    const [a, b] = await Promise.all([json<Quotation>(first), json<Quotation>(second)]);
+    const [a, b] = await Promise.all([
+      json<Quotation>(first),
+      json<Quotation>(second),
+    ]);
     expect(a.quotationNumber).not.toBe(b.quotationNumber);
   });
 });

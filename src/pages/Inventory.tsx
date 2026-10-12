@@ -16,6 +16,8 @@ import {
   Eye,
   Star,
   Trash2,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import type {
   Product,
@@ -766,6 +768,9 @@ export function ProductPage() {
     reload,
   } = useData<ProductDetail>(`/products/${id}`);
   const { data: customers } = useData<Customer[]>('/customers');
+  const { data: catalogConfig } = useData<{ publicBaseUrl: string }>(
+    '/catalogs/config',
+  );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -775,6 +780,19 @@ export function ProductPage() {
   const [reserveNotes, setReserveNotes] = useState('');
   const [draft, setDraft] = useState<Partial<Descriptions> | null>(null);
   const [notice, setNotice] = useState('');
+  const [publicDraft, setPublicDraft] = useState({
+    showPrice: false,
+    publicDescriptionTh: '',
+    publicDescriptionEn: '',
+  });
+  useEffect(() => {
+    if (d?.product)
+      setPublicDraft({
+        showPrice: d.product.showPrice,
+        publicDescriptionTh: d.product.publicDescriptionTh,
+        publicDescriptionEn: d.product.publicDescriptionEn,
+      });
+  }, [d?.product]);
   async function action(path: string, body?: unknown, method = 'POST') {
     setBusy(true);
     setError('');
@@ -807,6 +825,33 @@ export function ProductPage() {
     } finally {
       setGenerating(false);
       setBusy(false);
+    }
+  }
+  async function publishProduct() {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/products/${id}/publish`, {
+        method: 'POST',
+        body: JSON.stringify(publicDraft),
+      });
+      reload();
+      setNotice(t('Product published to the public catalog.'));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function copyPublicLink() {
+    if (!p.publicSlug || !catalogConfig?.publicBaseUrl) return;
+    try {
+      await navigator.clipboard.writeText(
+        `${catalogConfig.publicBaseUrl.replace(/\/$/, '')}/catalog/products/${p.publicSlug}`,
+      );
+      setNotice(t('Public product link copied.'));
+    } catch {
+      setError(t('Could not copy the link.'));
     }
   }
   if (!d)
@@ -1123,6 +1168,85 @@ export function ProductPage() {
           )}
         </section>
       </div>
+      <section className="panel catalog-publish-panel">
+        <div className="section-heading">
+          <div>
+            <h2>{t('Public catalog')}</h2>
+            <p className="muted">
+              {t('Products stay private until you publish them here.')}
+            </p>
+          </div>
+          <ExternalLink size={20} />
+        </div>
+        {p.isPublished && p.publicSlug ? (
+          <div className="catalog-publish-status">
+            <span className="catalog-status-dot" />
+            <span>{t('Published')}</span>
+            <a
+              className="text-link"
+              href={`${catalogConfig?.publicBaseUrl.replace(/\/$/, '')}/catalog/products/${p.publicSlug}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t('Preview')}
+              <ExternalLink size={14} />
+            </a>
+          </div>
+        ) : (
+          <p className="muted">{t('This product is private.')}</p>
+        )}
+        <label className="quotation-check catalog-show-price">
+          <input
+            type="checkbox"
+            checked={publicDraft.showPrice}
+            onChange={(e) =>
+              setPublicDraft({ ...publicDraft, showPrice: e.target.checked })
+            }
+          />
+          {t('Show selling price publicly')}
+        </label>
+        <div className="form-grid">
+          <Field label={t('Public description (Thai)')}>
+            <textarea
+              rows={4}
+              value={publicDraft.publicDescriptionTh}
+              onChange={(e) =>
+                setPublicDraft({
+                  ...publicDraft,
+                  publicDescriptionTh: e.target.value,
+                })
+              }
+            />
+          </Field>
+          <Field label={t('Public description (English)')}>
+            <textarea
+              rows={4}
+              value={publicDraft.publicDescriptionEn}
+              onChange={(e) =>
+                setPublicDraft({
+                  ...publicDraft,
+                  publicDescriptionEn: e.target.value,
+                })
+              }
+            />
+          </Field>
+        </div>
+        <div className="button-row">
+          <button className="primary" type="button" disabled={busy} onClick={() => void publishProduct()}>
+            {busy ? t('Working…') : p.isPublished ? t('Save catalog settings') : t('Publish to catalog')}
+          </button>
+          {p.isPublished && (
+            <>
+              <button type="button" disabled={!catalogConfig?.publicBaseUrl} onClick={() => void copyPublicLink()}>
+                <Copy size={15} /> {t('Copy public link')}
+              </button>
+              <button type="button" disabled={busy} onClick={() => void action(`/products/${id}/unpublish`)}>
+                {t('Unpublish')}
+              </button>
+            </>
+          )}
+        </div>
+      </section>
       <section className="panel">
         <div className="section-heading">
           <div>

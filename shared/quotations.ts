@@ -59,6 +59,8 @@ export const quotationSettingsInput = z
     phone: z.string().trim().max(100),
     email: z.union([z.literal(''), z.string().email()]),
     taxId: z.string().trim().max(100),
+    lineUrl: z.union([z.literal(''), z.string().url()]).default(''),
+    facebookUrl: z.union([z.literal(''), z.string().url()]).default(''),
     bankDetails: z.string().trim().max(2000),
     paymentTerms: z.string().trim().max(2000),
     deliveryTerms: z.string().trim().max(2000),

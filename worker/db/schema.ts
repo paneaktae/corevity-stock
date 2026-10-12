@@ -29,6 +29,16 @@ export const products = sqliteTable('products', {
   weaknesses: text('weaknesses').notNull().default('[]'),
   analysisSources: text('analysis_sources').notNull().default('[]'),
   ratingReasons: text('rating_reasons').notNull().default('{}'),
+  isPublished: integer('is_published', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  showPrice: integer('show_price', { mode: 'boolean' })
+    .notNull()
+    .default(false),
+  publicSlug: text('public_slug'),
+  publicDescriptionTh: text('public_description_th').notNull().default(''),
+  publicDescriptionEn: text('public_description_en').notNull().default(''),
+  publishedAt: text('published_at'),
   notes: text('notes').notNull(),
   soldAt: text('sold_at'),
   archivedAt: text('archived_at'),
@@ -127,6 +137,8 @@ export const quotationSettings = sqliteTable('quotation_settings', {
   phone: text('phone').notNull(),
   email: text('email').notNull(),
   taxId: text('tax_id').notNull(),
+  lineUrl: text('line_url').notNull().default(''),
+  facebookUrl: text('facebook_url').notNull().default(''),
   logoKey: text('logo_key').notNull(),
   bankDetails: text('bank_details').notNull(),
   paymentTerms: text('payment_terms').notNull(),
@@ -228,4 +240,51 @@ export const assistantMessages = sqliteTable('assistant_messages', {
   body: text('body').notNull(),
   productIds: text('product_ids').notNull().default('[]'),
   createdAt: text('created_at').notNull(),
+});
+
+export const catalogs = sqliteTable('catalogs', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  slug: text('slug').notNull().unique(),
+  status: text('status', { enum: ['ACTIVE', 'ARCHIVED'] })
+    .notNull()
+    .default('ACTIVE'),
+  customerId: text('customer_id').references(() => customers.id, {
+    onDelete: 'set null',
+  }),
+  showPrices: integer('show_prices', { mode: 'boolean' })
+    .notNull()
+    .default(true),
+  showSold: integer('show_sold', { mode: 'boolean' }).notNull().default(false),
+  expiresAt: text('expires_at'),
+  createdBy: text('created_by').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+export const catalogItems = sqliteTable('catalog_items', {
+  id: text('id').primaryKey(),
+  catalogId: text('catalog_id')
+    .notNull()
+    .references(() => catalogs.id, { onDelete: 'cascade' }),
+  productId: text('product_id')
+    .notNull()
+    .references(() => products.id, { onDelete: 'cascade' }),
+  sortOrder: integer('sort_order').notNull(),
+  productNameSnapshot: text('product_name_snapshot').notNull(),
+  brandSnapshot: text('brand_snapshot').notNull(),
+  modelSnapshot: text('model_snapshot').notNull(),
+  categorySnapshot: text('category_snapshot').notNull(),
+  conditionSnapshot: text('condition_snapshot').notNull(),
+  descriptionSnapshot: text('description_snapshot').notNull(),
+  imageKeySnapshot: text('image_key_snapshot').notNull().default(''),
+  imageMimeSnapshot: text('image_mime_snapshot').notNull().default(''),
+  displayPrice: real('display_price'),
+});
+export const catalogEvents = sqliteTable('catalog_events', {
+  entityType: text('entity_type').notNull(),
+  entitySlug: text('entity_slug').notNull(),
+  eventType: text('event_type').notNull(),
+  hour: text('hour').notNull(),
+  count: integer('count').notNull().default(0),
 });

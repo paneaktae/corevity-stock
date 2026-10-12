@@ -28,6 +28,7 @@
     "AI_BASE_URL": "",
     "MAX_UPLOAD_MB": "10",
     "BUSINESS_TIMEZONE": "Asia/Bangkok",
+    "PUBLIC_CATALOG_BASE_URL": "",
   },
   "d1_databases": [
     {
@@ -62,6 +63,7 @@
         "AI_BASE_URL": "https://api.openai.com/v1",
         "MAX_UPLOAD_MB": "10",
         "BUSINESS_TIMEZONE": "Asia/Bangkok",
+        "PUBLIC_CATALOG_BASE_URL": "https://fitness-equipment-catalog.analyziie.workers.dev",
       },
       "d1_databases": [
         {

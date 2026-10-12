@@ -25,6 +25,7 @@ import { salespeopleRoutes } from './salespeople';
 import { chatRoutes } from './chat';
 import { lineRoutes } from './line-routes';
 import { quotationRoutes, quotationSettingsRoutes } from './quotations';
+import { catalogsRoutes } from './catalogs';
 import {
   allowedSales,
   handleLineWebhook,
@@ -339,6 +340,7 @@ app.route('/api/chat', chatRoutes);
 app.route('/api/salespeople', salespeopleRoutes);
 app.route('/api/quotations', quotationRoutes);
 app.route('/api/quotation-settings', quotationSettingsRoutes);
+app.route('/api', catalogsRoutes);
 app.get('/api/exchange-rate', async (c) =>
   c.json(await exchangeRate(c.env.DB, fetch, new Date(), c.env.BOT_API_KEY)),
 );
