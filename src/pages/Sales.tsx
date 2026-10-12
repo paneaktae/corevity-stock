@@ -461,7 +461,9 @@ export function LeadPage() {
               )}
             </p>
             {d.products
-              .filter((p) => p.status !== 'SOLD')
+              .filter(
+                (p) => p.status === 'AVAILABLE' || p.status === 'RESERVED',
+              )
               .map((p) => (
                 <label className="checkbox-row" key={p.id}>
                   <input

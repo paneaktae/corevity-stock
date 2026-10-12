@@ -1,5 +1,10 @@
 import { z } from 'zod';
-export const productStatuses = ['AVAILABLE', 'RESERVED', 'SOLD'] as const;
+export const productStatuses = [
+  'AVAILABLE',
+  'NOT_AVAILABLE',
+  'RESERVED',
+  'SOLD',
+] as const;
 export const leadStatuses = [
   'NEW',
   'CONTACTED',

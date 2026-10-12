@@ -259,6 +259,8 @@
   "Maximum photo size:": "ขนาดรูปภาพสูงสุด:",
   "MB": "เมกะไบต์",
   "Available": "พร้อมขาย",
+  "Not available": "ไม่พร้อมขาย",
+  "Make the equipment available before selling it.": "เปลี่ยนสินค้าเป็นพร้อมขายก่อนบันทึกการขาย",
   "Reserved": "จองแล้ว",
   "Sold": "ขายแล้ว",
   "New": "ใหม่",

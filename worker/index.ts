@@ -91,13 +91,18 @@ const spreadsheetMoney = (value: unknown) => {
   return number;
 };
 const spreadsheetStatus = (value: unknown) => {
-  const thai: Record<string, 'AVAILABLE' | 'RESERVED' | 'SOLD'> = {
+  const thai: Record<
+    string,
+    'AVAILABLE' | 'NOT_AVAILABLE' | 'RESERVED' | 'SOLD'
+  > = {
     พร้อมขาย: 'AVAILABLE',
+    ไม่พร้อมขาย: 'NOT_AVAILABLE',
     จองแล้ว: 'RESERVED',
     ขายแล้ว: 'SOLD',
   };
   return (
-    (thai[spreadsheetText(value)] ?? spreadsheetText(value).toUpperCase()) ||
+    (thai[spreadsheetText(value)] ??
+      spreadsheetText(value).toUpperCase().replace(/\s+/g, '_')) ||
     'AVAILABLE'
   );
 };
@@ -654,7 +659,14 @@ app.patch('/api/products/:id', async (c) => {
       ? {}
       : { ratingReasons: JSON.stringify(ratingReasons) }),
   };
-  if (data.status && data.status !== p.status)
+  if (
+    data.status &&
+    data.status !== p.status &&
+    !(
+      ['AVAILABLE', 'NOT_AVAILABLE'].includes(p.status) &&
+      ['AVAILABLE', 'NOT_AVAILABLE'].includes(data.status)
+    )
+  )
     fail(
       422,
       'Use Reserve, Release reservation, or Mark sold to change status.',
@@ -740,6 +752,8 @@ app.post('/api/products/:id/release-reservation', async (c) => {
 app.post('/api/products/:id/mark-sold', async (c) => {
   const p = await getProduct(c, c.req.param('id'));
   if (p.status === 'SOLD') return c.json(p);
+  if (p.status === 'NOT_AVAILABLE')
+    fail(409, 'Make the equipment available before selling it.');
   await db(c).batch([
     db(c).insert(s.productSales).values({
       productId: p.id,
@@ -1046,7 +1060,7 @@ app.get('/api/dashboard', async (c) => {
     inventoryCostValue:
       Math.round(
         products
-          .filter((p) => p.status !== 'SOLD')
+          .filter((p) => p.status === 'AVAILABLE' || p.status === 'RESERVED')
           .reduce((sum, p) => sum + p.purchaseCost, 0) * 100,
       ) / 100,
     activeLeads: active.length,

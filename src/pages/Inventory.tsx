@@ -618,7 +618,12 @@ export function ProductForm() {
             </Field>
             <Field label={t('Status *')} error={fields.status}>
               <select
-                disabled={!!id}
+                disabled={
+                  !!id &&
+                  !['AVAILABLE', 'NOT_AVAILABLE'].includes(
+                    detail?.product.status ?? '',
+                  )
+                }
                 value={form.status}
                 onChange={(e) =>
                   setForm({
@@ -627,7 +632,14 @@ export function ProductForm() {
                   })
                 }
               >
-                {(id ? productStatuses : ['AVAILABLE', 'SOLD']).map((v) => (
+                {(id
+                  ? ['AVAILABLE', 'NOT_AVAILABLE'].includes(
+                      detail?.product.status ?? '',
+                    )
+                    ? ['AVAILABLE', 'NOT_AVAILABLE']
+                    : [form.status]
+                  : ['AVAILABLE', 'NOT_AVAILABLE', 'SOLD']
+                ).map((v) => (
                   <option key={v} value={v}>
                     {label(v)}
                   </option>
@@ -996,7 +1008,7 @@ export function ProductPage() {
                 {t('Release reservation')}
               </button>
             )}
-            {p.status !== 'SOLD' && (
+            {(p.status === 'AVAILABLE' || p.status === 'RESERVED') && (
               <button
                 disabled={busy}
                 className="primary"

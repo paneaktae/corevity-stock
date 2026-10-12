@@ -631,6 +631,70 @@ describe('D1-backed inventory and sales', () => {
         .status,
     ).toBe(409);
   });
+  it('excludes unavailable stock, permits availability edits and protects reserved and sold statuses', async () => {
+    const p = await product(),
+      c = await customer();
+    const dashboard = async () =>
+      json<{ inventoryCostValue: number }>(await request('/dashboard'));
+    const before = await dashboard();
+    expect(
+      (await request(`/products/${p.id}`, 'PATCH', { status: 'NOT_AVAILABLE' }))
+        .status,
+    ).toBe(200);
+    expect((await dashboard()).inventoryCostValue).toBe(
+      before.inventoryCostValue - 100,
+    );
+    const list = await json<{ status: string }[]>(
+      await request('/products?status=NOT_AVAILABLE'),
+    );
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.every((item) => item.status === 'NOT_AVAILABLE')).toBe(true);
+    expect(
+      (await request(`/products/${p.id}/reserve`, 'POST', { customerId: c.id }))
+        .status,
+    ).toBe(409);
+    expect((await request(`/products/${p.id}/mark-sold`, 'POST')).status).toBe(
+      409,
+    );
+    expect(
+      (await request(`/products/${p.id}`, 'PATCH', { status: 'AVAILABLE' }))
+        .status,
+    ).toBe(200);
+    expect((await dashboard()).inventoryCostValue).toBe(
+      before.inventoryCostValue,
+    );
+    expect(
+      (await request(`/products/${p.id}/reserve`, 'POST', { customerId: c.id }))
+        .status,
+    ).toBe(200);
+    expect(
+      (await request(`/products/${p.id}`, 'PATCH', { status: 'NOT_AVAILABLE' }))
+        .status,
+    ).toBe(422);
+    await request(`/products/${p.id}/mark-sold`, 'POST');
+    expect(
+      (await request(`/products/${p.id}`, 'PATCH', { status: 'AVAILABLE' }))
+        .status,
+    ).toBe(422);
+    expect(
+      (await request(`/products/${p.id}`, 'PATCH', { status: 'NOT_AVAILABLE' }))
+        .status,
+    ).toBe(422);
+    expect((await dashboard()).inventoryCostValue).toBe(
+      before.inventoryCostValue - 100,
+    );
+    const created = await request('/products', 'POST', {
+      brand: 'Test',
+      model: 'Unavailable',
+      status: 'NOT_AVAILABLE',
+      purchaseCost: 500,
+      sellingPrice: 700,
+    });
+    expect(created.status).toBe(201);
+    expect((await dashboard()).inventoryCostValue).toBe(
+      before.inventoryCostValue - 100,
+    );
+  });
   it('dashboard computes current inventory costs excluding sold and archived items', async () => {
     const before = await json<{
       inventoryCostValue: number;

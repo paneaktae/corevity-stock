@@ -13,7 +13,9 @@ export const products = sqliteTable('products', {
   condition: text('condition').notNull(),
   purchaseCost: real('purchase_cost').notNull(),
   sellingPrice: real('selling_price').notNull(),
-  status: text('status', { enum: ['AVAILABLE', 'RESERVED', 'SOLD'] }).notNull(),
+  status: text('status', {
+    enum: ['AVAILABLE', 'NOT_AVAILABLE', 'RESERVED', 'SOLD'],
+  }).notNull(),
   location: text('location').notNull(),
   descriptionTh: text('description_th').notNull(),
   descriptionEn: text('description_en').notNull(),

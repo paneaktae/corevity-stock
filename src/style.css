@@ -451,7 +451,6 @@ main {
   border-radius: 50%;
   background: currentColor;
 }
-.badge.available,
 .badge.won {
   background: #e9edf3;
   color: #4b5c72;
@@ -462,8 +461,16 @@ main {
   color: #9c7e3c;
 }
 .badge.sold {
-  background: #e9eef4;
-  color: #62738c;
+  background: #fff3c4;
+  color: #855b00;
+}
+.badge.available {
+  background: #dcfce7;
+  color: #166534;
+}
+.badge.not_available {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 .badge.new {
   background: #e8edf4;
