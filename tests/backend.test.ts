@@ -966,6 +966,40 @@ describe('Salesperson profiles', () => {
 });
 
 describe('Private shared team chat', () => {
+  it('keeps AI inventory search history private to the authenticated user', async () => {
+    const db = await mf.getD1Database('DB');
+    const p = await product('Private assistant equipment');
+    await db.batch([
+      db
+        .prepare(
+          "INSERT INTO assistant_messages(user_email,role,body,product_ids,created_at) VALUES(?,'assistant',?,?,?)",
+        )
+        .bind(
+          'tester@example.test',
+          'Your private result',
+          JSON.stringify([p.id]),
+          new Date().toISOString(),
+        ),
+      db
+        .prepare(
+          "INSERT INTO assistant_messages(user_email,role,body,product_ids,created_at) VALUES(?,'assistant',?,?,?)",
+        )
+        .bind(
+          'second@example.test',
+          'Another user private result',
+          JSON.stringify([p.id]),
+          new Date().toISOString(),
+        ),
+    ]);
+    const history = await json<{
+      messages: { body: string; products: { id: string }[] }[];
+    }>(await request('/chat/assistant'));
+    expect(history.messages).toHaveLength(1);
+    expect(history.messages[0]).toMatchObject({
+      body: 'Your private result',
+      products: [{ id: p.id }],
+    });
+  });
   it('broadcasts persisted messages over an authenticated WebSocket', async () => {
     expect((await request('/chat/socket')).status).toBe(426);
     const response = await request('/chat/socket', 'GET', undefined, {

@@ -1547,6 +1547,22 @@ html[lang='th'] .nav-label {
   border-bottom: 1px solid var(--border);
   background: #fbfdff;
 }
+.assistant-page {
+  display: grid;
+  grid-template-rows: auto minmax(320px, 1fr) auto;
+  gap: 16px;
+  min-height: min(72vh, 820px);
+}
+.assistant-page-feed {
+  max-height: min(58vh, 650px);
+  min-height: 320px;
+}
+.assistant-turn time {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted, #718096);
+  font-size: 11px;
+}
 .chat-assistant-heading,
 .assistant-thinking {
   display: flex;

@@ -52,11 +52,63 @@ async function attachProducts(
   }));
 }
 export const chatRoutes = new Hono<AppEnv>();
+type AssistantMessageRow = {
+  id: number;
+  role: 'user' | 'assistant';
+  body: string;
+  createdAt: string;
+  productIds: string;
+};
+async function attachAssistantProducts(
+  env: Bindings,
+  userEmail: string,
+  rows: AssistantMessageRow[],
+) {
+  if (!rows.length) return [];
+  const attachments = await env.DB.prepare(
+    `SELECT m.id AS messageId,p.id,p.sku,p.brand,p.model,p.status,p.selling_price AS sellingPrice,p.archived_at AS archivedAt,
+    (SELECT id FROM product_images WHERE product_id=p.id ORDER BY is_primary DESC,sort_order LIMIT 1) AS primaryImageId
+    FROM assistant_messages m JOIN json_each(m.product_ids) j JOIN products p ON p.id=j.value
+    WHERE m.user_email=? AND m.id IN (${rows.map(() => '?').join(',')}) ORDER BY m.id,j.key`,
+  )
+    .bind(userEmail, ...rows.map((row) => row.id))
+    .all<ChatProduct & { messageId: number }>();
+  return rows.map((row) => ({
+    id: row.id,
+    role: row.role,
+    body: row.body,
+    createdAt: row.createdAt,
+    products: attachments.results
+      .filter((product) => product.messageId === row.id)
+      .map(({ messageId: _messageId, ...product }) => product),
+  }));
+}
+chatRoutes.get('/assistant', async (c) => {
+  const email = c.get('email');
+  const result = await c.env.DB.prepare(
+    'SELECT id,role,body,created_at AS createdAt,product_ids AS productIds FROM assistant_messages WHERE user_email=? ORDER BY id DESC LIMIT 100',
+  )
+    .bind(email)
+    .all<AssistantMessageRow>();
+  const rows = result.results.reverse();
+  const messages = await attachAssistantProducts(c.env, email, rows);
+  return c.json({ messages });
+});
 chatRoutes.post('/assistant', async (c) => {
   const input = inventoryAssistantInput.parse(await c.req.json());
+  const email = c.get('email');
+  const previous = await c.env.DB.prepare(
+    `SELECT role,body AS content FROM (SELECT role,body,id FROM assistant_messages WHERE user_email=? ORDER BY id DESC LIMIT 8) ORDER BY id ASC`,
+  )
+    .bind(email)
+    .all<{ role: 'user' | 'assistant'; content: string }>();
+  const privateHistory = previous.results.map(({ role, content }) => ({
+    role,
+    content,
+  }));
   let plan: Awaited<ReturnType<typeof createInventorySearchPlan>>;
   try {
-    plan = await createInventorySearchPlan(input.message, input.history, c.env);
+    plan = await createInventorySearchPlan(input.message, privateHistory, c.env);
   } catch (error) {
     const notConfigured =
       error instanceof Error && error.message === 'AI_NOT_CONFIGURED';
@@ -136,9 +188,37 @@ chatRoutes.post('/assistant', async (c) => {
       }
     >();
   try {
-    return c.json(
-      await answerInventoryQuestion(input, plan, inventory.results, c.env),
+    const answer = await answerInventoryQuestion(
+      { ...input, history: privateHistory },
+      plan,
+      inventory.results,
+      c.env,
     );
+    const createdAt = new Date().toISOString();
+    const userTurn = c.env.DB.prepare(
+      "INSERT INTO assistant_messages(user_email,role,body,product_ids,created_at) VALUES(?,'user',?,'[]',?)",
+    ).bind(email, input.message, createdAt);
+    const assistantTurn = c.env.DB.prepare(
+      "INSERT INTO assistant_messages(user_email,role,body,product_ids,created_at) VALUES(?,'assistant',?,?,?)",
+    ).bind(
+      email,
+      answer.reply,
+      JSON.stringify(answer.products.map((product) => product.id)),
+      createdAt,
+    );
+    await c.env.DB.batch([userTurn, assistantTurn]);
+    const saved = await c.env.DB.prepare(
+      'SELECT id,role,body,created_at AS createdAt,product_ids AS productIds FROM assistant_messages WHERE user_email=? ORDER BY id DESC LIMIT 2',
+    )
+      .bind(email)
+      .all<AssistantMessageRow>();
+    return c.json({
+      messages: await attachAssistantProducts(
+        c.env,
+        email,
+        saved.results.reverse(),
+      ),
+    });
   } catch (error) {
     const notConfigured =
       error instanceof Error && error.message === 'AI_NOT_CONFIGURED';

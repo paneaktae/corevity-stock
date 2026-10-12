@@ -9,6 +9,7 @@ import {
   CalendarClock,
   Settings,
   MessageCircle,
+  Sparkles,
   ChevronRight,
 } from 'lucide-react';
 import { DashboardPage } from './pages/Dashboard';
@@ -16,6 +17,7 @@ import { InventoryPage, ProductPage, ProductForm } from './pages/Inventory';
 import { CustomersPage, CustomerPage, CustomerForm } from './pages/Customers';
 import { SalesPage, LeadPage, LeadForm, FollowupsPage } from './pages/Sales';
 import { ChatPage } from './pages/Chat';
+import { InventoryAssistantPage } from './pages/InventoryAssistant';
 import { ChatBadge } from './components/ChatBadge';
 import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
@@ -27,6 +29,7 @@ const navigation = [
   ['/sales', 'Sales', Kanban],
   ['/followups', 'Follow-ups', CalendarClock],
   ['/chat', 'Team chat', MessageCircle],
+  ['/ai-search', 'AI product search', Sparkles],
   ['/settings', 'Settings', Settings],
 ] as const;
 function App() {
@@ -97,6 +100,7 @@ function App() {
               <Route path="/sales/:id/edit" element={<LeadForm />} />
               <Route path="/followups" element={<FollowupsPage />} />
               <Route path="/chat" element={<ChatPage />} />
+              <Route path="/ai-search" element={<InventoryAssistantPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<h1>{t('Page not found')}</h1>} />
             </Routes>

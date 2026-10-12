@@ -137,3 +137,11 @@ export const chatMessages = sqliteTable('chat_messages', {
   productIds: text('product_ids').notNull().default('[]'),
   createdAt: text('created_at').notNull(),
 });
+export const assistantMessages = sqliteTable('assistant_messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userEmail: text('user_email').notNull(),
+  role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+  body: text('body').notNull(),
+  productIds: text('product_ids').notNull().default('[]'),
+  createdAt: text('created_at').notNull(),
+});
