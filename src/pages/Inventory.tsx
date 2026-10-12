@@ -310,6 +310,34 @@ type ProductFormValues = Omit<ProductInput, 'purchaseCost' | 'sellingPrice'> & {
   purchaseCost: string | number;
   sellingPrice: string | number;
 };
+const maxProductPhotoDimension = 1920;
+async function compressProductPhoto(file: File): Promise<File> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(
+      1,
+      maxProductPhotoDimension / Math.max(bitmap.width, bitmap.height),
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const compressed = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/webp', 0.82),
+    );
+    if (!compressed || (compressed.size >= file.size && scale === 1))
+      return file;
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'product-photo';
+    return new File([compressed], `${baseName}.webp`, {
+      type: 'image/webp',
+      lastModified: file.lastModified,
+    });
+  } finally {
+    bitmap.close();
+  }
+}
 const blank: ProductFormValues = {
   brand: '',
   model: '',
@@ -917,8 +945,9 @@ export function ProductPage() {
                 setBusy(true);
                 setError('');
                 const form = new FormData();
-                files.forEach((f) => form.append('files', f));
                 try {
+                  for (const file of files)
+                    form.append('files', await compressProductPhoto(file));
                   await api(`/products/${id}/images`, {
                     method: 'POST',
                     body: form,
@@ -934,7 +963,7 @@ export function ProductPage() {
             />
           </label>
           <small className="muted">
-            {t('JPEG, PNG, WEBP · up to 5 photos per upload')}
+            {t('Photos are compressed automatically · up to 5 per upload')}
           </small>
         </section>
         <section className="panel">
