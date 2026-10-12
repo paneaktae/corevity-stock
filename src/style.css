@@ -125,7 +125,8 @@ select {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 42px;
-  background-image: linear-gradient(45deg, transparent 50%, #71849c 50%),
+  background-image:
+    linear-gradient(45deg, transparent 50%, #71849c 50%),
     linear-gradient(135deg, #71849c 50%, transparent 50%);
   background-position:
     calc(100% - 17px) 50%,
@@ -462,6 +463,11 @@ main {
 }
 .settings-panel {
   min-width: 0;
+}
+.settings-products-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 .list-row {
   display: flex;
@@ -1290,6 +1296,9 @@ td small {
   .detail-grid {
     grid-template-columns: 1fr 1fr;
   }
+  .settings-products-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1432,6 +1441,7 @@ td small {
     font-size: 10px;
   }
   .detail-grid,
+  .settings-products-grid,
   .form-grid,
   .followup-grid,
   .customer-grid {
@@ -1833,7 +1843,8 @@ html[data-theme='dark'] select:disabled {
   background: #1c2939;
 }
 html[data-theme='dark'] select {
-  background-image: linear-gradient(45deg, transparent 50%, #a6b6ca 50%),
+  background-image:
+    linear-gradient(45deg, transparent 50%, #a6b6ca 50%),
     linear-gradient(135deg, #a6b6ca 50%, transparent 50%);
 }
 .chat-connection {
@@ -2316,7 +2327,9 @@ html[data-theme='dark'] .inventory-table tbody tr:hover td {
   background: var(--page);
   font-size: 11px;
   font-weight: 600;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
 }
 .guide-category:hover {
   background: var(--brand-soft);

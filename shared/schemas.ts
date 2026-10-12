@@ -193,6 +193,7 @@ export type Reservation = {
 };
 export type Settings = {
   brands: string[];
+  categories: string[];
   conditions: string[];
   userEmail: string;
   environment: string;

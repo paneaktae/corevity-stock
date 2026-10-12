@@ -249,12 +249,15 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/products/${p.id}`, 'DELETE')).status).toBe(200);
     expect((await request(`/products/${p.id}`)).status).toBe(404);
   });
-  it('manages brand choices independently of conditions and preserves existing product brands', async () => {
+  it('manages brand and category choices independently of conditions', async () => {
     const p = await product('Legacy Brand');
-    const initial = await json<{ brands: string[]; conditions: string[] }>(
-      await request('/settings'),
-    );
+    const initial = await json<{
+      brands: string[];
+      categories: string[];
+      conditions: string[];
+    }>(await request('/settings'));
     expect(initial.brands).toContain('Legacy Brand');
+    expect(initial.categories).toContain('Treadmills');
     expect(
       (
         await request('/settings', 'PATCH', {
@@ -267,6 +270,27 @@ describe('D1-backed inventory and sales', () => {
     );
     expect(updated.brands).toEqual(['Brand A', 'Brand B']);
     expect(updated.conditions).toEqual(initial.conditions);
+    expect(
+      (
+        await request('/settings', 'PATCH', {
+          categories: ['Custom Category', 'Accessories'],
+        })
+      ).status,
+    ).toBe(200);
+    const withCategories = await json<{ categories: string[] }>(
+      await request('/settings'),
+    );
+    expect(withCategories.categories).toEqual([
+      'Custom Category',
+      'Accessories',
+    ]);
+    expect(
+      (
+        await request('/settings', 'PATCH', {
+          categories: ['Custom Category', 'custom category'],
+        })
+      ).status,
+    ).toBe(422);
     expect(
       (await request('/settings', 'PATCH', { brands: ['Brand A', 'brand a'] }))
         .status,
@@ -291,6 +315,13 @@ describe('D1-backed inventory and sales', () => {
     expect(
       (await json<{ brands: string[] }>(await request('/settings'))).brands,
     ).toEqual([]);
+    expect(
+      (
+        await request('/settings', 'PATCH', {
+          categories: initial.categories,
+        })
+      ).status,
+    ).toBe(200);
   });
   it('allocates annual SKU sequences atomically with Bangkok month and year boundaries', async () => {
     const db = await mf.getD1Database('DB');
@@ -421,7 +452,10 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/leads/${reservedLead.id}`, 'DELETE')).status).toBe(
       409,
     );
-    await request(`/products/${reservedProduct.id}/release-reservation`, 'POST');
+    await request(
+      `/products/${reservedProduct.id}/release-reservation`,
+      'POST',
+    );
     expect((await request(`/leads/${reservedLead.id}`, 'DELETE')).status).toBe(
       204,
     );
@@ -1109,16 +1143,13 @@ describe('Private shared team chat', () => {
           () => reject(new Error('Timed out waiting for chat broadcast')),
           2_000,
         );
-        socket!.addEventListener(
-          'message',
-          (event) => {
+        socket!.addEventListener('message', (event) => {
           const data = JSON.parse(String(event.data));
           if (data.type === 'chat.message') {
             clearTimeout(timeout);
             resolve(data);
           }
-        },
-        );
+        });
       },
     );
     await expect(receivedPresence).resolves.toMatchObject({

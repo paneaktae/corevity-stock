@@ -8,10 +8,13 @@ describe('Excel categories', () => {
     expect(importCategory('  upright   BIKE ')).toBe('Upright Bike');
     expect(importCategory('station/cable/smith')).toBe('Station/Cable/Smith');
     expect(importCategory('dumbbell+rack')).toBe('Dumbbell+Rack');
+    expect(importCategory('strength add-on', ['Strength Add-on'])).toBe(
+      'Strength Add-on',
+    );
     expect(importCategory(null)).toBe('');
   });
-  it('rejects unknown categories instead of silently assigning Other', () => {
+  it('rejects categories that are not configured', () => {
     expect(() => importCategory('ลู่วิ่ง')).toThrow('Category');
-    expect(() => importCategory('Unknown')).toThrow('Other');
+    expect(() => importCategory('Unknown')).toThrow('configured in Settings');
   });
 });

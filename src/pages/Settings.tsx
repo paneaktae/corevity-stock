@@ -1,5 +1,6 @@
 import { SalespeopleSettings } from '../components/SalespeopleSettings';
 import { BrandSettings } from '../components/BrandSettings';
+import { CategorySettings } from '../components/CategorySettings';
 import { LineSettings } from '../components/LineSettings';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
@@ -83,9 +84,10 @@ export function SettingsPage() {
           id="settings-panel-products"
           role="tabpanel"
           aria-labelledby="settings-tab-products"
-          className="settings-panel detail-grid"
+          className="settings-panel settings-products-grid"
         >
           <BrandSettings brands={data.brands} />
+          <CategorySettings categories={data.categories} />
           <section className="panel">
             {saved && <div className="success">{t('Conditions saved.')}</div>}
             <ErrorBox message={error} />

@@ -1,5 +1,4 @@
 import { t, localized } from '../i18n';
-import productCategories from '../../shared/product-categories.json';
 import { UsdPrice, ExchangeRateNote } from '../components/UsdPrice';
 import { useEffect, useState, type FormEvent } from 'react';
 import {
@@ -603,12 +602,20 @@ export function ProductForm() {
                     <datalist id="product-category-options">
                       {[
                         ...new Set(
-                          [...productCategories, form.category].filter(Boolean),
+                          [
+                            ...(settings?.categories ?? []),
+                            form.category,
+                          ].filter(Boolean),
                         ),
                       ].map((category) => (
                         <option key={category} value={category} />
                       ))}
                     </datalist>
+                    <small>
+                      <Link to="/settings">
+                        {t('Manage categories in Settings')}
+                      </Link>
+                    </small>
                   </>
                 ) : (
                   <input

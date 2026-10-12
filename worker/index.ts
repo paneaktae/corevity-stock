@@ -17,6 +17,7 @@ import {
 import { z, ZodError } from 'zod';
 import readXlsxFile from 'read-excel-file/web-worker';
 import { importCategory } from './services/import-category';
+import productCategories from '../shared/product-categories.json';
 import { generateSkus, nextSku } from './services/sku';
 import { auth, type AppEnv, type Bindings } from './auth';
 export { ChatRoom } from './chat-room';
@@ -354,12 +355,33 @@ app.get('/api/settings', async (c) => {
       )
         .map((row) => row.brand)
         .filter(Boolean);
+  const [categorySetting] = await db(c)
+    .select()
+    .from(s.settings)
+    .where(eq(s.settings.key, 'categories'));
+  const categories = categorySetting
+    ? JSON.parse(categorySetting.value)
+    : [
+        ...new Set([
+          ...productCategories,
+          ...(
+            await db(c)
+              .selectDistinct({ category: s.products.category })
+              .from(s.products)
+              .where(isNull(s.products.archivedAt))
+              .orderBy(s.products.category)
+          )
+            .map((row) => row.category)
+            .filter(Boolean),
+        ]),
+      ];
   const [row] = await db(c)
     .select()
     .from(s.settings)
     .where(eq(s.settings.key, 'conditions'));
   return c.json({
     brands,
+    categories,
     conditions: JSON.parse(row.value),
     userEmail: c.get('email'),
     environment: c.env.ENVIRONMENT,
@@ -389,25 +411,39 @@ app.patch('/api/settings', async (c) => {
           'Brands must be unique',
         )
         .optional(),
+      categories: z
+        .array(z.string().trim().min(1).max(120))
+        .max(200)
+        .refine(
+          (v) =>
+            new Set(v.map((category) => category.toLowerCase())).size ===
+            v.length,
+          'Categories must be unique',
+        )
+        .optional(),
     })
     .refine(
-      (data) => data.conditions !== undefined || data.brands !== undefined,
+      (data) =>
+        data.conditions !== undefined ||
+        data.brands !== undefined ||
+        data.categories !== undefined,
       'Choose a setting to update',
     )
     .parse(await c.req.json());
-  const operations = (['conditions', 'brands'] as const).flatMap((key) =>
-    data[key] === undefined
-      ? []
-      : [
-          db(c)
-            .insert(s.settings)
-            .values({ key, value: JSON.stringify(data[key]) })
-            .onConflictDoUpdate({
-              target: s.settings.key,
-              set: { value: JSON.stringify(data[key]) },
-            }),
-          activity(c, 'settings', key, 'updated', `Equipment ${key} updated`),
-        ],
+  const operations = (['conditions', 'brands', 'categories'] as const).flatMap(
+    (key) =>
+      data[key] === undefined
+        ? []
+        : [
+            db(c)
+              .insert(s.settings)
+              .values({ key, value: JSON.stringify(data[key]) })
+              .onConflictDoUpdate({
+                target: s.settings.key,
+                set: { value: JSON.stringify(data[key]) },
+              }),
+            activity(c, 'settings', key, 'updated', `Equipment ${key} updated`),
+          ],
   );
   await db(c).batch(
     operations as [(typeof operations)[number], ...typeof operations],
@@ -526,6 +562,13 @@ app.post('/api/products/import', async (c) => {
   if (rows.length > 200)
     fail(422, 'Excel import supports up to 200 products at a time.');
   const issues: string[] = [];
+  const [categorySetting] = await db(c)
+    .select()
+    .from(s.settings)
+    .where(eq(s.settings.key, 'categories'));
+  const allowedCategories: string[] = categorySetting
+    ? JSON.parse(categorySetting.value)
+    : productCategories;
   const parsed = rows.flatMap(({ values: row, rowNumber }) => {
     try {
       const status = spreadsheetStatus(spreadsheetValue(row, 'status'));
@@ -538,7 +581,10 @@ app.post('/api/products/import', async (c) => {
           brand: spreadsheetText(spreadsheetValue(row, 'brand')),
           model: spreadsheetText(spreadsheetValue(row, 'model')),
           sku: spreadsheetText(spreadsheetValue(row, 'sku')) || undefined,
-          category: importCategory(spreadsheetValue(row, 'category')),
+          category: importCategory(
+            spreadsheetValue(row, 'category'),
+            allowedCategories,
+          ),
           serialNumber: spreadsheetText(spreadsheetValue(row, 'serialNumber')),
           condition: spreadsheetText(spreadsheetValue(row, 'condition')),
           purchaseCost: spreadsheetMoney(spreadsheetValue(row, 'purchaseCost')),
@@ -970,18 +1016,23 @@ app.delete('/api/leads/:id', async (c) => {
     c.env.DB.prepare('SELECT id FROM reservations WHERE lead_id=? LIMIT 1')
       .bind(lead.id)
       .first(),
-    c.env.DB.prepare('SELECT product_id FROM product_sales WHERE lead_id=? LIMIT 1')
+    c.env.DB.prepare(
+      'SELECT product_id FROM product_sales WHERE lead_id=? LIMIT 1',
+    )
       .bind(lead.id)
       .first(),
   ]);
   if (reservation)
     fail(409, 'Release this lead’s equipment reservations before deleting it.');
-  if (sale)
-    fail(409, 'Deals linked to a recorded sale cannot be deleted.');
+  if (sale) fail(409, 'Deals linked to a recorded sale cannot be deleted.');
   await c.env.DB.batch([
-    c.env.DB.prepare('DELETE FROM line_reminders WHERE lead_id=?').bind(lead.id),
+    c.env.DB.prepare('DELETE FROM line_reminders WHERE lead_id=?').bind(
+      lead.id,
+    ),
     c.env.DB.prepare('DELETE FROM lead_products WHERE lead_id=?').bind(lead.id),
-    c.env.DB.prepare("DELETE FROM activities WHERE entity_type='lead' AND entity_id=?").bind(lead.id),
+    c.env.DB.prepare(
+      "DELETE FROM activities WHERE entity_type='lead' AND entity_id=?",
+    ).bind(lead.id),
     c.env.DB.prepare('DELETE FROM leads WHERE id=?').bind(lead.id),
   ]);
   return c.body(null, 204);
@@ -1066,7 +1117,9 @@ app.get('/api/dashboard', async (c) => {
   const all = await db(c)
     .select({
       ...getTableColumns(s.products),
-      primaryImageId: sql<string | null>`(SELECT id FROM product_images WHERE product_id=products.id ORDER BY is_primary DESC,sort_order LIMIT 1)`,
+      primaryImageId: sql<
+        string | null
+      >`(SELECT id FROM product_images WHERE product_id=products.id ORDER BY is_primary DESC,sort_order LIMIT 1)`,
     })
     .from(s.products);
   const products = all.filter((p) => !p.archivedAt).map(productResponse);
