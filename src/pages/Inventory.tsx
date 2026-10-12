@@ -10,11 +10,11 @@ import {
 } from 'react-router-dom';
 import {
   Search,
-  ArrowUpRight,
   Upload,
   Sparkles,
   ArrowLeft,
   ArrowRight,
+  Eye,
   Star,
   Trash2,
 } from 'lucide-react';
@@ -260,7 +260,7 @@ export function InventoryPage() {
                         )}
                         to={`/inventory/${p.id}`}
                       >
-                        <ArrowUpRight size={18} />
+                        <Eye size={18} />
                       </Link>
                     </td>
                   </tr>

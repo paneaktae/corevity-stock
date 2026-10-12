@@ -1,5 +1,6 @@
 import { t, useLanguage, setLanguage } from './i18n';
 import { createRoot } from 'react-dom/client';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -11,6 +12,8 @@ import {
   MessageCircle,
   Sparkles,
   ChevronRight,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { DashboardPage } from './pages/Dashboard';
 import { InventoryPage, ProductPage, ProductForm } from './pages/Inventory';
@@ -34,6 +37,24 @@ const navigation = [
 ] as const;
 function App() {
   const language = useLanguage();
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('corevity-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {
+      // Keep the app usable when browser storage is disabled.
+    }
+    return 'light';
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    try {
+      localStorage.setItem('corevity-theme', theme);
+    } catch {
+      // Keep the selected theme for this session.
+    }
+  }, [theme]);
   document.documentElement.lang = language;
   return (
     <BrowserRouter>
@@ -78,6 +99,16 @@ function App() {
                   <option value="en">English</option>
                 </select>
               </label>
+              <button
+                className="theme-toggle"
+                type="button"
+                aria-label={t(theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode')}
+                title={t(theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode')}
+                onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
+              >
+                {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+                {t(theme === 'light' ? 'Dark mode' : 'Light mode')}
+              </button>
               <span className="workspace-tag">
                 <span className="status-dot" /> {t('Corevity Operations')}
               </span>

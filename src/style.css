@@ -1,17 +1,21 @@
 @import 'tailwindcss';
 :root {
-  --brand-blue: #1765b8;
-  --brand-blue-dark: #104e94;
-  --brand-soft: #eaf3ff;
+  --brand-blue: #1769d2;
+  --brand-blue-dark: #104eaa;
+  --brand-soft: #e7f1ff;
   --border: #dce5ef;
+  --surface: #ffffff;
+  --page: #f3f6fb;
+  --text: #202a39;
+  --muted-text: #677b95;
   font-family:
     Inter,
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  color: #242b35;
-  background: #f3f4f6;
+  color: var(--text);
+  background: var(--page);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -20,6 +24,8 @@
 }
 body {
   margin: 0;
+  background: var(--page);
+  color: var(--text);
 }
 a {
   color: inherit;
@@ -34,11 +40,11 @@ textarea {
 button,
 .button {
   min-height: 44px;
-  border: 1px solid #d9dee5;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 9px 14px;
-  background: white;
-  color: #2e3742;
+  background: var(--surface);
+  color: var(--text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -107,13 +113,13 @@ strong {
 input,
 select,
 textarea {
-  background: white;
-  border: 1px solid #d9dee5;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 7px;
   padding: 10px 11px;
   width: 100%;
   min-height: 44px;
-  color: #242b35;
+  color: var(--text);
 }
 /* Monetary amounts are typed directly, without browser stepper controls. */
 input[type='number'] {
@@ -689,6 +695,14 @@ td small {
   width: 35px;
   height: 40px;
   border-radius: 7px;
+}
+.inventory-table .icon-button {
+  color: var(--brand-blue-dark);
+  background: var(--brand-soft);
+  border: 1px solid #c9def6;
+}
+.inventory-table .icon-button:hover {
+  background: #d6e8ff;
 }
 .inventory-cards {
   display: none;
@@ -1633,6 +1647,119 @@ html[lang='th'] .nav-label {
   flex: 1;
   min-width: 0;
 }
+.theme-toggle {
+  min-height: 36px;
+  padding: 6px 10px;
+  color: var(--brand-blue-dark);
+  border-color: #c9def6;
+  background: var(--brand-soft);
+  font-size: 12px;
+}
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --brand-blue: #3988f5;
+  --brand-blue-dark: #74adff;
+  --brand-soft: #172c4a;
+  --border: #2c405a;
+  --surface: #142033;
+  --page: #0c1523;
+  --text: #e7eef8;
+  --muted-text: #a6b6ca;
+}
+html[data-theme='dark'] body {
+  background: var(--page);
+  color: var(--text);
+}
+html[data-theme='dark'] .sidebar,
+html[data-theme='dark'] .topbar,
+html[data-theme='dark'] .panel,
+html[data-theme='dark'] .metric,
+html[data-theme='dark'] .kanban-column,
+html[data-theme='dark'] .deal-card,
+html[data-theme='dark'] .inventory-card,
+html[data-theme='dark'] .followup-card,
+html[data-theme='dark'] .chat-panel,
+html[data-theme='dark'] .chat-assistant,
+html[data-theme='dark'] .assistant-turn,
+html[data-theme='dark'] .chat-product,
+html[data-theme='dark'] .chat-picker,
+html[data-theme='dark'] .empty {
+  color: var(--text);
+  background-color: var(--surface);
+  border-color: var(--border);
+}
+html[data-theme='dark'] .sidebar {
+  background: #101b2c;
+}
+html[data-theme='dark'] .inventory-table .icon-button {
+  color: #d7e8ff;
+  background: #1a2f4d;
+  border-color: #35577e;
+}
+html[data-theme='dark'] .brand,
+html[data-theme='dark'] .sidebar nav a,
+html[data-theme='dark'] h1,
+html[data-theme='dark'] h2,
+html[data-theme='dark'] h3,
+html[data-theme='dark'] p,
+html[data-theme='dark'] td,
+html[data-theme='dark'] th,
+html[data-theme='dark'] label,
+html[data-theme='dark'] .equipment-cell,
+html[data-theme='dark'] .list-row,
+html[data-theme='dark'] .text-link {
+  color: var(--text);
+}
+html[data-theme='dark'] small,
+html[data-theme='dark'] .muted,
+html[data-theme='dark'] .topbar,
+html[data-theme='dark'] .chat-message-meta,
+html[data-theme='dark'] .sidebar-bottom,
+html[data-theme='dark'] .chat-assistant-heading p,
+html[data-theme='dark'] .assistant-turn time {
+  color: var(--muted-text);
+}
+html[data-theme='dark'] input,
+html[data-theme='dark'] select,
+html[data-theme='dark'] textarea,
+html[data-theme='dark'] button:not(.primary):not(.danger),
+html[data-theme='dark'] .button:not(.primary):not(.danger) {
+  color: var(--text);
+  background-color: #1a2a40;
+  border-color: #354b67;
+}
+html[data-theme='dark'] button:hover,
+html[data-theme='dark'] .button:hover,
+html[data-theme='dark'] .sidebar nav a:hover {
+  background-color: #233956;
+}
+html[data-theme='dark'] .sidebar nav a.active {
+  color: white;
+  background: #1769d2;
+}
+html[data-theme='dark'] .assistant-turn.user,
+html[data-theme='dark'] .chat-message.mine .chat-bubble {
+  color: #e7eef8;
+  background: #19385e;
+  border-color: #315783;
+}
+html[data-theme='dark'] tr,
+html[data-theme='dark'] th,
+html[data-theme='dark'] td,
+html[data-theme='dark'] .chat-heading,
+html[data-theme='dark'] .chat-composer,
+html[data-theme='dark'] .section-heading {
+  border-color: var(--border);
+}
+html[data-theme='dark'] .theme-toggle {
+  color: #d7e8ff;
+  background: #1a2a40;
+  border-color: #354b67;
+}
+html[data-theme='dark'] input:disabled,
+html[data-theme='dark'] select:disabled {
+  background: #1c2939;
+}
 .chat-connection {
   margin-left: auto;
   color: #64748b;
@@ -1835,4 +1962,31 @@ a.chat-product:hover {
   .chat-product {
     min-width: 0;
   }
+}
+html[data-theme='dark'] .chat-feed,
+html[data-theme='dark'] .chat-bubble,
+html[data-theme='dark'] .ai-draft,
+html[data-theme='dark'] .settings-tab,
+html[data-theme='dark'] .chat-picker-results button {
+  color: var(--text);
+  background: #101b2c;
+  border-color: var(--border);
+}
+html[data-theme='dark'] .settings-tab.active,
+html[data-theme='dark'] .mine .chat-bubble {
+  color: #e7eef8;
+  background: #19385e;
+  border-color: #315783;
+}
+html[data-theme='dark'] .metric-top,
+html[data-theme='dark'] .metric-top svg,
+html[data-theme='dark'] .nav-label,
+html[data-theme='dark'] .chat-connection,
+html[data-theme='dark'] .chat-message-meta strong,
+html[data-theme='dark'] .chat-product small,
+html[data-theme='dark'] .chat-picker-results small {
+  color: var(--muted-text);
+}
+html[data-theme='dark'] .metric-top {
+  background: transparent;
 }
