@@ -365,6 +365,19 @@ describe('D1-backed inventory and sales', () => {
         .first(),
     ).toEqual(before);
   });
+  it('uses the latest stored product SKU when previewing and allocating a new one', async () => {
+    const db = await mf.getD1Database('DB');
+    const clock = new Date('2092-03-15T00:00:00Z');
+    await db
+      .prepare(
+        "INSERT INTO products(id,sku,brand,model,created_at,updated_at) VALUES('legacy-sku-2092','209202087','Legacy','Imported',?,?)",
+      )
+      .bind(clock.toISOString(), clock.toISOString())
+      .run();
+    expect(await nextSku(db, clock)).toBe('209203088');
+    expect(await generateSkus(db, 1, clock)).toEqual(['209203088']);
+    expect(await nextSku(db, clock)).toBe('209203089');
+  });
   it('rejects invalid Excel imports before changing inventory', async () => {
     const form = new FormData();
     form.append(
