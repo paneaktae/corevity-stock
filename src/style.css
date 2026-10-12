@@ -1216,13 +1216,30 @@ td small {
 }
 .count {
   font-size: 11px;
-  background: #dfe4eb;
+  min-width: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  background: #365b8f;
+  color: #fff;
   border-radius: 6px;
-  padding: 2px 7px;
+  padding: 2px 8px;
+  font-weight: 750;
+  line-height: 1;
 }
 .count.overdue {
-  background: #f4e8d4;
-  color: #9f7f4d;
+  background: #a84732;
+  color: #fff;
+}
+.count.today {
+  background: #1769d2;
+  color: #fff;
+}
+.count.upcoming {
+  background: #087e79;
+  color: #fff;
 }
 .muted {
   color: #73859d;
@@ -1896,6 +1913,18 @@ html[data-theme='dark'] .theme-option.active {
   background: #1769d2;
   border-color: #78b2ff;
   box-shadow: 0 0 0 2px #111d2d, 0 0 0 3px #78b2ff, 0 2px 9px rgb(0 0 0 / 40%);
+}
+html[data-theme='dark'] .count.overdue {
+  background: #b84d37;
+  color: #fff;
+}
+html[data-theme='dark'] .count.today {
+  background: #2879e5;
+  color: #fff;
+}
+html[data-theme='dark'] .count.upcoming {
+  background: #07877f;
+  color: #fff;
 }
 html[data-theme='dark'] input:disabled,
 html[data-theme='dark'] select:disabled {
