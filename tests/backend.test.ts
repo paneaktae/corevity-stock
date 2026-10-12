@@ -390,13 +390,63 @@ describe('D1-backed inventory and sales', () => {
     );
     expect((await request(`/customers/${removable.id}`)).status).toBe(404);
     const retained = await customer();
-    await request('/leads', 'POST', {
-      customerId: retained.id,
-      title: 'Keep this history',
-    });
+    const lead = await json<{ id: string }>(
+      await request('/leads', 'POST', {
+        customerId: retained.id,
+        title: 'Remove this lead first',
+      }),
+    );
     expect((await request(`/customers/${retained.id}`, 'DELETE')).status).toBe(
       409,
     );
+    expect((await request(`/leads/${lead.id}`, 'DELETE')).status).toBe(204);
+    expect((await request(`/customers/${retained.id}`, 'DELETE')).status).toBe(
+      204,
+    );
+  });
+  it('deletes leads safely and protects reservations and closed sale history', async () => {
+    const customerWithReservation = await customer();
+    const reservedProduct = await product();
+    const reservedLead = await json<{ id: string }>(
+      await request('/leads', 'POST', {
+        customerId: customerWithReservation.id,
+        title: 'Reserved lead',
+        productIds: [reservedProduct.id],
+      }),
+    );
+    await request(`/products/${reservedProduct.id}/reserve`, 'POST', {
+      customerId: customerWithReservation.id,
+      leadId: reservedLead.id,
+    });
+    expect((await request(`/leads/${reservedLead.id}`, 'DELETE')).status).toBe(
+      409,
+    );
+    await request(`/products/${reservedProduct.id}/release-reservation`, 'POST');
+    expect((await request(`/leads/${reservedLead.id}`, 'DELETE')).status).toBe(
+      204,
+    );
+    expect(
+      (await request(`/customers/${customerWithReservation.id}`, 'DELETE'))
+        .status,
+    ).toBe(204);
+
+    const soldProduct = await product();
+    const soldCustomer = await customer();
+    const soldLead = await json<{ id: string }>(
+      await request('/leads', 'POST', {
+        customerId: soldCustomer.id,
+        title: 'Closed lead',
+        productIds: [soldProduct.id],
+      }),
+    );
+    expect(
+      (
+        await request(`/leads/${soldLead.id}/win`, 'POST', {
+          productIds: [soldProduct.id],
+        })
+      ).status,
+    ).toBe(200);
+    expect((await request(`/leads/${soldLead.id}`, 'DELETE')).status).toBe(409);
   });
   it('partial updates preserve omitted fields and linked products', async () => {
     const p = await product(),

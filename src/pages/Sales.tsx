@@ -8,7 +8,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router-dom';
-import { LayoutGrid, List, Clock, ArrowUpRight } from 'lucide-react';
+import { LayoutGrid, List, Clock, ArrowUpRight, Trash2 } from 'lucide-react';
 import {
   leadStatuses,
   type Lead,
@@ -361,6 +361,7 @@ export function LeadPage() {
   const [winning, setWinning] = useState(false);
   const [sold, setSold] = useState<string[]>([]);
   const [followup, setFollowup] = useState('');
+  const nav = useNavigate();
   useEffect(() => {
     if (d) {
       setFollowup(localDate(d.lead.nextFollowUpAt));
@@ -394,9 +395,32 @@ export function LeadPage() {
         title={l.title}
         subtitle={d.customer.name}
         action={
-          <Link className="button" to={`/sales/${id}/edit`}>
-            {t('Edit lead')}
-          </Link>
+          <div className="header-actions">
+            <Link className="button" to={`/sales/${id}/edit`}>
+              {t('Edit lead')}
+            </Link>
+            <button
+              className="danger"
+              disabled={busy || l.status === 'WON'}
+              onClick={async () => {
+                if (!confirm(t('Delete this lead? This cannot be undone.')))
+                  return;
+                setBusy(true);
+                setError('');
+                try {
+                  await api(`/leads/${id}`, { method: 'DELETE' });
+                  nav('/sales');
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <Trash2 size={16} />
+              {t('Delete lead')}
+            </button>
+          </div>
         }
       />
       <ErrorBox message={error || loadError} />

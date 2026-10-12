@@ -962,6 +962,30 @@ app.patch('/api/leads/:id', async (c) => {
   ]);
   return c.json(await getLead(c, lead.id));
 });
+app.delete('/api/leads/:id', async (c) => {
+  const lead = await getLead(c, c.req.param('id'));
+  if (lead.status === 'WON')
+    fail(409, 'Won deals cannot be deleted; sales history must be retained.');
+  const [reservation, sale] = await Promise.all([
+    c.env.DB.prepare('SELECT id FROM reservations WHERE lead_id=? LIMIT 1')
+      .bind(lead.id)
+      .first(),
+    c.env.DB.prepare('SELECT product_id FROM product_sales WHERE lead_id=? LIMIT 1')
+      .bind(lead.id)
+      .first(),
+  ]);
+  if (reservation)
+    fail(409, 'Release this lead’s equipment reservations before deleting it.');
+  if (sale)
+    fail(409, 'Deals linked to a recorded sale cannot be deleted.');
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM line_reminders WHERE lead_id=?').bind(lead.id),
+    c.env.DB.prepare('DELETE FROM lead_products WHERE lead_id=?').bind(lead.id),
+    c.env.DB.prepare("DELETE FROM activities WHERE entity_type='lead' AND entity_id=?").bind(lead.id),
+    c.env.DB.prepare('DELETE FROM leads WHERE id=?').bind(lead.id),
+  ]);
+  return c.body(null, 204);
+});
 app.post('/api/leads/:id/win', async (c) => {
   const lead = await getLead(c, c.req.param('id'));
   if (lead.status === 'WON') fail(409, 'This lead is already won.');
