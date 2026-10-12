@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Moon,
   Sun,
+  BookOpenText,
 } from 'lucide-react';
 import { DashboardPage } from './pages/Dashboard';
 import { InventoryPage, ProductPage, ProductForm } from './pages/Inventory';
@@ -21,6 +22,7 @@ import { CustomersPage, CustomerPage, CustomerForm } from './pages/Customers';
 import { SalesPage, LeadPage, LeadForm, FollowupsPage } from './pages/Sales';
 import { ChatPage } from './pages/Chat';
 import { InventoryAssistantPage } from './pages/InventoryAssistant';
+import { EquipmentGuidePage } from './pages/EquipmentGuide';
 import { ChatBadge } from './components/ChatBadge';
 import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
@@ -28,6 +30,7 @@ import './style.css';
 const navigation = [
   ['/', 'Dashboard', LayoutDashboard],
   ['/inventory', 'Inventory', Dumbbell],
+  ['/equipment-guide', 'Equipment guide', BookOpenText],
   ['/customers', 'Customers', Users],
   ['/sales', 'Sales', Kanban],
   ['/followups', 'Follow-ups', CalendarClock],
@@ -118,6 +121,7 @@ function App() {
             <Routes>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/equipment-guide" element={<EquipmentGuidePage />} />
               <Route path="/inventory/new" element={<ProductForm />} />
               <Route path="/inventory/:id" element={<ProductPage />} />
               <Route path="/inventory/:id/edit" element={<ProductForm />} />

@@ -54,7 +54,7 @@ export function InventoryPage() {
   const q = useDebounce(search);
   const [filters, setFilters] = useState({
     brand: '',
-    category: '',
+    category: params.get('category') ?? '',
     status: params.get('status') ?? '',
     condition: '',
     sort: 'newest',
