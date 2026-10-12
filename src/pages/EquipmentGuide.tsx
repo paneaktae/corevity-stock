@@ -197,7 +197,7 @@ export function EquipmentGuidePage() {
             <div className="guide-categories">
               {categories.map(({ name, th }) => (
                 <Link className="guide-category" to={`/inventory?category=${encodeURIComponent(name)}`} key={name}>
-                  {localized(th, name)}
+                  {localized(name, th)}
                   <ArrowUpRight size={13} />
                 </Link>
               ))}
