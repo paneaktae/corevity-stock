@@ -14,7 +14,7 @@ export const leadStatuses = [
   'LOST',
 ] as const;
 const text = z.string().trim().max(10000).default('');
-const money = z
+export const money = z
   .number()
   .finite()
   .min(0)
@@ -77,6 +77,7 @@ export const customerInput = z.object({
   phone: text,
   lineId: text,
   email: z.union([z.literal(''), z.string().email()]).default(''),
+  billingAddress: text,
   budget: money,
   interestedIn: text,
   notes: text,
@@ -211,6 +212,15 @@ export type CustomerDetail = {
   customer: Customer;
   leads: Lead[];
   activities: Activity[];
+  quotations?: {
+    id: string;
+    quotationNumber: string;
+    status: string;
+    issueDate: string;
+    validUntil: string;
+    currency: 'THB' | 'USD';
+    grandTotal: number;
+  }[];
 };
 export type LeadDetail = {
   lead: Lead;

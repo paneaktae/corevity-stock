@@ -835,9 +835,14 @@ export function ProductPage() {
         title={`${p.brand} ${p.model}`}
         subtitle={`${p.category || t('Equipment')} · ${t(p.condition) || t('Condition not specified')}`}
         action={
-          <Link className="button" to={`/inventory/${id}/edit`}>
-            {t('Edit equipment')}
-          </Link>
+          <div className="header-actions">
+            <Link className="button" to={`/inventory/${id}/edit`}>
+              {t('Edit equipment')}
+            </Link>
+            <Link className="button" to={`/quotations/new?productId=${id}`}>
+              {t('Create quotation')}
+            </Link>
+          </div>
         }
       />
       <ErrorBox message={error || loadError} />

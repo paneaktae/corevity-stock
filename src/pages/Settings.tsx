@@ -1,6 +1,7 @@
 import { SalespeopleSettings } from '../components/SalespeopleSettings';
 import { BrandSettings } from '../components/BrandSettings';
 import { CategorySettings } from '../components/CategorySettings';
+import { QuotationSettingsPanel } from '../components/QuotationSettingsPanel';
 import { LineSettings } from '../components/LineSettings';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
@@ -11,6 +12,7 @@ import {
   UsersRound,
   ShieldCheck,
   Sparkles,
+  FileText,
 } from 'lucide-react';
 import type { Settings } from '../../shared/schemas';
 import { api, useData } from '../lib';
@@ -21,7 +23,9 @@ export function SettingsPage() {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<'sales' | 'products' | 'line' | 'other'>(
+  const [tab, setTab] = useState<
+    'sales' | 'products' | 'line' | 'quotation' | 'other'
+  >(
     'sales',
   );
   useEffect(() => {
@@ -51,6 +55,7 @@ export function SettingsPage() {
             ['sales', 'Sales', UsersRound],
             ['products', 'Products', Box],
             ['line', 'LINE alerts', BellRing],
+            ['quotation', 'Quotations', FileText],
             ['other', 'Other', MoreHorizontal],
           ] as const
         ).map(([key, title, Icon]) => (
@@ -144,6 +149,16 @@ export function SettingsPage() {
           className="settings-panel"
         >
           <LineSettings />
+        </section>
+      )}
+      {tab === 'quotation' && (
+        <section
+          id="settings-panel-quotation"
+          role="tabpanel"
+          aria-labelledby="settings-tab-quotation"
+          className="settings-panel"
+        >
+          <QuotationSettingsPanel />
         </section>
       )}
       {tab === 'other' && (

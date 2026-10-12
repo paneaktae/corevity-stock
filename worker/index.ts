@@ -24,6 +24,7 @@ export { ChatRoom } from './chat-room';
 import { salespeopleRoutes } from './salespeople';
 import { chatRoutes } from './chat';
 import { lineRoutes } from './line-routes';
+import { quotationRoutes, quotationSettingsRoutes } from './quotations';
 import {
   allowedSales,
   handleLineWebhook,
@@ -336,6 +337,8 @@ app.onError((error, c) => {
 app.route('/api/line', lineRoutes);
 app.route('/api/chat', chatRoutes);
 app.route('/api/salespeople', salespeopleRoutes);
+app.route('/api/quotations', quotationRoutes);
+app.route('/api/quotation-settings', quotationSettingsRoutes);
 app.get('/api/exchange-rate', async (c) =>
   c.json(await exchangeRate(c.env.DB, fetch, new Date(), c.env.BOT_API_KEY)),
 );
@@ -460,6 +463,7 @@ async function productList(c: Parameters<typeof auth>[0]) {
           s.products.sku,
           s.products.brand,
           s.products.model,
+          s.products.category,
           s.products.serialNumber,
         ].map((col) => like(col, `%${q}%`)),
       )!,
@@ -856,7 +860,7 @@ app.patch('/api/customers/:id', async (c) => {
 });
 app.delete('/api/customers/:id', async (c) => {
   const customer = await getCustomer(c, c.req.param('id'));
-  const [lead, reservation, sale] = await Promise.all([
+  const [lead, reservation, sale, quotation] = await Promise.all([
     db(c)
       .select({ id: s.leads.id })
       .from(s.leads)
@@ -872,8 +876,11 @@ app.delete('/api/customers/:id', async (c) => {
       .from(s.productSales)
       .where(eq(s.productSales.customerId, customer.id))
       .limit(1),
+    c.env.DB.prepare('SELECT id FROM quotations WHERE customer_id=? LIMIT 1')
+      .bind(customer.id)
+      .first<{ id: string }>(),
   ]);
-  if (lead.length || reservation.length || sale.length)
+  if (lead.length || reservation.length || sale.length || quotation)
     fail(
       409,
       'Cannot delete a customer with sales, reservations, or deal history.',
@@ -911,10 +918,20 @@ async function leadList(c: Parameters<typeof auth>[0]): Promise<Lead[]> {
 }
 app.get('/api/customers/:id', async (c) => {
   const customer = await getCustomer(c, c.req.param('id'));
+  const quotations = await c.env.DB.prepare(
+    'SELECT id,quotation_number AS quotationNumber,status,issue_date AS issueDate,valid_until AS validUntil,currency,grand_total_minor AS grandTotalMinor FROM quotations WHERE customer_id=? ORDER BY created_at DESC LIMIT 100',
+  )
+    .bind(customer.id)
+    .all();
   return c.json({
     customer,
     leads: (await leadList(c)).filter((l) => l.customerId === customer.id),
     activities: await activities(c, 'customer', customer.id),
+    quotations: quotations.results.map((quote) => ({
+      ...quote,
+      grandTotal: Number(quote.grandTotalMinor) / 100,
+      grandTotalMinor: undefined,
+    })),
   });
 });
 app.get('/api/leads', async (c) => c.json(await leadList(c)));

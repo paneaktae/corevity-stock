@@ -15,6 +15,7 @@ import {
   Moon,
   Sun,
   BookOpenText,
+  FileText,
 } from 'lucide-react';
 import { DashboardPage } from './pages/Dashboard';
 import { InventoryPage, ProductPage, ProductForm } from './pages/Inventory';
@@ -26,6 +27,7 @@ import { EquipmentGuidePage } from './pages/EquipmentGuide';
 import { ChatBadge } from './components/ChatBadge';
 import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
+import { QuotationsPage, QuotationForm, QuotationPage } from './pages/Quotations';
 import './style.css';
 const navigation = [
   ['/', 'Dashboard', LayoutDashboard],
@@ -33,6 +35,7 @@ const navigation = [
   ['/equipment-guide', 'Equipment guide', BookOpenText],
   ['/customers', 'Customers', Users],
   ['/sales', 'Sales', Kanban],
+  ['/quotations', 'Quotations', FileText],
   ['/followups', 'Follow-ups', CalendarClock],
   ['/chat', 'Team chat', MessageCircle],
   ['/ai-search', 'AI product search', Sparkles],
@@ -133,6 +136,10 @@ function App() {
               <Route path="/sales/new" element={<LeadForm />} />
               <Route path="/sales/:id" element={<LeadPage />} />
               <Route path="/sales/:id/edit" element={<LeadForm />} />
+              <Route path="/quotations" element={<QuotationsPage />} />
+              <Route path="/quotations/new" element={<QuotationForm />} />
+              <Route path="/quotations/:id" element={<QuotationPage />} />
+              <Route path="/quotations/:id/edit" element={<QuotationForm />} />
               <Route path="/followups" element={<FollowupsPage />} />
               <Route path="/chat" element={<ChatPage />} />
               <Route path="/ai-search" element={<InventoryAssistantPage />} />

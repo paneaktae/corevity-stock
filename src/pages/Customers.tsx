@@ -87,6 +87,7 @@ const blank: CustomerFormValues = {
   phone: '',
   lineId: '',
   email: '',
+  billingAddress: '',
   budget: '',
   interestedIn: '',
   notes: '',
@@ -177,6 +178,15 @@ export function CustomerForm() {
               </Field>
             ))}
           </div>
+          <Field label={t('Billing address')} error={fields.billingAddress}>
+            <textarea
+              rows={3}
+              value={form.billingAddress}
+              onChange={(e) =>
+                setForm({ ...form, billingAddress: e.target.value })
+              }
+            />
+          </Field>
           <Field label={t('Notes')} error={fields.notes}>
             <textarea
               rows={5}
@@ -222,6 +232,9 @@ export function CustomerPage() {
         subtitle={c.companyName || t('Individual customer')}
         action={
           <div className="header-actions">
+            <Link className="button" to={`/quotations/new?customerId=${id}`}>
+              {t('Create quotation')}
+            </Link>
             <Link className="button" to={`/customers/${id}/edit`}>
               {t('Edit customer')}
             </Link>
@@ -259,6 +272,7 @@ export function CustomerPage() {
               [t('Phone'), c.phone],
               ['LINE', c.lineId],
               [t('Email'), c.email],
+              [t('Billing address'), c.billingAddress],
               [t('Budget'), money(c.budget)],
               [t('Interested in'), c.interestedIn],
               [t('Next follow-up'), date(next?.nextFollowUpAt)],
@@ -301,7 +315,30 @@ export function CustomerPage() {
           )}
         </section>
       </div>
+      {d.quotations?.length ? (
+        <section className="panel customer-quotation-history">
+          <div className="section-heading">
+            <h2>{t('Quotations')}</h2>
+            <Link className="button" to={`/quotations/new?customerId=${id}`}>
+              {t('Create quotation')}
+            </Link>
+          </div>
+          {d.quotations.map((quote) => (
+            <Link className="list-row" key={quote.id} to={`/quotations/${quote.id}`}>
+              <div className="grow">
+                <strong>{quote.quotationNumber}</strong>
+                <small>{date(quote.issueDate)} · {t('Valid until')} {date(quote.validUntil)}</small>
+              </div>
+              <strong>{formatCustomerCurrency(quote.grandTotal, quote.currency)}</strong>
+              <Badge value={quote.status} />
+            </Link>
+          ))}
+        </section>
+      ) : null}
       <ActivityList items={d.activities} />
     </>
   );
+}
+function formatCustomerCurrency(amount: number, currency: string) {
+  return new Intl.NumberFormat('th-TH', { style: 'currency', currency }).format(amount);
 }

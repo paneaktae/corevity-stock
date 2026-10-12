@@ -6,6 +6,7 @@ import { parseDescriptions } from '../worker/services/ai';
 import { exchangeRate } from '../worker/services/exchange-rate';
 import { generateSkus, nextSku } from '../worker/services/sku';
 import type { ChatMessage } from '../shared/schemas';
+import type { Quotation } from '../shared/quotations';
 let mf: Miniflare;
 beforeAll(async () => {
   const result = await build({
@@ -941,6 +942,89 @@ describe('D1-backed inventory and sales', () => {
       { method: 'POST', body: form },
     );
     expect(r.status).toBe(422);
+  });
+});
+
+describe('quotation workflow', () => {
+  it('protects quotation endpoints with Cloudflare Access authentication', async () => {
+    expect((await mf.dispatchFetch('https://example.test/api/quotations')).status).toBe(503);
+    expect((await mf.dispatchFetch('https://example.test/api/quotation-settings')).status).toBe(503);
+  });
+
+  async function makeQuotation(customerId: string, productId: string) {
+    const response = await request('/quotations', 'POST', {
+      customerId,
+      issueDate: '2026-10-12',
+      validUntil: '2026-11-11',
+      currency: 'THB',
+      items: [{
+        productId, imageId: null, displayName: 'Saved product name',
+        description: 'A snapshot description', quantity: 2,
+        unitPrice: 1000, discount: 100,
+      }],
+      discount: 50, deliveryFee: 100, installationFee: 10, otherCharges: 0,
+      vatEnabled: true, vatRate: 7, taxMode: 'EXCLUSIVE',
+      paymentTerms: '50% deposit', deliveryTerms: '', warrantyTerms: '', notes: '',
+    });
+    return response;
+  }
+
+  it('creates a numbered quote with correct totals and immutable customer/product snapshots', async () => {
+    const customerRecord = await customer();
+    const equipment = await product('Snapshot Brand');
+    const response = await makeQuotation(customerRecord.id, equipment.id);
+    expect(response.status).toBe(201);
+    const quote = await json<Quotation>(response);
+    expect(quote.quotationNumber).toMatch(/^QT-2026-\d{4}$/);
+    expect(quote.status).toBe('DRAFT');
+    expect(quote.subtotal).toBe(1900);
+    expect(quote.beforeTax).toBe(1960);
+    expect(quote.vatAmount).toBe(137.2);
+    expect(quote.grandTotal).toBe(2097.2);
+    expect(quote.items[0].productName).toBe('Saved product name');
+    expect(quote.items[0].brand).toBe('Snapshot Brand');
+
+    const db = await mf.getD1Database('DB');
+    await db.prepare('UPDATE customers SET name=? WHERE id=?').bind('Changed customer', customerRecord.id).run();
+    await db.prepare('UPDATE products SET brand=?,model=? WHERE id=?').bind('Changed brand', 'Changed model', equipment.id).run();
+    const saved = await json<Quotation>(await request(`/quotations/${quote.id}`));
+    expect(saved.customer.name).toBe('Test customer');
+    expect(saved.items[0].brand).toBe('Snapshot Brand');
+    expect(saved.history.map((entry) => entry.toStatus)).toEqual(['DRAFT']);
+  });
+
+  it('locks sent quotes, records status history and duplicates into a new draft number', async () => {
+    const customerRecord = await customer();
+    const equipment = await product('Status Brand');
+    const quote = await json<Quotation>(await makeQuotation(customerRecord.id, equipment.id));
+    expect((await request(`/quotations/${quote.id}/status`, 'POST', { status: 'SENT' })).status).toBe(200);
+    expect((await request(`/quotations/${quote.id}`, 'PATCH', {
+      customerId: customerRecord.id, issueDate: '2026-10-12', validUntil: '2026-11-11',
+      currency: 'THB', items: [{ productId: equipment.id, imageId: null, displayName: 'No edit', description: '', quantity: 1, unitPrice: 1, discount: 0 }],
+      discount: 0, deliveryFee: 0, installationFee: 0, otherCharges: 0, vatEnabled: false,
+      vatRate: 7, taxMode: 'EXCLUSIVE', paymentTerms: '', deliveryTerms: '', warrantyTerms: '', notes: '',
+    })).status).toBe(409);
+    const copyResponse = await request(`/quotations/${quote.id}/duplicate`, 'POST');
+    expect(copyResponse.status).toBe(201);
+    const copy = await json<Quotation>(copyResponse);
+    expect(copy.id).not.toBe(quote.id);
+    expect(copy.quotationNumber).not.toBe(quote.quotationNumber);
+    expect(copy.status).toBe('DRAFT');
+    expect(copy.grandTotal).toBe(quote.grandTotal);
+    expect(copy.history.map((entry) => entry.toStatus)).toEqual(['DRAFT']);
+  });
+
+  it('reserves unique sequential numbers when quotes are created concurrently', async () => {
+    const customerRecord = await customer();
+    const equipment = await product('Concurrent Brand');
+    const [first, second] = await Promise.all([
+      makeQuotation(customerRecord.id, equipment.id),
+      makeQuotation(customerRecord.id, equipment.id),
+    ]);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    const [a, b] = await Promise.all([json<Quotation>(first), json<Quotation>(second)]);
+    expect(a.quotationNumber).not.toBe(b.quotationNumber);
   });
 });
 describe('AI response validation', () => {
