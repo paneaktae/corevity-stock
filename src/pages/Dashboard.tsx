@@ -123,9 +123,21 @@ export function DashboardPage() {
           </div>
           {d.recentProducts.length ? (
             d.recentProducts.map((p) => (
-              <Link className="list-row" to={`/inventory/${p.id}`} key={p.id}>
-                <div className="mini-icon">
-                  <Package size={21} />
+              <Link
+                className="list-row recent-equipment-row"
+                to={`/inventory/${p.id}`}
+                key={p.id}
+              >
+                <div className="recent-equipment-thumb">
+                  {p.primaryImageId ? (
+                    <img
+                      src={`/api/images/${p.primaryImageId}`}
+                      alt={`${p.brand} ${p.model}`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <Package size={23} />
+                  )}
                 </div>
                 <div className="grow">
                   <strong>
@@ -135,7 +147,7 @@ export function DashboardPage() {
                     {p.sku} · {p.category || t('Uncategorized')}
                   </small>
                 </div>
-                <div className="align-right">
+                <div className="recent-equipment-meta">
                   <strong>{money(p.sellingPrice)}</strong>
                   <Badge value={p.status} />
                 </div>
