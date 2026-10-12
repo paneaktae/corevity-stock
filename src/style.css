@@ -2579,7 +2579,21 @@ html[data-theme='dark'] .guide-category:hover {
 .quotation-card > strong { font-variant-numeric: tabular-nums; }
 .quotation-editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; gap: 18px; }
 .quotation-editor-main { display: grid; gap: 16px; min-width: 0; }
-.quotation-section { padding: 20px; }
+.quotation-section { padding: 20px; min-width: 0; max-width: 100%; }
+.quotation-section .form-grid,
+.quotation-section .field {
+  min-width: 0;
+  max-width: 100%;
+}
+.quotation-section input[type='date'] {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 8px;
+  font-size: 16px;
+}
 .quotation-section > h2, .quotation-summary > h2 { margin-bottom: 16px; }
 .quotation-selected-customer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--page); }
 .quotation-selected-customer small { margin-top: 3px; }
