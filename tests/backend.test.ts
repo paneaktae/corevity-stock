@@ -191,6 +191,7 @@ describe('D1-backed inventory and sales', () => {
     const skuSearchHtml = await skuSearch.text();
     expect(skuSearchHtml).toContain('1 products');
     expect(skuSearchHtml).toContain('Public boundary Test model');
+    expect(skuSearchHtml).toContain("addEventListener('input',updateCatalog)");
 
     const unpublish = await request(`/products/${item.id}/unpublish`, 'POST');
     expect(unpublish.status).toBe(200);
