@@ -1772,9 +1772,13 @@ html[lang='th'] .nav-label {
 }
 .theme-option.active {
   color: #fff;
-  background: var(--brand-blue);
-  border-color: var(--brand-blue);
-  box-shadow: 0 1px 3px rgb(27 86 160 / 22%);
+  background: #155fc4;
+  border-color: #155fc4;
+  box-shadow: 0 0 0 2px #fff, 0 2px 7px rgb(27 86 160 / 35%);
+  font-weight: 750;
+}
+.theme-option.active svg {
+  filter: drop-shadow(0 0 2px rgb(255 255 255 / 55%));
 }
 .theme-option:focus-visible {
   outline: 2px solid var(--brand-blue);
@@ -1889,8 +1893,9 @@ html[data-theme='dark'] .theme-option:hover:not(.active) {
 }
 html[data-theme='dark'] .theme-option.active {
   color: #fff;
-  background: #2875dc;
-  border-color: #3988f5;
+  background: #1769d2;
+  border-color: #78b2ff;
+  box-shadow: 0 0 0 2px #111d2d, 0 0 0 3px #78b2ff, 0 2px 9px rgb(0 0 0 / 40%);
 }
 html[data-theme='dark'] input:disabled,
 html[data-theme='dark'] select:disabled {
