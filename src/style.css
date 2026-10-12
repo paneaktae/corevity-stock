@@ -1990,3 +1990,15 @@ html[data-theme='dark'] .chat-picker-results small {
 html[data-theme='dark'] .metric-top {
   background: transparent;
 }
+html[data-theme='dark'] .inventory-table th {
+  color: #f1f6ff;
+  background: #1a2f4d;
+  border-bottom: 1px solid #3a5577;
+}
+html[data-theme='dark'] .inventory-table td {
+  color: #e7eef8;
+  background: #142033;
+}
+html[data-theme='dark'] .inventory-table tbody tr:hover td {
+  background: #1a2a40;
+}
