@@ -6,6 +6,7 @@ import type {
   Customer,
   CustomerDetail,
   CustomerInput,
+  Settings,
 } from '../../shared/schemas';
 import { api, ApiError, useData, useDebounce, money, date } from '../lib';
 import {
@@ -98,6 +99,7 @@ export function CustomerForm() {
   const { data, error: loadError } = useData<CustomerDetail>(
     id ? `/customers/${id}` : null,
   );
+  const { data: settings } = useData<Settings>('/settings');
   const [form, setForm] = useState<CustomerFormValues>(blank);
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string[]>>({});
@@ -149,7 +151,6 @@ export function CustomerForm() {
                 ['lineId', t('LINE ID')],
                 ['email', t('Email')],
                 ['budget', t('Budget (THB)')],
-                ['interestedIn', t('Interested in')],
               ] as const
             ).map(([key, title]) => (
               <Field key={key} label={title} error={fields[key]}>
@@ -178,6 +179,42 @@ export function CustomerForm() {
               </Field>
             ))}
           </div>
+          <Field label={t('Interested in')}>
+            <div className="interest-category-list">
+              {(settings?.categories ?? []).map((category) => {
+                const selected = form.interestedIn
+                  .split(',')
+                  .map((value) => value.trim())
+                  .filter(Boolean);
+                const checked = selected.includes(category);
+                return (
+                  <label className="interest-category" key={category}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        const knownCategories = settings?.categories ?? [];
+                        const preserved = selected.filter(
+                          (value) => !knownCategories.includes(value),
+                        );
+                        const next = checked
+                          ? selected.filter((value) => value !== category)
+                          : [...selected, category];
+                        setForm({
+                          ...form,
+                          interestedIn: [...preserved, ...next.filter((value) => knownCategories.includes(value))].join(', '),
+                        });
+                      }}
+                    />
+                    <span>{category}</span>
+                  </label>
+                );
+              })}
+              {!settings?.categories.length && (
+                <span className="muted">{t('Loading categories…')}</span>
+              )}
+            </div>
+          </Field>
           <Field label={t('Billing address')} error={fields.billingAddress}>
             <textarea
               rows={3}

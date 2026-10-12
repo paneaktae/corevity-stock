@@ -798,6 +798,41 @@ td small {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 22px;
 }
+.interest-category-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--page);
+}
+.interest-category {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.interest-category input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  accent-color: var(--brand-blue);
+}
+.interest-category span {
+  overflow-wrap: anywhere;
+}
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -1332,19 +1367,22 @@ td small {
 }
 @media (max-width: 760px) {
   .sidebar {
-    position: sticky;
-    top: 0;
+    position: relative;
     inset: auto;
     width: 100%;
-    padding: 12px 12px 0;
+    padding: 10px 12px 0;
     display: block;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 3px 12px rgb(21 44 75 / 7%);
+    z-index: 5;
   }
   .app {
     display: block;
   }
   .brand {
     font-size: 15px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   .brand-mark {
     height: 32px;
@@ -1359,40 +1397,89 @@ td small {
     display: none !important;
   }
   .sidebar nav {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 2px;
-    padding-bottom: 8px;
+    display: flex;
+    gap: 6px;
+    padding: 0 0 9px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sidebar nav::-webkit-scrollbar {
+    display: none;
   }
   .sidebar nav a {
-    padding: 8px 2px;
-    gap: 4px;
-    flex-direction: column;
-    font-size: 9px;
-    min-height: 46px;
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: center;
+    padding: 8px 11px;
+    gap: 7px;
+    font-size: 11px;
+    min-height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    white-space: nowrap;
   }
   .sidebar nav a svg {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
   }
   .sidebar nav a.active {
-    background: var(--brand-blue);
+    background: var(--brand-soft);
+    border-color: var(--brand-blue);
+    color: var(--brand-blue-dark);
+  }
+  html[data-theme='dark'] .sidebar nav a.active {
+    background: #1769d2;
+    border-color: #3e8df6;
     color: white;
   }
   main {
     margin-left: 0;
   }
   .topbar {
-    height: 42px;
-    padding: 0 18px;
+    height: auto;
+    min-height: 48px;
+    padding: 7px 12px;
     font-size: 10px;
+  }
+  .topbar > span {
+    display: none;
+  }
+  .topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .language-picker > span {
+    display: none;
+  }
+  .language-picker select {
+    min-height: 38px;
+    padding-left: 10px;
+    padding-right: 32px;
+  }
+  .theme-toggle {
+    min-height: 38px;
+  }
+  .theme-option {
+    min-height: 30px;
+    padding: 4px 8px;
+    gap: 5px;
+    font-size: 11px;
+  }
+  .workspace-tag {
+    display: none;
   }
   .workspace-tag {
     border: 0;
     padding: 0;
   }
   .content {
-    padding: 24px 17px 45px;
+    width: 100%;
+    min-width: 0;
+    padding: 20px 12px 40px;
   }
   .page-header {
     align-items: flex-start;
@@ -1511,6 +1598,17 @@ td small {
   .field textarea,
   .field select {
     font-size: 16px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .panel,
+  form,
+  .form-grid,
+  .form-grid > *,
+  .field {
+    min-width: 0;
+    max-width: 100%;
   }
   .kanban {
     grid-template-columns: 1fr;
@@ -1900,6 +1998,13 @@ html[data-theme='dark'] .section-heading {
 html[data-theme='dark'] .theme-toggle {
   background: #111d2d;
   border-color: #354b67;
+}
+html[data-theme='dark'] .interest-category-list {
+  background: #101b2c;
+}
+html[data-theme='dark'] .interest-category {
+  background: #142033;
+  border-color: var(--border);
 }
 html[data-theme='dark'] .theme-option {
   color: #a6b6ca;
