@@ -406,6 +406,43 @@ main {
   grid-template-columns: 1.25fr 1fr;
   gap: 22px;
 }
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 0 20px;
+  padding: 4px 2px 8px;
+  border-bottom: 1px solid #dee2e8;
+}
+.settings-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #53657d;
+  font-weight: 600;
+}
+.settings-tab:hover {
+  background: #f2f6fb;
+}
+.settings-tab.active {
+  border-color: #c9d9ee;
+  background: #eaf2fc;
+  color: #1d4e89;
+}
+.settings-tab:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+.settings-panel {
+  min-width: 0;
+}
 .list-row {
   display: flex;
   align-items: center;
