@@ -1351,6 +1351,16 @@ describe('Catalog inquiry chat', () => {
     );
 
     const visitorHeaders = { Authorization: `Bearer ${session.token}` };
+    const wrongToken =
+      session.token.slice(0, -1) +
+      (session.token.endsWith("0") ? "1" : "0");
+    expect(
+      (
+        await fetchPublic(`/api/public/chat/${session.id}`, {
+          headers: { Authorization: `Bearer ${wrongToken}` },
+        })
+      ).status,
+    ).toBe(404);
     const managerDetail = await request(`/catalog-chats/${session.id}`);
     expect(managerDetail.status).toBe(200);
     const threadData = (await managerDetail.json()) as {

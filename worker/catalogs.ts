@@ -571,6 +571,15 @@ catalogsRoutes.post("/products/:id/unpublish", async (c) => {
   return c.json({ ok: true });
 });
 
+async function constantTimeTextEqual(left: string, right: string) {
+  const encoder = new TextEncoder();
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(left)),
+    crypto.subtle.digest("SHA-256", encoder.encode(right)),
+  ]);
+  return crypto.subtle.timingSafeEqual(leftHash, rightHash);
+}
+
 async function canAccessCatalogChat(c: Context, assignedEmail: string) {
   const email = c.get("email").toLowerCase();
   const admin = (c.env.AUTH_ADMIN_EMAIL ?? allowedSales(c.env)[0] ?? "")
@@ -681,10 +690,14 @@ export async function notifyCatalogChat(
   env: AppEnv["Bindings"],
   request: Request,
 ) {
+  const providedSecret =
+    request.headers.get("x-catalog-chat-secret") ?? "";
   if (
     !env.CATALOG_CHAT_INTERNAL_SECRET ||
-    request.headers.get("x-catalog-chat-secret") !==
-      env.CATALOG_CHAT_INTERNAL_SECRET
+    !(await constantTimeTextEqual(
+      providedSecret,
+      env.CATALOG_CHAT_INTERNAL_SECRET,
+    ))
   )
     return new Response("Unauthorized", { status: 401 });
   if (!lineConfigured(env))

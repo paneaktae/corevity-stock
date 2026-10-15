@@ -56,6 +56,14 @@ async function digest(value: string) {
     .join('');
 }
 
+async function constantTimeTextEqual(left: string, right: string) {
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(left)),
+    crypto.subtle.digest("SHA-256", encoder.encode(right)),
+  ]);
+  return crypto.subtle.timingSafeEqual(leftHash, rightHash);
+}
+
 async function jsonBody(request: Request) {
   const text = await request.text();
   if (encoder.encode(text).byteLength > 16_384) return { tooLarge: true };
@@ -172,7 +180,11 @@ async function ownedThread(c: Context<ChatEnv>, id: string) {
   )
     .bind(id)
     .first<ChatRow>();
-  if (!thread || (await digest(token)) !== thread.token_hash) return null;
+  if (
+    !thread ||
+    !(await constantTimeTextEqual(await digest(token), thread.token_hash))
+  )
+    return null;
   return thread;
 }
 
