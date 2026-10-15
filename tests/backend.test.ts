@@ -340,12 +340,16 @@ describe("D1-backed inventory and sales", () => {
     expect(htmlText).toContain('property="og:title"');
     expect(htmlText).toContain('property="og:description"');
     expect(htmlText).toContain('property="og:image"');
-    expect(htmlText).toContain("/media/catalogs/items/");
+    expect(htmlText).toContain(`/media/catalogs/${catalog.slug}/0`);
 
     const publicItem = publicData.products[0] as {
+      itemId: string;
       slug: string;
       imageUrl: string;
     };
+    expect(publicItem.imageUrl).toBe(
+      `/media/catalogs/${catalog.slug}/items/${publicItem.itemId}/0`,
+    );
     const detail = await fetchPublic(`/s/${catalog.slug}/p/${publicItem.slug}`);
     expect(detail.status).toBe(200);
     expect(await detail.text()).toContain("Catalog snapshot Test model");
