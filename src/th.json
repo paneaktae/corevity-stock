@@ -587,5 +587,9 @@
   "Shared catalogs": "แคตตาล็อกที่แชร์ให้ลูกค้า",
   "Manage catalogs": "จัดการแคตตาล็อก",
   "Open share link": "เปิดลิงก์แชร์",
-  "No description": "ไม่มีคำอธิบาย"
+  "No description": "ไม่มีคำอธิบาย",
+  "Search inventory products": "ค้นหาสินค้าในคลัง",
+  "No inventory products match your search.": "ไม่พบสินค้าในคลังที่ตรงกับคำค้น",
+  "Website Catalog visibility": "การแสดงสินค้าในแคตตาล็อกเว็บไซต์",
+  "Products are visible on the website only when Sales adds them to an active Catalog.": "สินค้าจะแสดงบนเว็บไซต์เมื่อฝ่ายขายเพิ่มสินค้าไว้ในแคตตาล็อกที่เปิดใช้งานเท่านั้น"
 }

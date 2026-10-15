@@ -1,22 +1,22 @@
-import { Hono, type Context as HonoContext } from 'hono';
-import { z } from 'zod';
-import type { AppEnv } from './auth';
+import { Hono, type Context as HonoContext } from "hono";
+import { z } from "zod";
+import type { AppEnv } from "./auth";
 
 export const catalogsRoutes = new Hono<AppEnv>();
 const stamp = () => new Date().toISOString();
-const randomToken = () => crypto.randomUUID().replaceAll('-', '').slice(0, 8);
+const randomToken = () => crypto.randomUUID().replaceAll("-", "").slice(0, 8);
 const slugPart = (value: string) =>
   value
-    .normalize('NFKD')
+    .normalize("NFKD")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 54) || 'equipment';
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 54) || "equipment";
 const productPublishInput = z
   .object({
     showPrice: z.boolean().default(false),
-    publicDescriptionTh: z.string().trim().max(5000).default(''),
-    publicDescriptionEn: z.string().trim().max(5000).default(''),
+    publicDescriptionTh: z.string().trim().max(5000).default(""),
+    publicDescriptionEn: z.string().trim().max(5000).default(""),
     publicSlug: z
       .string()
       .trim()
@@ -28,7 +28,7 @@ const productPublishInput = z
 const catalogInput = z
   .object({
     title: z.string().trim().min(1).max(160),
-    description: z.string().trim().max(5000).default(''),
+    description: z.string().trim().max(5000).default(""),
     customerId: z.string().nullable().default(null),
     showPrices: z.boolean().default(true),
     showSold: z.boolean().default(false),
@@ -57,7 +57,7 @@ async function writeActivity(
   description: string,
 ) {
   await c.env.DB.prepare(
-    'INSERT INTO activities(id,entity_type,entity_id,action,description,user_email,created_at) VALUES(?,?,?,?,?,?,?)',
+    "INSERT INTO activities(id,entity_type,entity_id,action,description,user_email,created_at) VALUES(?,?,?,?,?,?,?)",
   )
     .bind(
       crypto.randomUUID(),
@@ -65,7 +65,7 @@ async function writeActivity(
       entityId,
       action,
       description,
-      c.get('email'),
+      c.get("email"),
       stamp(),
     )
     .run();
@@ -108,7 +108,7 @@ type ProductSnapshotItem = {
 type ResolvedSnapshots = { snapshots: ProductSnapshotItem[] };
 async function snapshotProducts(
   c: Context,
-  items: z.infer<typeof catalogInput>['items'],
+  items: z.infer<typeof catalogInput>["items"],
 ): Promise<ResolvedSnapshots | { error: string }> {
   const snapshots: ProductSnapshotItem[] = [];
   for (const [index, item] of items.entries()) {
@@ -124,12 +124,7 @@ async function snapshotProducts(
       .bind(item.productId)
       .first<ProductSnapshot>();
     if (!product || product.archived_at)
-      return { error: 'A selected product is no longer available.' as const };
-    if (!product.is_published || !product.public_slug)
-      return {
-        error:
-          `${product.brand} ${product.model} must be published before it can be added to a shareable catalog.` as const,
-      };
+      return { error: "A selected product is no longer available." as const };
     snapshots.push({
       id: crypto.randomUUID(),
       productId: product.id,
@@ -140,13 +135,12 @@ async function snapshotProducts(
       category: product.category,
       condition: product.condition,
       description:
-        (item.description ?? product.public_description_en) ||
-        product.public_description_th ||
-        product.description_en ||
-        product.description_th ||
-        product.short_description,
-      imageKey: product.image_key ?? '',
-      imageMime: product.image_mime ?? '',
+        item.description ??
+        product.public_description_en ??
+        product.public_description_th ??
+        "",
+      imageKey: product.image_key ?? "",
+      imageMime: product.image_mime ?? "",
       displayPrice: item.displayPrice ?? product.selling_price,
     });
   }
@@ -161,7 +155,7 @@ function itemStatements(
   return items.snapshots.map((item) =>
     database
       .prepare(
-        'INSERT INTO catalog_items(id,catalog_id,product_id,sort_order,product_name_snapshot,brand_snapshot,model_snapshot,category_snapshot,condition_snapshot,description_snapshot,image_key_snapshot,image_mime_snapshot,display_price) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        "INSERT INTO catalog_items(id,catalog_id,product_id,sort_order,product_name_snapshot,brand_snapshot,model_snapshot,category_snapshot,condition_snapshot,description_snapshot,image_key_snapshot,image_mime_snapshot,display_price) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
       )
       .bind(
         item.id,
@@ -181,13 +175,13 @@ function itemStatements(
   );
 }
 
-catalogsRoutes.get('/catalogs', async (c) => {
+catalogsRoutes.get("/catalogs", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT c.id,c.title,c.description,c.slug,c.status,c.customer_id AS customerId,
       c.show_prices AS showPrices,c.show_sold AS showSold,c.expires_at AS expiresAt,
       c.created_by AS createdBy,c.created_at AS createdAt,c.updated_at AS updatedAt,
       customers.name AS customerName,
-      (SELECT COUNT(*) FROM catalog_items i JOIN products p ON p.id=i.product_id AND p.is_published=1 AND p.archived_at IS NULL WHERE i.catalog_id=c.id) AS productCount,
+      (SELECT COUNT(*) FROM catalog_items i JOIN products p ON p.id=i.product_id AND p.archived_at IS NULL WHERE i.catalog_id=c.id) AS productCount,
       COALESCE((SELECT SUM(count) FROM catalog_events e WHERE e.entity_type='CATALOG' AND e.entity_slug=c.slug AND e.event_type='PAGE_VIEW'),0) AS pageViews,
       COALESCE((SELECT SUM(count) FROM catalog_events e WHERE e.entity_type='CATALOG' AND e.entity_slug=c.slug AND e.event_type='PRODUCT_VIEW'),0) AS productViews,
       COALESCE((SELECT SUM(count) FROM catalog_events e WHERE e.entity_type='CATALOG' AND e.entity_slug=c.slug AND e.event_type='CONTACT_CLICK'),0) AS contactClicks
@@ -196,28 +190,28 @@ catalogsRoutes.get('/catalogs', async (c) => {
   ).all();
   return c.json({
     catalogs: results,
-    publicBaseUrl: c.env.PUBLIC_CATALOG_BASE_URL ?? '',
+    publicBaseUrl: c.env.PUBLIC_CATALOG_BASE_URL ?? "",
   });
 });
-catalogsRoutes.get('/catalogs/config', (c) =>
-  c.json({ publicBaseUrl: c.env.PUBLIC_CATALOG_BASE_URL ?? '' }),
+catalogsRoutes.get("/catalogs/config", (c) =>
+  c.json({ publicBaseUrl: c.env.PUBLIC_CATALOG_BASE_URL ?? "" }),
 );
 
-catalogsRoutes.get('/customers/:customerId/catalogs', async (c) => {
+catalogsRoutes.get("/customers/:customerId/catalogs", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT id,title,description,slug,status,expires_at AS expiresAt,updated_at AS updatedAt,
       COALESCE((SELECT SUM(count) FROM catalog_events e WHERE e.entity_type='CATALOG' AND e.entity_slug=catalogs.slug AND e.event_type='PAGE_VIEW'),0) AS pageViews
      FROM catalogs WHERE customer_id=? ORDER BY updated_at DESC LIMIT 100`,
   )
-    .bind(c.req.param('customerId'))
+    .bind(c.req.param("customerId"))
     .all();
   return c.json({
     catalogs: results,
-    publicBaseUrl: c.env.PUBLIC_CATALOG_BASE_URL ?? '',
+    publicBaseUrl: c.env.PUBLIC_CATALOG_BASE_URL ?? "",
   });
 });
 
-catalogsRoutes.get('/catalogs/analytics', async (c) => {
+catalogsRoutes.get("/catalogs/analytics", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT entity_type AS entityType,entity_slug AS entitySlug,event_type AS eventType,SUM(count) AS count
      FROM catalog_events GROUP BY entity_type,entity_slug,event_type ORDER BY entity_slug LIMIT 1000`,
@@ -225,16 +219,16 @@ catalogsRoutes.get('/catalogs/analytics', async (c) => {
   return c.json(results);
 });
 
-catalogsRoutes.get('/catalogs/:id', async (c) => {
+catalogsRoutes.get("/catalogs/:id", async (c) => {
   const catalog = await c.env.DB.prepare(
     `SELECT id,title,description,slug,status,customer_id AS customerId,show_prices AS showPrices,
       show_sold AS showSold,expires_at AS expiresAt,created_by AS createdBy,created_at AS createdAt,updated_at AS updatedAt
      FROM catalogs WHERE id=?`,
   )
-    .bind(c.req.param('id'))
+    .bind(c.req.param("id"))
     .first();
   if (!catalog)
-    return c.json({ error: { message: 'Catalog not found.' } }, 404);
+    return c.json({ error: { message: "Catalog not found." } }, 404);
   const { results: items } = await c.env.DB.prepare(
     `SELECT i.id,i.product_id AS productId,i.sort_order AS sortOrder,
       i.product_name_snapshot AS productName,i.brand_snapshot AS brand,i.model_snapshot AS model,
@@ -244,24 +238,24 @@ catalogsRoutes.get('/catalogs/:id', async (c) => {
      FROM catalog_items i JOIN products p ON p.id=i.product_id
      WHERE i.catalog_id=? ORDER BY i.sort_order`,
   )
-    .bind(c.req.param('id'))
+    .bind(c.req.param("id"))
     .all();
   return c.json({ catalog, items });
 });
 
-catalogsRoutes.post('/catalogs', async (c) => {
+catalogsRoutes.post("/catalogs", async (c) => {
   const input = catalogInput.parse(await c.req.json());
   if (input.customerId) {
     const customer = await c.env.DB.prepare(
-      'SELECT id FROM customers WHERE id=?',
+      "SELECT id FROM customers WHERE id=?",
     )
       .bind(input.customerId)
       .first();
     if (!customer)
-      return c.json({ error: { message: 'Customer not found.' } }, 404);
+      return c.json({ error: { message: "Customer not found." } }, 404);
   }
   const resolved = await snapshotProducts(c, input.items);
-  if ('error' in resolved)
+  if ("error" in resolved)
     return c.json({ error: { message: resolved.error } }, 422);
   const id = crypto.randomUUID();
   const slug = `${slugPart(input.title)}-${randomToken()}`;
@@ -279,7 +273,7 @@ catalogsRoutes.post('/catalogs', async (c) => {
       Number(input.showPrices),
       Number(input.showSold),
       input.expiresAt,
-      c.get('email'),
+      c.get("email"),
       time,
       time,
     ),
@@ -288,38 +282,38 @@ catalogsRoutes.post('/catalogs', async (c) => {
   await c.env.DB.batch(operations);
   await writeActivity(
     c,
-    'catalog',
+    "catalog",
     id,
-    'created',
+    "created",
     `Shareable catalog created: ${input.title}`,
   );
   return c.json({ id, slug, title: input.title }, 201);
 });
 
-catalogsRoutes.patch('/catalogs/:id', async (c) => {
+catalogsRoutes.patch("/catalogs/:id", async (c) => {
   const input = catalogInput.parse(await c.req.json());
-  const id = c.req.param('id');
+  const id = c.req.param("id");
   const existing = await c.env.DB.prepare(
     "SELECT id,slug FROM catalogs WHERE id=? AND status='ACTIVE'",
   )
     .bind(id)
     .first<{ id: string; slug: string }>();
   if (!existing)
-    return c.json({ error: { message: 'Catalog not found.' } }, 404);
+    return c.json({ error: { message: "Catalog not found." } }, 404);
   if (input.customerId) {
     const customer = await c.env.DB.prepare(
-      'SELECT id FROM customers WHERE id=?',
+      "SELECT id FROM customers WHERE id=?",
     )
       .bind(input.customerId)
       .first();
     if (!customer)
-      return c.json({ error: { message: 'Customer not found.' } }, 404);
+      return c.json({ error: { message: "Customer not found." } }, 404);
   }
   const resolved = await snapshotProducts(c, input.items);
-  if ('error' in resolved)
+  if ("error" in resolved)
     return c.json({ error: { message: resolved.error } }, 422);
   const { results: oldItems } = await c.env.DB.prepare(
-    'SELECT * FROM catalog_items WHERE catalog_id=?',
+    "SELECT * FROM catalog_items WHERE catalog_id=?",
   )
     .bind(id)
     .all<{
@@ -374,39 +368,39 @@ catalogsRoutes.patch('/catalogs/:id', async (c) => {
       stamp(),
       id,
     ),
-    c.env.DB.prepare('DELETE FROM catalog_items WHERE catalog_id=?').bind(id),
+    c.env.DB.prepare("DELETE FROM catalog_items WHERE catalog_id=?").bind(id),
     ...itemStatements(c.env.DB, id, resolved),
   ];
   await c.env.DB.batch(statements);
   await writeActivity(
     c,
-    'catalog',
+    "catalog",
     id,
-    'updated',
+    "updated",
     `Shareable catalog updated: ${input.title}`,
   );
   return c.json({ ok: true, id, slug: existing.slug });
 });
 
-catalogsRoutes.post('/catalogs/:id/duplicate', async (c) => {
+catalogsRoutes.post("/catalogs/:id/duplicate", async (c) => {
   const source = await c.env.DB.prepare(
     "SELECT title,description,show_prices,show_sold FROM catalogs WHERE id=? AND status='ACTIVE'",
   )
-    .bind(c.req.param('id'))
+    .bind(c.req.param("id"))
     .first<{
       title: string;
       description: string;
       show_prices: number;
       show_sold: number;
     }>();
-  if (!source) return c.json({ error: { message: 'Catalog not found.' } }, 404);
+  if (!source) return c.json({ error: { message: "Catalog not found." } }, 404);
   const id = crypto.randomUUID();
   const time = stamp();
   const slug = `${slugPart(source.title)}-${randomToken()}`;
   const { results: sourceItems } = await c.env.DB.prepare(
-    'SELECT * FROM catalog_items WHERE catalog_id=? ORDER BY sort_order',
+    "SELECT * FROM catalog_items WHERE catalog_id=? ORDER BY sort_order",
   )
-    .bind(c.req.param('id'))
+    .bind(c.req.param("id"))
     .all<Record<string, unknown>>();
   const statements = [
     c.env.DB.prepare(
@@ -419,7 +413,7 @@ catalogsRoutes.post('/catalogs/:id/duplicate', async (c) => {
       slug,
       source.show_prices,
       source.show_sold,
-      c.get('email'),
+      c.get("email"),
       time,
       time,
     ),
@@ -427,44 +421,44 @@ catalogsRoutes.post('/catalogs/:id/duplicate', async (c) => {
       c.env.DB.prepare(
         `INSERT INTO catalog_items(id,catalog_id,product_id,sort_order,product_name_snapshot,brand_snapshot,model_snapshot,category_snapshot,condition_snapshot,description_snapshot,image_key_snapshot,image_mime_snapshot,display_price)
          SELECT ?,?,i.product_id,?,i.product_name_snapshot,i.brand_snapshot,i.model_snapshot,i.category_snapshot,i.condition_snapshot,i.description_snapshot,i.image_key_snapshot,i.image_mime_snapshot,i.display_price
-         FROM catalog_items i JOIN products p ON p.id=i.product_id AND p.is_published=1 AND p.archived_at IS NULL WHERE i.id=?`,
+         FROM catalog_items i JOIN products p ON p.id=i.product_id AND p.archived_at IS NULL WHERE i.id=?`,
       ).bind(crypto.randomUUID(), id, index, item.id),
     ),
   ];
   await c.env.DB.batch(statements);
   await writeActivity(
     c,
-    'catalog',
+    "catalog",
     id,
-    'duplicated',
+    "duplicated",
     `Catalog duplicated from ${source.title}`,
   );
   return c.json({ id, slug, title: `${source.title} (copy)` }, 201);
 });
 
-catalogsRoutes.post('/catalogs/:id/archive', async (c) => {
+catalogsRoutes.post("/catalogs/:id/archive", async (c) => {
   const result = await c.env.DB.prepare(
     `UPDATE catalogs SET status='ARCHIVED',updated_at=? WHERE id=? AND status='ACTIVE'`,
   )
-    .bind(stamp(), c.req.param('id'))
+    .bind(stamp(), c.req.param("id"))
     .run();
   if (!result.meta.changes)
-    return c.json({ error: { message: 'Catalog not found.' } }, 404);
+    return c.json({ error: { message: "Catalog not found." } }, 404);
   await writeActivity(
     c,
-    'catalog',
-    c.req.param('id'),
-    'archived',
-    'Shareable catalog archived',
+    "catalog",
+    c.req.param("id"),
+    "archived",
+    "Shareable catalog archived",
   );
   return c.json({ ok: true });
 });
 
-catalogsRoutes.post('/products/:id/publish', async (c) => {
+catalogsRoutes.post("/products/:id/publish", async (c) => {
   const input = productPublishInput.parse(await c.req.json());
-  const id = c.req.param('id');
+  const id = c.req.param("id");
   const product = await c.env.DB.prepare(
-    'SELECT id,brand,model,public_slug,archived_at FROM products WHERE id=?',
+    "SELECT id,brand,model,public_slug,archived_at FROM products WHERE id=?",
   )
     .bind(id)
     .first<{
@@ -475,19 +469,19 @@ catalogsRoutes.post('/products/:id/publish', async (c) => {
       archived_at: string | null;
     }>();
   if (!product || product.archived_at)
-    return c.json({ error: { message: 'Product not found.' } }, 404);
+    return c.json({ error: { message: "Product not found." } }, 404);
   const slug =
     input.publicSlug ??
     product.public_slug ??
     `${slugPart(`${product.brand} ${product.model}`)}-${randomToken()}`;
   const conflictingSlug = await c.env.DB.prepare(
-    'SELECT id FROM products WHERE public_slug=? AND id!=?',
+    "SELECT id FROM products WHERE public_slug=? AND id!=?",
   )
     .bind(slug, id)
     .first();
   if (conflictingSlug)
     return c.json(
-      { error: { message: 'This public link is already in use.' } },
+      { error: { message: "This public link is already in use." } },
       409,
     );
   await c.env.DB.prepare(
@@ -505,29 +499,29 @@ catalogsRoutes.post('/products/:id/publish', async (c) => {
     .run();
   await writeActivity(
     c,
-    'product',
+    "product",
     id,
-    'catalog_published',
-    'Product published to the public catalog',
+    "catalog_published",
+    "Product published to the public catalog",
   );
   return c.json({ ok: true, slug });
 });
 
-catalogsRoutes.post('/products/:id/unpublish', async (c) => {
-  const id = c.req.param('id');
+catalogsRoutes.post("/products/:id/unpublish", async (c) => {
+  const id = c.req.param("id");
   const result = await c.env.DB.prepare(
-    'UPDATE products SET is_published=0,published_at=NULL,updated_at=? WHERE id=? AND is_published=1',
+    "UPDATE products SET is_published=0,published_at=NULL,updated_at=? WHERE id=? AND is_published=1",
   )
     .bind(stamp(), id)
     .run();
   if (!result.meta.changes)
-    return c.json({ error: { message: 'Published product not found.' } }, 404);
+    return c.json({ error: { message: "Published product not found." } }, 404);
   await writeActivity(
     c,
-    'product',
+    "product",
     id,
-    'catalog_unpublished',
-    'Product removed from the public catalog',
+    "catalog_unpublished",
+    "Product removed from the public catalog",
   );
   return c.json({ ok: true });
 });

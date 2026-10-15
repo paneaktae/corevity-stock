@@ -1,12 +1,12 @@
-import { t, localized } from '../i18n';
-import { UsdPrice, ExchangeRateNote } from '../components/UsdPrice';
-import { useEffect, useState, type FormEvent } from 'react';
+import { t, localized } from "../i18n";
+import { UsdPrice, ExchangeRateNote } from "../components/UsdPrice";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Link,
   useNavigate,
   useParams,
   useSearchParams,
-} from 'react-router-dom';
+} from "react-router-dom";
 import {
   Search,
   Upload,
@@ -16,9 +16,7 @@ import {
   Eye,
   Star,
   Trash2,
-  Copy,
-  ExternalLink,
-} from 'lucide-react';
+} from "lucide-react";
 import type {
   Product,
   ProductDetail,
@@ -26,8 +24,8 @@ import type {
   Settings,
   Customer,
   Descriptions,
-} from '../../shared/schemas';
-import { productStatuses } from '../../shared/schemas';
+} from "../../shared/schemas";
+import { productStatuses } from "../../shared/schemas";
 import {
   api,
   ApiError,
@@ -37,7 +35,7 @@ import {
   date,
   label,
   toISO,
-} from '../lib';
+} from "../lib";
 import {
   ActivityList,
   AddLink,
@@ -48,35 +46,35 @@ import {
   Header,
   Loading,
   Photo,
-} from '../components/ui';
+} from "../components/ui";
 export function InventoryPage() {
   const [params] = useSearchParams();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const q = useDebounce(search);
   const [filters, setFilters] = useState({
-    brand: '',
-    category: params.get('category') ?? '',
-    status: params.get('status') ?? '',
-    condition: '',
-    sort: 'newest',
+    brand: "",
+    category: params.get("category") ?? "",
+    status: params.get("status") ?? "",
+    condition: "",
+    sort: "newest",
   });
   const { data, error, reload } = useData<Product[]>(
     `/products?${new URLSearchParams({ q, ...filters })}`,
   );
-  const { data: all, reload: reloadAll } = useData<Product[]>('/products');
-  const [importError, setImportError] = useState('');
-  const [importNotice, setImportNotice] = useState('');
+  const { data: all, reload: reloadAll } = useData<Product[]>("/products");
+  const [importError, setImportError] = useState("");
+  const [importNotice, setImportNotice] = useState("");
   const [importing, setImporting] = useState(false);
   async function importProducts(file: File | undefined) {
     if (!file) return;
-    setImportError('');
-    setImportNotice('');
+    setImportError("");
+    setImportNotice("");
     setImporting(true);
     try {
       const form = new FormData();
-      form.append('file', file);
-      const result = await api<{ created: number }>('/products/import', {
-        method: 'POST',
+      form.append("file", file);
+      const result = await api<{ created: number }>("/products/import", {
+        method: "POST",
         body: form,
       });
       setImportNotice(
@@ -96,8 +94,8 @@ export function InventoryPage() {
   return (
     <>
       <Header
-        title={t('Equipment inventory')}
-        subtitle={t('Everything on hand. Every detail in one place.')}
+        title={t("Equipment inventory")}
+        subtitle={t("Everything on hand. Every detail in one place.")}
         action={
           <div className="header-actions">
             <a
@@ -105,11 +103,11 @@ export function InventoryPage() {
               href="/downloads/Corevity-Product-Import-Example.xlsx"
               download
             >
-              {t('Download Excel example')}
+              {t("Download Excel example")}
             </a>
-            <label className={`button${importing ? ' disabled' : ''}`}>
+            <label className={`button${importing ? " disabled" : ""}`}>
               <Upload size={17} />
-              {importing ? t('Importing…') : t('Import Excel')}
+              {importing ? t("Importing…") : t("Import Excel")}
               <input
                 hidden
                 type="file"
@@ -117,11 +115,11 @@ export function InventoryPage() {
                 disabled={importing}
                 onChange={(event) => {
                   void importProducts(event.target.files?.[0]);
-                  event.target.value = '';
+                  event.target.value = "";
                 }}
               />
             </label>
-            <AddLink to="/inventory/new">{t('Add equipment')}</AddLink>
+            <AddLink to="/inventory/new">{t("Add equipment")}</AddLink>
           </div>
         }
       />
@@ -136,22 +134,22 @@ export function InventoryPage() {
         <label className="search">
           <Search size={18} />
           <input
-            aria-label={t('Search equipment')}
-            placeholder={t('Search brand, model, SKU, serial…')}
+            aria-label={t("Search equipment")}
+            placeholder={t("Search brand, model, SKU, serial…")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
         <div className="filters">
-          {(['brand', 'category', 'status', 'condition'] as const).map((k) => (
+          {(["brand", "category", "status", "condition"] as const).map((k) => (
             <select
               key={k}
               aria-label={t(
                 {
-                  brand: 'All brands',
-                  category: 'All categories',
-                  status: 'All statuses',
-                  condition: 'All conditions',
+                  brand: "All brands",
+                  category: "All categories",
+                  status: "All statuses",
+                  condition: "All conditions",
                 }[k],
               )}
               value={filters[k]}
@@ -160,32 +158,32 @@ export function InventoryPage() {
               <option value="">
                 {t(
                   {
-                    brand: 'All brands',
-                    category: 'All categories',
-                    status: 'All statuses',
-                    condition: 'All conditions',
+                    brand: "All brands",
+                    category: "All categories",
+                    status: "All statuses",
+                    condition: "All conditions",
                   }[k],
                 )}
               </option>
-              {(k === 'status'
+              {(k === "status"
                 ? [...productStatuses]
                 : [...new Set(all?.map((p) => p[k]).filter(Boolean))].sort()
               ).map((v) => (
                 <option key={v} value={v}>
-                  {k === 'status' ? label(v) : t(v)}
+                  {k === "status" ? label(v) : t(v)}
                 </option>
               ))}
             </select>
           ))}
           <select
-            aria-label={t('Sort inventory')}
+            aria-label={t("Sort inventory")}
             value={filters.sort}
             onChange={(e) => setFilters({ ...filters, sort: e.target.value })}
           >
-            <option value="newest">{t('Newest first')}</option>
-            <option value="brand">{t('Brand A–Z')}</option>
-            <option value="price-asc">{t('Price: low to high')}</option>
-            <option value="price-desc">{t('Price: high to low')}</option>
+            <option value="newest">{t("Newest first")}</option>
+            <option value="brand">{t("Brand A–Z")}</option>
+            <option value="price-asc">{t("Price: low to high")}</option>
+            <option value="price-desc">{t("Price: high to low")}</option>
           </select>
         </div>
       </div>
@@ -205,13 +203,13 @@ export function InventoryPage() {
               <thead>
                 <tr>
                   {[
-                    t('Equipment'),
-                    t('Category / Condition'),
-                    t('Cost'),
-                    t('Selling price'),
-                    t('Status'),
-                    t('Location'),
-                    '',
+                    t("Equipment"),
+                    t("Category / Condition"),
+                    t("Cost"),
+                    t("Selling price"),
+                    t("Status"),
+                    t("Location"),
+                    "",
                   ].map((h, i) => (
                     <th key={i}>{h}</th>
                   ))}
@@ -234,8 +232,8 @@ export function InventoryPage() {
                       </Link>
                     </td>
                     <td>
-                      {p.category || '—'}
-                      <small>{t(p.condition) || t('Not specified')}</small>
+                      {p.category || "—"}
+                      <small>{t(p.condition) || t("Not specified")}</small>
                     </td>
                     <td>
                       {money(p.purchaseCost)}
@@ -251,7 +249,7 @@ export function InventoryPage() {
                         <small>{p.reservedCustomerName}</small>
                       )}
                     </td>
-                    <td>{p.location || '—'}</td>
+                    <td>{p.location || "—"}</td>
                     <td>
                       <Link
                         className="icon-button"
@@ -286,7 +284,7 @@ export function InventoryPage() {
                   <Badge value={p.status} />
                   {p.reservedCustomerName && (
                     <small>
-                      {t('Reserved for')}
+                      {t("Reserved for")}
                       {p.reservedCustomerName}
                     </small>
                   )}
@@ -296,18 +294,18 @@ export function InventoryPage() {
           </div>
         </>
       ) : (
-        <Empty title={t('No equipment found')}>
+        <Empty title={t("No equipment found")}>
           <p>
             {q
-              ? t('Try a different search or filter.')
-              : t('Add your first equipment item.')}
+              ? t("Try a different search or filter.")
+              : t("Add your first equipment item.")}
           </p>
         </Empty>
       )}
     </>
   );
 }
-type ProductFormValues = Omit<ProductInput, 'purchaseCost' | 'sellingPrice'> & {
+type ProductFormValues = Omit<ProductInput, "purchaseCost" | "sellingPrice"> & {
   purchaseCost: string | number;
   sellingPrice: string | number;
 };
@@ -319,20 +317,20 @@ async function compressProductPhoto(file: File): Promise<File> {
       1,
       maxProductPhotoDimension / Math.max(bitmap.width, bitmap.height),
     );
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext("2d");
     if (!context) return file;
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     const compressed = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/webp', 0.82),
+      canvas.toBlob(resolve, "image/webp", 0.82),
     );
     if (!compressed || (compressed.size >= file.size && scale === 1))
       return file;
-    const baseName = file.name.replace(/\.[^.]+$/, '') || 'product-photo';
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "product-photo";
     return new File([compressed], `${baseName}.webp`, {
-      type: 'image/webp',
+      type: "image/webp",
       lastModified: file.lastModified,
     });
   } finally {
@@ -340,52 +338,52 @@ async function compressProductPhoto(file: File): Promise<File> {
   }
 }
 const blank: ProductFormValues = {
-  brand: '',
-  model: '',
-  status: 'AVAILABLE',
-  sku: '',
-  category: '',
-  condition: 'Good',
-  serialNumber: '',
-  purchaseCost: '',
-  sellingPrice: '',
-  location: '',
-  descriptionTh: '',
-  descriptionEn: '',
-  shortDescription: '',
-  facebookCaption: '',
-  notes: '',
+  brand: "",
+  model: "",
+  status: "AVAILABLE",
+  sku: "",
+  category: "",
+  condition: "Good",
+  serialNumber: "",
+  purchaseCost: "",
+  sellingPrice: "",
+  location: "",
+  descriptionTh: "",
+  descriptionEn: "",
+  shortDescription: "",
+  facebookCaption: "",
+  notes: "",
 };
 const textFields = [
-  ['brand', 'Brand *'],
-  ['model', 'Model *'],
-  ['sku', 'SKU'],
-  ['category', 'Category'],
-  ['serialNumber', 'Serial number'],
-  ['location', 'Location'],
+  ["brand", "Brand *"],
+  ["model", "Model *"],
+  ["sku", "SKU"],
+  ["category", "Category"],
+  ["serialNumber", "Serial number"],
+  ["location", "Location"],
 ] as const;
 const descriptions = [
-  ['descriptionTh', 'Thai description'],
-  ['descriptionEn', 'English description'],
-  ['shortDescription', 'Short description'],
-  ['facebookCaption', 'Facebook caption'],
+  ["descriptionTh", "Thai description"],
+  ["descriptionEn", "English description"],
+  ["shortDescription", "Short description"],
+  ["facebookCaption", "Facebook caption"],
 ] as const;
 const ratings = [
-  ['priceRating', 'Price'],
-  ['designRating', 'Design'],
-  ['qualityPerformanceRating', 'Quality & performance'],
+  ["priceRating", "Price"],
+  ["designRating", "Design"],
+  ["qualityPerformanceRating", "Quality & performance"],
 ] as const;
 const analysisLists = [
-  ['features', 'Verified features & functions'],
-  ['strengths', 'Strengths'],
-  ['weaknesses', 'Weaknesses / considerations'],
+  ["features", "Verified features & functions"],
+  ["strengths", "Strengths"],
+  ["weaknesses", "Weaknesses / considerations"],
 ] as const;
 type RatingValues = Partial<Record<(typeof ratings)[number][0], number | null>>;
 type AnalysisValues = Partial<
   Record<(typeof analysisLists)[number][0], string[]>
 >;
 type RatingReasons = Partial<
-  Record<'price' | 'design' | 'qualityPerformance', string>
+  Record<"price" | "design" | "qualityPerformance", string>
 >;
 function RatingCards({
   values,
@@ -399,29 +397,29 @@ function RatingCards({
       {ratings.map(([key, title]) => {
         const score = values[key];
         const value =
-          typeof score === 'number' && Number.isFinite(score)
+          typeof score === "number" && Number.isFinite(score)
             ? Math.min(10, Math.max(0, score))
             : null;
         return (
           <div className="rating-card" key={key}>
             <span>{t(title)}</span>
-            <strong>{value == null ? '—' : value.toFixed(1)}</strong>
-            <small>{t('out of 10')}</small>
+            <strong>{value == null ? "—" : value.toFixed(1)}</strong>
+            <small>{t("out of 10")}</small>
             {reasons?.[
-              key === 'priceRating'
-                ? 'price'
-                : key === 'designRating'
-                  ? 'design'
-                  : 'qualityPerformance'
+              key === "priceRating"
+                ? "price"
+                : key === "designRating"
+                  ? "design"
+                  : "qualityPerformance"
             ] && (
               <p className="muted rating-reason">
                 {
                   reasons[
-                    key === 'priceRating'
-                      ? 'price'
-                      : key === 'designRating'
-                        ? 'design'
-                        : 'qualityPerformance'
+                    key === "priceRating"
+                      ? "price"
+                      : key === "designRating"
+                        ? "design"
+                        : "qualityPerformance"
                   ]
                 }
               </p>
@@ -431,11 +429,11 @@ function RatingCards({
               {...(value == null
                 ? {}
                 : {
-                    role: 'meter',
-                    'aria-label': t(title),
-                    'aria-valuemin': 0,
-                    'aria-valuemax': 10,
-                    'aria-valuenow': value,
+                    role: "meter",
+                    "aria-label": t(title),
+                    "aria-valuemin": 0,
+                    "aria-valuemax": 10,
+                    "aria-valuenow": value,
                   })}
             >
               <span style={{ width: `${(value ?? 0) * 10}%` }} />
@@ -459,7 +457,7 @@ function AnalysisLists({ values }: { values: AnalysisValues }) {
               ))}
             </ul>
           ) : (
-            <p className="muted">{t('No supported points yet.')}</p>
+            <p className="muted">{t("No supported points yet.")}</p>
           )}
         </div>
       ))}
@@ -474,7 +472,7 @@ function AnalysisSources({
   if (!values?.length) return null;
   return (
     <div className="analysis-sources">
-      <h4>{t('Sources used')}</h4>
+      <h4>{t("Sources used")}</h4>
       <ul>
         {values.map((source, index) => (
           <li key={`${source.url}-${index}`}>
@@ -490,15 +488,15 @@ function AnalysisSources({
 export function ProductForm() {
   const { id } = useParams();
   const { data: nextSku, error: skuError } = useData<{ sku: string }>(
-    id ? null : '/products/next-sku',
+    id ? null : "/products/next-sku",
   );
   const nav = useNavigate();
   const { data: detail, error: loadError } = useData<ProductDetail>(
     id ? `/products/${id}` : null,
   );
-  const { data: settings } = useData<Settings>('/settings');
+  const { data: settings } = useData<Settings>("/settings");
   const [form, setForm] = useState<ProductFormValues>(blank);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -507,11 +505,11 @@ export function ProductForm() {
   async function save(e: FormEvent, stay: boolean) {
     e.preventDefault();
     setBusy(true);
-    setError('');
+    setError("");
     setFields({});
     try {
-      const p = await api<Product>(id ? `/products/${id}` : '/products', {
-        method: id ? 'PATCH' : 'POST',
+      const p = await api<Product>(id ? `/products/${id}` : "/products", {
+        method: id ? "PATCH" : "POST",
         body: JSON.stringify({
           ...form,
           sku: id ? form.sku : undefined,
@@ -519,7 +517,7 @@ export function ProductForm() {
           sellingPrice: Number(form.sellingPrice),
         }),
       });
-      nav(`/inventory/${p.id}${stay ? '/edit' : ''}`);
+      nav(`/inventory/${p.id}${stay ? "/edit" : ""}`);
     } catch (e) {
       setError((e as Error).message);
       if (e instanceof ApiError) setFields(e.fields);
@@ -537,39 +535,39 @@ export function ProductForm() {
   return (
     <>
       <Header
-        title={id ? t('Edit equipment') : t('Add equipment')}
-        subtitle={t('Start with a brand and model. Add photos after saving.')}
+        title={id ? t("Edit equipment") : t("Add equipment")}
+        subtitle={t("Start with a brand and model. Add photos after saving.")}
       />
       <form onSubmit={(e) => void save(e, false)}>
         <ErrorBox message={error} />
         <section className="panel">
-          <h2>{t('Equipment details')}</h2>
+          <h2>{t("Equipment details")}</h2>
           <div className="form-grid">
             {textFields.map(([k, title]) => (
               <Field key={k} label={title} error={fields[k]}>
-                {k === 'sku' && !id ? (
+                {k === "sku" && !id ? (
                   <>
                     <input
                       readOnly
-                      value={nextSku?.sku ?? ''}
-                      placeholder={t('Generated automatically when saved')}
+                      value={nextSku?.sku ?? ""}
+                      placeholder={t("Generated automatically when saved")}
                     />
                     <small>
                       {t(
-                        'SKU is assigned when saved. The final number may change if another user adds a product first.',
+                        "SKU is assigned when saved. The final number may change if another user adds a product first.",
                       )}
                     </small>
                     {skuError && (
-                      <small>{t('Generated automatically when saved')}</small>
+                      <small>{t("Generated automatically when saved")}</small>
                     )}
                   </>
-                ) : k === 'brand' ? (
+                ) : k === "brand" ? (
                   <>
                     <input
                       list="product-brand-options"
                       required
                       value={form.brand}
-                      placeholder={t('Search or type a brand')}
+                      placeholder={t("Search or type a brand")}
                       onChange={(e) =>
                         setForm({ ...form, brand: e.target.value })
                       }
@@ -587,16 +585,16 @@ export function ProductForm() {
                     </datalist>
                     <small>
                       <Link to="/settings">
-                        {t('Manage brands in Settings')}
+                        {t("Manage brands in Settings")}
                       </Link>
                     </small>
                   </>
-                ) : k === 'category' ? (
+                ) : k === "category" ? (
                   <>
                     <input
                       list="product-category-options"
                       value={form.category}
-                      placeholder={t('Search or type a category')}
+                      placeholder={t("Search or type a category")}
                       onChange={(e) =>
                         setForm({ ...form, category: e.target.value })
                       }
@@ -615,35 +613,35 @@ export function ProductForm() {
                     </datalist>
                     <small>
                       <Link to="/settings">
-                        {t('Manage categories in Settings')}
+                        {t("Manage categories in Settings")}
                       </Link>
                     </small>
                   </>
                 ) : (
                   <input
-                    required={k === 'model'}
+                    required={k === "model"}
                     value={form[k]}
                     onChange={(e) => setForm({ ...form, [k]: e.target.value })}
                   />
                 )}
               </Field>
             ))}
-            <Field label={t('Condition')} error={fields.condition}>
+            <Field label={t("Condition")} error={fields.condition}>
               <select
                 value={form.condition}
                 onChange={(e) =>
                   setForm({ ...form, condition: e.target.value })
                 }
               >
-                <option value="">{t('Not specified')}</option>
+                <option value="">{t("Not specified")}</option>
                 {[
                   ...new Set(
                     [
                       ...(settings?.conditions ?? [
-                        'Excellent',
-                        'Good',
-                        'Fair',
-                        'Needs Repair',
+                        "Excellent",
+                        "Good",
+                        "Fair",
+                        "Needs Repair",
                       ]),
                       form.condition,
                     ].filter(Boolean),
@@ -655,29 +653,29 @@ export function ProductForm() {
                 ))}
               </select>
             </Field>
-            <Field label={t('Status *')} error={fields.status}>
+            <Field label={t("Status *")} error={fields.status}>
               <select
                 disabled={
                   !!id &&
-                  !['AVAILABLE', 'NOT_AVAILABLE'].includes(
-                    detail?.product.status ?? '',
+                  !["AVAILABLE", "NOT_AVAILABLE"].includes(
+                    detail?.product.status ?? "",
                   )
                 }
                 value={form.status}
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    status: e.target.value as ProductInput['status'],
+                    status: e.target.value as ProductInput["status"],
                   })
                 }
               >
                 {(id
-                  ? ['AVAILABLE', 'NOT_AVAILABLE'].includes(
-                      detail?.product.status ?? '',
+                  ? ["AVAILABLE", "NOT_AVAILABLE"].includes(
+                      detail?.product.status ?? "",
                     )
-                    ? ['AVAILABLE', 'NOT_AVAILABLE']
+                    ? ["AVAILABLE", "NOT_AVAILABLE"]
                     : [form.status]
-                  : ['AVAILABLE', 'NOT_AVAILABLE', 'SOLD']
+                  : ["AVAILABLE", "NOT_AVAILABLE", "SOLD"]
                 ).map((v) => (
                   <option key={v} value={v}>
                     {label(v)}
@@ -686,22 +684,22 @@ export function ProductForm() {
               </select>
               <small>
                 {t(
-                  'Use the equipment detail page to reserve or sell an existing item.',
+                  "Use the equipment detail page to reserve or sell an existing item.",
                 )}
               </small>
             </Field>
-            {(['purchaseCost', 'sellingPrice'] as const).map((k) => (
+            {(["purchaseCost", "sellingPrice"] as const).map((k) => (
               <Field
                 key={k}
                 label={
-                  k === 'purchaseCost'
-                    ? t('Purchase cost (THB)')
-                    : t('Selling price (THB)')
+                  k === "purchaseCost"
+                    ? t("Purchase cost (THB)")
+                    : t("Selling price (THB)")
                 }
                 error={fields[k]}
               >
                 <input
-                  disabled={form.status === 'SOLD' && !!id}
+                  disabled={form.status === "SOLD" && !!id}
                   type="number"
                   inputMode="decimal"
                   min="0"
@@ -712,7 +710,7 @@ export function ProductForm() {
               </Field>
             ))}
           </div>
-          <Field label={t('Internal notes')} error={fields.notes}>
+          <Field label={t("Internal notes")} error={fields.notes}>
             <textarea
               rows={3}
               value={form.notes}
@@ -721,10 +719,10 @@ export function ProductForm() {
           </Field>
         </section>
         <section className="panel">
-          <h2>{t('Descriptions & sales copy')}</h2>
+          <h2>{t("Descriptions & sales copy")}</h2>
           <p className="muted">
             {t(
-              'AI draft generation is available from the equipment detail page after saving.',
+              "AI draft generation is available from the equipment detail page after saving.",
             )}
           </p>
           {descriptions.map(([k, title]) => (
@@ -738,8 +736,8 @@ export function ProductForm() {
           ))}
         </section>
         <div className="form-actions">
-          <Link className="button" to={id ? `/inventory/${id}` : '/inventory'}>
-            {t('Cancel')}
+          <Link className="button" to={id ? `/inventory/${id}` : "/inventory"}>
+            {t("Cancel")}
           </Link>
           <button
             disabled={busy}
@@ -749,10 +747,10 @@ export function ProductForm() {
               if (f?.reportValidity()) void save(e, true);
             }}
           >
-            {t('Save & continue editing')}
+            {t("Save & continue editing")}
           </button>
           <button disabled={busy} className="primary">
-            {busy ? t('Saving…') : t('Save equipment')}
+            {busy ? t("Saving…") : t("Save equipment")}
           </button>
         </div>
       </form>
@@ -767,35 +765,19 @@ export function ProductPage() {
     error: loadError,
     reload,
   } = useData<ProductDetail>(`/products/${id}`);
-  const { data: customers } = useData<Customer[]>('/customers');
-  const { data: catalogConfig } = useData<{ publicBaseUrl: string }>(
-    '/catalogs/config',
-  );
-  const [error, setError] = useState('');
+  const { data: customers } = useData<Customer[]>("/customers");
+  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [reserve, setReserve] = useState(false);
-  const [customerId, setCustomerId] = useState('');
-  const [expires, setExpires] = useState('');
-  const [reserveNotes, setReserveNotes] = useState('');
+  const [customerId, setCustomerId] = useState("");
+  const [expires, setExpires] = useState("");
+  const [reserveNotes, setReserveNotes] = useState("");
   const [draft, setDraft] = useState<Partial<Descriptions> | null>(null);
-  const [notice, setNotice] = useState('');
-  const [publicDraft, setPublicDraft] = useState({
-    showPrice: false,
-    publicDescriptionTh: '',
-    publicDescriptionEn: '',
-  });
-  useEffect(() => {
-    if (d?.product)
-      setPublicDraft({
-        showPrice: d.product.showPrice,
-        publicDescriptionTh: d.product.publicDescriptionTh,
-        publicDescriptionEn: d.product.publicDescriptionEn,
-      });
-  }, [d?.product]);
-  async function action(path: string, body?: unknown, method = 'POST') {
+  const [notice, setNotice] = useState("");
+  async function action(path: string, body?: unknown, method = "POST") {
     setBusy(true);
-    setError('');
+    setError("");
     try {
       await api(path, {
         method,
@@ -812,11 +794,11 @@ export function ProductPage() {
   async function generate(target: string) {
     setBusy(true);
     setGenerating(true);
-    setError('');
+    setError("");
     try {
       setDraft(
         await api(`/products/${id}/generate-description`, {
-          method: 'POST',
+          method: "POST",
           body: JSON.stringify({ target }),
         }),
       );
@@ -825,33 +807,6 @@ export function ProductPage() {
     } finally {
       setGenerating(false);
       setBusy(false);
-    }
-  }
-  async function publishProduct() {
-    setBusy(true);
-    setError('');
-    try {
-      await api(`/products/${id}/publish`, {
-        method: 'POST',
-        body: JSON.stringify(publicDraft),
-      });
-      reload();
-      setNotice(t('Product published to the public catalog.'));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function copyPublicLink() {
-    if (!p.publicSlug || !catalogConfig?.publicBaseUrl) return;
-    try {
-      await navigator.clipboard.writeText(
-        `${catalogConfig.publicBaseUrl.replace(/\/$/, '')}/catalog/products/${p.publicSlug}`,
-      );
-      setNotice(t('Public product link copied.'));
-    } catch {
-      setError(t('Could not copy the link.'));
     }
   }
   if (!d)
@@ -863,29 +818,29 @@ export function ProductPage() {
     );
   const p = d.product;
   const hasRating = ratings.some(
-    ([key]) => typeof p[key] === 'number' && Number.isFinite(p[key]),
+    ([key]) => typeof p[key] === "number" && Number.isFinite(p[key]),
   );
   const main = d.images.find((i) => i.isPrimary) ?? d.images[0];
   const profit = p.sellingPrice - p.purchaseCost;
   async function order(imageIds: string[], primaryId: string) {
-    await action(`/products/${id}/images`, { imageIds, primaryId }, 'PATCH');
+    await action(`/products/${id}/images`, { imageIds, primaryId }, "PATCH");
   }
   return (
     <>
       <Link className="back" to="/inventory">
-        <ArrowLeft size={16} /> {t('Inventory')}
+        <ArrowLeft size={16} /> {t("Inventory")}
       </Link>
       <Header
         eyebrow={p.sku}
         title={`${p.brand} ${p.model}`}
-        subtitle={`${p.category || t('Equipment')} · ${t(p.condition) || t('Condition not specified')}`}
+        subtitle={`${p.category || t("Equipment")} · ${t(p.condition) || t("Condition not specified")}`}
         action={
           <div className="header-actions">
             <Link className="button" to={`/inventory/${id}/edit`}>
-              {t('Edit equipment')}
+              {t("Edit equipment")}
             </Link>
             <Link className="button" to={`/quotations/new?productId=${id}`}>
-              {t('Create quotation')}
+              {t("Create quotation")}
             </Link>
           </div>
         }
@@ -911,9 +866,9 @@ export function ProductPage() {
                 />
               </a>
             ) : (
-              <Empty title={t('Add a first look')}>
+              <Empty title={t("Add a first look")}>
                 <p>
-                  {t('Upload equipment photos from your phone or computer.')}
+                  {t("Upload equipment photos from your phone or computer.")}
                 </p>
               </Empty>
             )}
@@ -931,7 +886,7 @@ export function ProductPage() {
                 <div>
                   <button
                     disabled={busy || index === 0}
-                    aria-label={t('Move image earlier')}
+                    aria-label={t("Move image earlier")}
                     onClick={() => {
                       const ids = d.images.map((i) => i.id);
                       [ids[index - 1], ids[index]] = [
@@ -945,8 +900,8 @@ export function ProductPage() {
                   </button>
                   <button
                     disabled={busy || img.isPrimary}
-                    title={t('Set primary photo')}
-                    aria-label={t('Set primary photo')}
+                    title={t("Set primary photo")}
+                    aria-label={t("Set primary photo")}
                     onClick={() =>
                       void order(
                         d.images.map((i) => i.id),
@@ -956,12 +911,12 @@ export function ProductPage() {
                   >
                     <Star
                       size={14}
-                      fill={img.isPrimary ? 'currentColor' : 'none'}
+                      fill={img.isPrimary ? "currentColor" : "none"}
                     />
                   </button>
                   <button
                     disabled={busy || index === d.images.length - 1}
-                    aria-label={t('Move image later')}
+                    aria-label={t("Move image later")}
                     onClick={() => {
                       const ids = d.images.map((i) => i.id);
                       [ids[index + 1], ids[index]] = [
@@ -975,13 +930,13 @@ export function ProductPage() {
                   </button>
                   <button
                     disabled={busy}
-                    aria-label={t('Delete photo')}
+                    aria-label={t("Delete photo")}
                     onClick={() => {
-                      if (confirm(t('Permanently delete this photo?')))
+                      if (confirm(t("Permanently delete this photo?")))
                         void action(
                           `/products/${id}/images/${img.id}`,
                           undefined,
-                          'DELETE',
+                          "DELETE",
                         );
                     }}
                   >
@@ -991,9 +946,9 @@ export function ProductPage() {
               </div>
             ))}
           </div>
-          <label className={`button upload-button ${busy ? 'disabled' : ''}`}>
+          <label className={`button upload-button ${busy ? "disabled" : ""}`}>
             <Upload size={17} />
-            {busy ? t('Working…') : t('Upload photos')}
+            {busy ? t("Working…") : t("Upload photos")}
             <input
               disabled={busy}
               type="file"
@@ -1003,13 +958,13 @@ export function ProductPage() {
                 const files = Array.from(e.target.files ?? []);
                 if (!files.length) return;
                 setBusy(true);
-                setError('');
+                setError("");
                 const form = new FormData();
                 try {
                   for (const file of files)
-                    form.append('files', await compressProductPhoto(file));
+                    form.append("files", await compressProductPhoto(file));
                   await api(`/products/${id}/images`, {
-                    method: 'POST',
+                    method: "POST",
                     body: form,
                   });
                   reload();
@@ -1017,13 +972,13 @@ export function ProductPage() {
                   setError((err as Error).message);
                 } finally {
                   setBusy(false);
-                  e.target.value = '';
+                  e.target.value = "";
                 }
               }}
             />
           </label>
           <small className="muted">
-            {t('Photos are compressed automatically · up to 5 per upload')}
+            {t("Photos are compressed automatically · up to 5 per upload")}
           </small>
         </section>
         <section className="panel">
@@ -1033,77 +988,77 @@ export function ProductPage() {
           <ExchangeRateNote />
           <div className="facts">
             <div>
-              <span>{t('Purchase cost')}</span>
+              <span>{t("Purchase cost")}</span>
               <div className="fact-value">
                 <strong>{money(p.purchaseCost)}</strong>
                 <UsdPrice amount={p.purchaseCost} />
               </div>
             </div>
             <div>
-              <span>{t('Estimated gross profit')}</span>
+              <span>{t("Estimated gross profit")}</span>
               <div className="fact-value">
                 <strong>{money(profit)}</strong>
                 <UsdPrice amount={profit} />
               </div>
             </div>
             <div>
-              <span>{t('Estimated margin')}</span>
+              <span>{t("Estimated margin")}</span>
               <strong>
                 {p.sellingPrice
                   ? `${((profit / p.sellingPrice) * 100).toFixed(1)}%`
-                  : '—'}
+                  : "—"}
               </strong>
             </div>
             <div>
-              <span>{t('Location')}</span>
-              <strong>{p.location || t('Not set')}</strong>
+              <span>{t("Location")}</span>
+              <strong>{p.location || t("Not set")}</strong>
             </div>
             <div>
-              <span>{t('Serial number')}</span>
-              <strong>{p.serialNumber || t('Not set')}</strong>
+              <span>{t("Serial number")}</span>
+              <strong>{p.serialNumber || t("Not set")}</strong>
             </div>
           </div>
           {d.reservation && (
             <div className="reservation">
               <strong>
-                {t('Reserved for')}
+                {t("Reserved for")}
                 {d.reservation.customerName}
               </strong>
               <small>
-                {t('Since')}
+                {t("Since")}
                 {date(d.reservation.reservedAt)}
               </small>
               <small>
-                {t('Expires:')}
+                {t("Expires:")}
                 {date(d.reservation.expiresAt)}
               </small>
               {d.reservation.notes && <p>{d.reservation.notes}</p>}
             </div>
           )}
           <div className="stack">
-            {p.status === 'AVAILABLE' && (
+            {p.status === "AVAILABLE" && (
               <button disabled={busy} onClick={() => setReserve(!reserve)}>
-                {t('Reserve for a customer')}
+                {t("Reserve for a customer")}
               </button>
             )}
-            {p.status === 'RESERVED' && (
+            {p.status === "RESERVED" && (
               <button
                 disabled={busy}
                 onClick={() => {
                   if (
                     confirm(
                       t(
-                        'Release this reservation and make the equipment available?',
+                        "Release this reservation and make the equipment available?",
                       ),
                     )
                   )
                     void action(`/products/${id}/release-reservation`);
                 }}
               >
-                {t('Release reservation')}
+                {t("Release reservation")}
               </button>
             )}
-            {(p.status === 'AVAILABLE' || p.status === 'RESERVED') && (
+            {(p.status === "AVAILABLE" || p.status === "RESERVED") && (
               <button
                 disabled={busy}
                 className="primary"
@@ -1111,14 +1066,14 @@ export function ProductPage() {
                   if (
                     confirm(
                       t(
-                        'Mark this equipment as sold? This cannot be undone in the app.',
+                        "Mark this equipment as sold? This cannot be undone in the app.",
                       ),
                     )
                   )
                     void action(`/products/${id}/mark-sold`);
                 }}
               >
-                {t('Mark as sold')}
+                {t("Mark as sold")}
               </button>
             )}
           </div>
@@ -1134,13 +1089,13 @@ export function ProductPage() {
                 });
               }}
             >
-              <Field label={t('Customer')}>
+              <Field label={t("Customer")}>
                 <select
                   required
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
                 >
-                  <option value="">{t('Choose customer')}</option>
+                  <option value="">{t("Choose customer")}</option>
                   {customers?.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name}
@@ -1148,21 +1103,21 @@ export function ProductPage() {
                   ))}
                 </select>
               </Field>
-              <Field label={t('Expires (optional)')}>
+              <Field label={t("Expires (optional)")}>
                 <input
                   type="datetime-local"
                   value={expires}
                   onChange={(e) => setExpires(e.target.value)}
                 />
               </Field>
-              <Field label={t('Reservation notes')}>
+              <Field label={t("Reservation notes")}>
                 <textarea
                   value={reserveNotes}
                   onChange={(e) => setReserveNotes(e.target.value)}
                 />
               </Field>
               <button className="primary" disabled={busy}>
-                {t('Confirm reservation')}
+                {t("Confirm reservation")}
               </button>
             </form>
           )}
@@ -1170,87 +1125,18 @@ export function ProductPage() {
       </div>
       <section className="panel catalog-publish-panel">
         <div className="section-heading">
-          <div>
-            <h2>{t('Public catalog')}</h2>
-            <p className="muted">
-              {t('Products stay private until you publish them here.')}
-            </p>
-          </div>
-          <ExternalLink size={20} />
+          <h2>{t("Website Catalog visibility")}</h2>
         </div>
-        {p.isPublished && p.publicSlug ? (
-          <div className="catalog-publish-status">
-            <span className="catalog-status-dot" />
-            <span>{t('Published')}</span>
-            <a
-              className="text-link"
-              href={`${catalogConfig?.publicBaseUrl.replace(/\/$/, '')}/catalog/products/${p.publicSlug}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t('Preview')}
-              <ExternalLink size={14} />
-            </a>
-          </div>
-        ) : (
-          <p className="muted">{t('This product is private.')}</p>
-        )}
-        <label className="quotation-check catalog-show-price">
-          <input
-            type="checkbox"
-            checked={publicDraft.showPrice}
-            onChange={(e) =>
-              setPublicDraft({ ...publicDraft, showPrice: e.target.checked })
-            }
-          />
-          {t('Show selling price publicly')}
-        </label>
-        <div className="form-grid">
-          <Field label={t('Public description (Thai)')}>
-            <textarea
-              rows={4}
-              value={publicDraft.publicDescriptionTh}
-              onChange={(e) =>
-                setPublicDraft({
-                  ...publicDraft,
-                  publicDescriptionTh: e.target.value,
-                })
-              }
-            />
-          </Field>
-          <Field label={t('Public description (English)')}>
-            <textarea
-              rows={4}
-              value={publicDraft.publicDescriptionEn}
-              onChange={(e) =>
-                setPublicDraft({
-                  ...publicDraft,
-                  publicDescriptionEn: e.target.value,
-                })
-              }
-            />
-          </Field>
-        </div>
-        <div className="button-row">
-          <button className="primary" type="button" disabled={busy} onClick={() => void publishProduct()}>
-            {busy ? t('Working…') : p.isPublished ? t('Save catalog settings') : t('Publish to catalog')}
-          </button>
-          {p.isPublished && (
-            <>
-              <button type="button" disabled={!catalogConfig?.publicBaseUrl} onClick={() => void copyPublicLink()}>
-                <Copy size={15} /> {t('Copy public link')}
-              </button>
-              <button type="button" disabled={busy} onClick={() => void action(`/products/${id}/unpublish`)}>
-                {t('Unpublish')}
-              </button>
-            </>
+        <p className="muted">
+          {t(
+            "Products are visible on the website only when Sales adds them to an active Catalog.",
           )}
-        </div>
+        </p>
       </section>
       <section className="panel">
         <div className="section-heading">
           <div>
-            <h2>{t('Descriptions & sales copy')}</h2>
+            <h2>{t("Descriptions & sales copy")}</h2>
             <p className="muted">
               {t("Generate a draft, review it, and save when you're ready.")}
             </p>
@@ -1258,9 +1144,9 @@ export function ProductPage() {
           <Sparkles size={22} />
         </div>
         <div className="button-row">
-          <button disabled={busy} onClick={() => void generate('all')}>
+          <button disabled={busy} onClick={() => void generate("all")}>
             <Sparkles size={16} />
-            {t('Generate all')}
+            {t("Generate all")}
           </button>
           {descriptions.map(([key, title]) => (
             <button
@@ -1268,7 +1154,7 @@ export function ProductPage() {
               key={key}
               onClick={() => void generate(key)}
             >
-              {t('Generate')}
+              {t("Generate")}
               {t(title)}
             </button>
           ))}
@@ -1276,7 +1162,7 @@ export function ProductPage() {
         {generating && (
           <div className="ai-generating" role="status" aria-live="polite">
             <span className="ai-generating-spinner" aria-hidden="true" />
-            <span>{t('Generating product description…')}</span>
+            <span>{t("Generating product description…")}</span>
             <span className="ai-generating-dots" aria-hidden="true">
               …
             </span>
@@ -1284,25 +1170,25 @@ export function ProductPage() {
         )}
         {draft && (
           <div className="ai-draft">
-            <h3>{t('Review AI draft')}</h3>
+            <h3>{t("Review AI draft")}</h3>
             <p>
               {t(
-                'Check accuracy before saving. Existing saved text is unchanged.',
+                "Check accuracy before saving. Existing saved text is unchanged.",
               )}
             </p>
-            <h4>{t('AI rating')}</h4>
+            <h4>{t("AI rating")}</h4>
             <RatingCards values={draft} reasons={draft.ratingReasons} />
             {analysisLists.map(([key, title]) => (
               <Field label={title} key={key}>
                 <textarea
                   rows={4}
-                  value={(draft[key] ?? []).join('\n')}
-                  placeholder={t('One point per line')}
+                  value={(draft[key] ?? []).join("\n")}
+                  placeholder={t("One point per line")}
                   onChange={(e) =>
                     setDraft({
                       ...draft,
                       [key]: e.target.value
-                        .split('\n')
+                        .split("\n")
                         .map((item) => item.trim())
                         .filter(Boolean),
                     })
@@ -1317,7 +1203,7 @@ export function ProductPage() {
                 <Field label={title} key={key}>
                   <textarea
                     rows={4}
-                    value={draft[key] ?? ''}
+                    value={draft[key] ?? ""}
                     onChange={(e) =>
                       setDraft({ ...draft, [key]: e.target.value })
                     }
@@ -1332,7 +1218,7 @@ export function ProductPage() {
                   if (
                     !confirm(
                       t(
-                        'Save this draft? It will replace the matching saved descriptions.',
+                        "Save this draft? It will replace the matching saved descriptions.",
                       ),
                     )
                   )
@@ -1340,11 +1226,11 @@ export function ProductPage() {
                   setBusy(true);
                   try {
                     await api(`/products/${id}`, {
-                      method: 'PATCH',
+                      method: "PATCH",
                       body: JSON.stringify(draft),
                     });
                     setDraft(null);
-                    setNotice(t('Descriptions saved.'));
+                    setNotice(t("Descriptions saved."));
                     reload();
                   } catch (e) {
                     setError((e as Error).message);
@@ -1353,13 +1239,13 @@ export function ProductPage() {
                   }
                 }}
               >
-                {t('Save reviewed draft')}
+                {t("Save reviewed draft")}
               </button>
-              <button disabled={busy} onClick={() => void generate('all')}>
-                {t('Regenerate')}
+              <button disabled={busy} onClick={() => void generate("all")}>
+                {t("Regenerate")}
               </button>
               <button onClick={() => setDraft(null)}>
-                {t('Discard draft')}
+                {t("Discard draft")}
               </button>
             </div>
           </div>
@@ -1367,12 +1253,12 @@ export function ProductPage() {
         <div className="product-ratings">
           <div className="section-heading">
             <div>
-              <h3>{t('AI rating')}</h3>
+              <h3>{t("AI rating")}</h3>
               <p className="muted">
                 {t(
                   hasRating
-                    ? 'AI scores are estimates based on the saved product details.'
-                    : 'No AI rating yet. Generate a description to create scores.',
+                    ? "AI scores are estimates based on the saved product details."
+                    : "No AI rating yet. Generate a description to create scores.",
                 )}
               </p>
             </div>
@@ -1396,23 +1282,23 @@ export function ProductPage() {
                     } catch {
                       setError(
                         t(
-                          'Copy is unavailable. Select and copy the text manually.',
+                          "Copy is unavailable. Select and copy the text manually.",
                         ),
                       );
                     }
                   }}
                 >
-                  {t('Copy')}
+                  {t("Copy")}
                 </button>
               )}
             </div>
-            <p>{p[key] || t('No description yet.')}</p>
+            <p>{p[key] || t("No description yet.")}</p>
           </div>
         ))}
       </section>
       <section className="panel">
-        <h2>{t('Internal notes')}</h2>
-        <p className="preserve">{p.notes || t('No notes yet.')}</p>
+        <h2>{t("Internal notes")}</h2>
+        <p className="preserve">{p.notes || t("No notes yet.")}</p>
       </section>
       <ActivityList items={d.activities} />
       <button
@@ -1422,15 +1308,15 @@ export function ProductPage() {
           if (
             !confirm(
               t(
-                'Archive this equipment? It will be hidden from inventory, with its history retained.',
+                "Archive this equipment? It will be hidden from inventory, with its history retained.",
               ),
             )
           )
             return;
           setBusy(true);
           try {
-            await api(`/products/${id}`, { method: 'DELETE' });
-            nav('/inventory');
+            await api(`/products/${id}`, { method: "DELETE" });
+            nav("/inventory");
           } catch (e) {
             setError((e as Error).message);
           } finally {
@@ -1438,7 +1324,7 @@ export function ProductPage() {
           }
         }}
       >
-        {t('Archive equipment')}
+        {t("Archive equipment")}
       </button>
     </>
   );
