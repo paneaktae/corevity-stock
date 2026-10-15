@@ -29,11 +29,7 @@ import { EquipmentGuidePage } from './pages/EquipmentGuide';
 import { ChatBadge } from './components/ChatBadge';
 import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
-import {
-  QuotationsPage,
-  QuotationForm,
-  QuotationPage,
-} from './pages/Quotations';
+import { QuotationsPage, QuotationForm, QuotationPage } from './pages/Quotations';
 import { CatalogsPage } from './pages/Catalogs';
 import { CatalogChatsPage } from './pages/CatalogChats';
 import './style.css';
@@ -115,15 +111,9 @@ function App() {
                   <option value="en">English</option>
                 </select>
               </label>
-              <div
-                className="theme-toggle"
-                role="group"
-                aria-label={t('Theme')}
-              >
+              <div className="theme-toggle" role="group" aria-label={t('Theme')}>
                 <button
-                  className={
-                    theme === 'light' ? 'theme-option active' : 'theme-option'
-                  }
+                  className={theme === 'light' ? 'theme-option active' : 'theme-option'}
                   type="button"
                   aria-pressed={theme === 'light'}
                   onClick={() => setTheme('light')}
@@ -132,9 +122,7 @@ function App() {
                   {t('Light mode')}
                 </button>
                 <button
-                  className={
-                    theme === 'dark' ? 'theme-option active' : 'theme-option'
-                  }
+                  className={theme === 'dark' ? 'theme-option active' : 'theme-option'}
                   type="button"
                   aria-pressed={theme === 'dark'}
                   onClick={() => setTheme('dark')}

@@ -2,7 +2,7 @@
   "Dashboard": "ภาพรวม",
   "Inventory": "คลังสินค้า",
   "Customers": "ลูกค้า",
-  "Sales": "การขาย",
+  "Sales": "เซล",
   "Follow-ups": "ติดตามลูกค้า",
   "Settings": "ตั้งค่า",
   "EQUIPMENT MANAGER": "ระบบจัดการอุปกรณ์",
@@ -259,7 +259,6 @@
   "No follow-ups today. You're all caught up.": "วันนี้ไม่มีนัดติดตาม งานครบแล้ว",
   "Workspace settings": "ตั้งค่าระบบ",
   "Settings sections": "หมวดการตั้งค่า",
-  "Sales": "เซล",
   "Products": "สินค้า",
   "LINE alerts": "แจ้งเตือน LINE",
   "Other": "อื่น ๆ",
@@ -561,7 +560,6 @@
   "Could not copy the link.": "คัดลอกลิงก์ไม่สำเร็จ",
   "Copy link": "คัดลอกลิงก์",
   "Preview": "ดูตัวอย่าง",
-  "Duplicate": "ทำสำเนา",
   "Catalog duplicated.": "ทำสำเนาแคตตาล็อกแล้ว",
   "Archive": "เก็บถาวร",
   "Catalog archived.": "เก็บแคตตาล็อกแล้ว",
@@ -612,3 +610,4 @@
   "CLOSED": "ปิดแล้ว",
   "Unassigned": "ยังไม่มอบหมาย"
 }
+

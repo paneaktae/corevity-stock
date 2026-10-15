@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from "react";
 import {
   Archive,
   ArrowDown,
@@ -8,18 +8,18 @@ import {
   Plus,
   Share2,
   X,
-} from 'lucide-react';
-import type { Customer, Product } from '../../shared/schemas';
-import { api, money, useData } from '../lib';
-import { t } from '../i18n';
-import { ErrorBox, Field, Header, Loading } from '../components/ui';
+} from "lucide-react";
+import type { Customer, Product } from "../../shared/schemas";
+import { api, money, useData } from "../lib";
+import { t } from "../i18n";
+import { ErrorBox, Field, Header, Loading } from "../components/ui";
 
 type CatalogRow = {
   id: string;
   title: string;
   description: string;
   slug: string;
-  status: 'ACTIVE' | 'ARCHIVED';
+  status: "ACTIVE" | "ARCHIVED";
   customerId: string | null;
   customerName: string | null;
   showPrices: number | boolean;
@@ -47,60 +47,60 @@ type CatalogDetail = {
 type CatalogList = { catalogs: CatalogRow[]; publicBaseUrl: string };
 
 export function CatalogsPage() {
-  const { data, error, reload } = useData<CatalogList>('/catalogs');
-  const { data: products } = useData<Product[]>('/products');
-  const { data: customers } = useData<Customer[]>('/customers');
+  const { data, error, reload } = useData<CatalogList>("/catalogs");
+  const { data: products } = useData<Product[]>("/products");
+  const { data: customers } = useData<Customer[]>("/customers");
   const [editorId, setEditorId] = useState<string | null>(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [customerId, setCustomerId] = useState('');
-  const [assignedSalespersonEmail, setAssignedSalespersonEmail] = useState('');
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [assignedSalespersonEmail, setAssignedSalespersonEmail] = useState("");
   const [showPrices, setShowPrices] = useState(true);
   const [showSold, setShowSold] = useState(false);
-  const [expires, setExpires] = useState('');
+  const [expires, setExpires] = useState("");
   const [items, setItems] = useState<CatalogItemDraft[]>([]);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [notice, setNotice] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
+  const [notice, setNotice] = useState("");
 
   function resetEditor() {
     setEditorId(null);
-    setTitle('');
-    setDescription('');
-    setCustomerId('');
-    setAssignedSalespersonEmail('');
+    setTitle("");
+    setDescription("");
+    setCustomerId("");
+    setAssignedSalespersonEmail("");
     setShowPrices(true);
     setShowSold(false);
-    setExpires('');
+    setExpires("");
     setItems([]);
   }
   function newCatalog() {
     resetEditor();
-    setErrorMessage('');
-    setNotice('');
-    setEditorId('new');
+    setErrorMessage("");
+    setNotice("");
+    setEditorId("new");
   }
   async function editCatalog(id: string) {
     setBusy(true);
-    setErrorMessage('');
+    setErrorMessage("");
     try {
       const detail = await api<CatalogDetail>(`/catalogs/${id}`);
       setEditorId(id);
       setTitle(detail.catalog.title);
       setDescription(detail.catalog.description);
-      setCustomerId(detail.catalog.customerId ?? '');
+      setCustomerId(detail.catalog.customerId ?? "");
       setAssignedSalespersonEmail(
-        detail.catalog.assignedSalespersonEmail ?? '',
+        detail.catalog.assignedSalespersonEmail ?? "",
       );
       setShowPrices(Boolean(detail.catalog.showPrices));
       setShowSold(Boolean(detail.catalog.showSold));
-      setExpires(detail.catalog.expiresAt?.slice(0, 10) ?? '');
+      setExpires(detail.catalog.expiresAt?.slice(0, 10) ?? "");
       setItems(
         detail.items.map((item) => ({
           productId: item.productId,
           displayPrice:
-            item.displayPrice == null ? '' : String(item.displayPrice),
+            item.displayPrice == null ? "" : String(item.displayPrice),
           description: item.description,
         })),
       );
@@ -122,7 +122,7 @@ export function CatalogsPage() {
               description:
                 product.publicDescriptionEn ||
                 product.publicDescriptionTh ||
-                '',
+                "",
             },
           ],
     );
@@ -139,8 +139,8 @@ export function CatalogsPage() {
   async function saveCatalog(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    setErrorMessage('');
-    setNotice('');
+    setErrorMessage("");
+    setNotice("");
     try {
       const payload = {
         title,
@@ -153,27 +153,27 @@ export function CatalogsPage() {
         items: items.map((item) => ({
           productId: item.productId,
           displayPrice:
-            item.displayPrice === '' ? null : Number(item.displayPrice),
+            item.displayPrice === "" ? null : Number(item.displayPrice),
           description: item.description,
         })),
       };
       const result =
-        editorId === 'new'
-          ? await api<{ id: string; slug: string }>('/catalogs', {
-              method: 'POST',
+        editorId === "new"
+          ? await api<{ id: string; slug: string }>("/catalogs", {
+              method: "POST",
               body: JSON.stringify(payload),
             })
           : await api<{ id: string; slug: string }>(`/catalogs/${editorId}`, {
-              method: 'PATCH',
+              method: "PATCH",
               body: JSON.stringify(payload),
             });
       resetEditor();
       reload();
-      setNotice(t('Catalog saved.'));
+      setNotice(t("Catalog saved."));
       if (result.slug && data?.publicBaseUrl)
         await navigator.clipboard
           .writeText(
-            `${data.publicBaseUrl.replace(/\/$/, '')}/s/${result.slug}`,
+            `${data.publicBaseUrl.replace(/\/$/, "")}/s/${result.slug}`,
           )
           .catch(() => undefined);
     } catch (e) {
@@ -186,29 +186,29 @@ export function CatalogsPage() {
     if (!data?.publicBaseUrl) return;
     try {
       await navigator.clipboard.writeText(
-        `${data.publicBaseUrl.replace(/\/$/, '')}/s/${slug}`,
+        `${data.publicBaseUrl.replace(/\/$/, "")}/s/${slug}`,
       );
-      setNotice(t('Catalog link copied.'));
+      setNotice(t("Catalog link copied."));
     } catch {
-      setErrorMessage(t('Could not copy the link.'));
+      setErrorMessage(t("Could not copy the link."));
     }
   }
-  async function catalogAction(id: string, action: 'duplicate' | 'archive') {
+  async function catalogAction(id: string, action: "duplicate" | "archive") {
     setBusy(true);
-    setErrorMessage('');
+    setErrorMessage("");
     try {
       const result = await api<{ slug?: string }>(`/catalogs/${id}/${action}`, {
-        method: 'POST',
+        method: "POST",
       });
-      if (action === 'duplicate' && result.slug && data?.publicBaseUrl)
+      if (action === "duplicate" && result.slug && data?.publicBaseUrl)
         await navigator.clipboard
           .writeText(
-            `${data.publicBaseUrl.replace(/\/$/, '')}/s/${result.slug}`,
+            `${data.publicBaseUrl.replace(/\/$/, "")}/s/${result.slug}`,
           )
           .catch(() => undefined);
       reload();
       setNotice(
-        t(action === 'duplicate' ? 'Catalog duplicated.' : 'Catalog archived.'),
+        t(action === "duplicate" ? "Catalog duplicated." : "Catalog archived."),
       );
     } catch (e) {
       setErrorMessage((e as Error).message);
@@ -229,11 +229,11 @@ export function CatalogsPage() {
   return (
     <>
       <Header
-        title={t('Shareable catalogs')}
-        subtitle={t('Build a curated product collection and share one link.')}
+        title={t("Shareable catalogs")}
+        subtitle={t("Build a curated product collection and share one link.")}
         action={
           <button className="primary" type="button" onClick={newCatalog}>
-            <Plus size={16} /> {t('Create catalog')}
+            <Plus size={16} /> {t("Create catalog")}
           </button>
         }
       />
@@ -247,14 +247,14 @@ export function CatalogsPage() {
       {editorId && (
         <section className="panel catalog-editor">
           <div className="section-heading">
-            <h2>{t(editorId === 'new' ? 'Create catalog' : 'Edit catalog')}</h2>
-            <button type="button" aria-label={t('Close')} onClick={resetEditor}>
+            <h2>{t(editorId === "new" ? "Create catalog" : "Edit catalog")}</h2>
+            <button type="button" aria-label={t("Close")} onClick={resetEditor}>
               <X size={17} />
             </button>
           </div>
           <form onSubmit={(event) => void saveCatalog(event)}>
             <div className="form-grid">
-              <Field label={t('Catalog title')}>
+              <Field label={t("Catalog title")}>
                 <input
                   required
                   maxLength={160}
@@ -262,12 +262,12 @@ export function CatalogsPage() {
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </Field>
-              <Field label={t('Associate customer (optional)')}>
+              <Field label={t("Associate customer (optional)")}>
                 <select
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
                 >
-                  <option value="">{t('No customer')}</option>
+                  <option value="">{t("No customer")}</option>
                   {customers?.map((customer) => (
                     <option key={customer.id} value={customer.id}>
                       {customer.companyName || customer.name}
@@ -275,17 +275,17 @@ export function CatalogsPage() {
                   ))}
                 </select>
               </Field>
-              <Field label={t('Assigned salesperson email (optional)')}>
+              <Field label={t("Assigned salesperson email (optional)")}>
                 <input
                   type="email"
                   maxLength={254}
                   value={assignedSalespersonEmail}
                   onChange={(e) => setAssignedSalespersonEmail(e.target.value)}
-                  placeholder={t('Workspace member email')}
+                  placeholder={t("Workspace member email")}
                 />
               </Field>
             </div>
-            <Field label={t('Catalog description')}>
+            <Field label={t("Catalog description")}>
               <textarea
                 rows={3}
                 maxLength={5000}
@@ -300,7 +300,7 @@ export function CatalogsPage() {
                   checked={showPrices}
                   onChange={(e) => setShowPrices(e.target.checked)}
                 />
-                {t('Show prices')}
+                {t("Show prices")}
               </label>
               <label className="quotation-check">
                 <input
@@ -308,9 +308,9 @@ export function CatalogsPage() {
                   checked={showSold}
                   onChange={(e) => setShowSold(e.target.checked)}
                 />
-                {t('Include sold products')}
+                {t("Include sold products")}
               </label>
-              <Field label={t('Expiration date (optional)')}>
+              <Field label={t("Expiration date (optional)")}>
                 <input
                   type="date"
                   value={expires}
@@ -318,11 +318,11 @@ export function CatalogsPage() {
                 />
               </Field>
             </div>
-            <Field label={t('Search inventory products')}>
+            <Field label={t("Search inventory products")}>
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('Search brand, model, or category')}
+                placeholder={t("Search brand, model, or category")}
               />
             </Field>
             <div className="catalog-product-picker">
@@ -351,7 +351,7 @@ export function CatalogsPage() {
                         {product.brand} {product.model}
                       </strong>
                       <small>
-                        {product.sku} · {product.category} ·{' '}
+                        {product.sku} · {product.category} ·{" "}
                         {money(product.sellingPrice)}
                       </small>
                     </span>
@@ -360,13 +360,13 @@ export function CatalogsPage() {
               })}
               {!eligibleProducts.length && (
                 <p className="muted">
-                  {t('No inventory products match your search.')}
+                  {t("No inventory products match your search.")}
                 </p>
               )}
             </div>
             <div className="catalog-order-list">
               <h3>
-                {t('Selected products')} · {items.length}
+                {t("Selected products")} · {items.length}
               </h3>
               {items.map((item, index) => {
                 const product = catalogProducts.get(item.productId);
@@ -375,7 +375,7 @@ export function CatalogsPage() {
                     <div className="catalog-order-actions">
                       <button
                         type="button"
-                        aria-label={t('Move item up')}
+                        aria-label={t("Move item up")}
                         disabled={index === 0}
                         onClick={() => moveItem(index, -1)}
                       >
@@ -383,7 +383,7 @@ export function CatalogsPage() {
                       </button>
                       <button
                         type="button"
-                        aria-label={t('Move item down')}
+                        aria-label={t("Move item down")}
                         disabled={index === items.length - 1}
                         onClick={() => moveItem(index, 1)}
                       >
@@ -393,10 +393,10 @@ export function CatalogsPage() {
                     <strong>
                       {product
                         ? `${product.brand} ${product.model}`
-                        : t('Product unavailable')}
+                        : t("Product unavailable")}
                     </strong>
                     <input
-                      aria-label={t('Catalog display price')}
+                      aria-label={t("Catalog display price")}
                       type="number"
                       min="0"
                       step="0.01"
@@ -414,7 +414,7 @@ export function CatalogsPage() {
                     />
                     <button
                       type="button"
-                      aria-label={t('Remove product')}
+                      aria-label={t("Remove product")}
                       onClick={() =>
                         setItems((current) =>
                           current.filter((_, i) => i !== index),
@@ -429,10 +429,10 @@ export function CatalogsPage() {
             </div>
             <div className="form-actions">
               <button type="button" onClick={resetEditor}>
-                {t('Cancel')}
+                {t("Cancel")}
               </button>
               <button className="primary" disabled={busy || items.length === 0}>
-                {busy ? t('Saving…') : t('Save catalog')}
+                {busy ? t("Saving…") : t("Save catalog")}
               </button>
             </div>
           </form>
@@ -445,96 +445,96 @@ export function CatalogsPage() {
               <Share2 size={18} />
               <div>
                 <h2>{catalog.title}</h2>
-                <small>{catalog.description || t('No description')}</small>
+                <small>{catalog.description || t("No description")}</small>
               </div>
             </div>
             <div className="catalog-row-stats">
               <span>
-                {catalog.productCount} {t('Products')}
+                {catalog.productCount} {t("Products")}
               </span>
               <span>
-                {catalog.pageViews} {t('Page views')}
+                {catalog.pageViews} {t("Page views")}
               </span>
               <span>
-                {catalog.productViews} {t('Product views')}
+                {catalog.productViews} {t("Product views")}
               </span>
               <span>
-                {catalog.contactClicks} {t('Contact clicks')}
+                {catalog.contactClicks} {t("Contact clicks")}
               </span>
               {catalog.customerName && (
                 <span>
-                  {t('Customer')}: {catalog.customerName}
+                  {t("Customer")}: {catalog.customerName}
                 </span>
               )}
               {catalog.expiresAt && (
                 <span>
-                  {t('Expires:')}{' '}
+                  {t("Expires:")}{" "}
                   {new Date(catalog.expiresAt).toLocaleDateString()}
                 </span>
               )}
             </div>
           </div>
-          {catalog.status === 'ACTIVE' ? (
+          {catalog.status === "ACTIVE" ? (
             <div className="catalog-row-actions">
               <button
                 type="button"
                 onClick={() => void copyCatalogLink(catalog.slug)}
               >
                 <Copy size={14} />
-                {t('Copy link')}
+                {t("Copy link")}
               </button>
               {data.publicBaseUrl && (
                 <a
                   className="button"
-                  href={`${data.publicBaseUrl.replace(/\/$/, '')}/s/${catalog.slug}`}
+                  href={`${data.publicBaseUrl.replace(/\/$/, "")}/s/${catalog.slug}`}
                   target="_blank"
                   rel="noreferrer"
                 >
                   <ExternalLink size={14} />
-                  {t('Preview')}
+                  {t("Preview")}
                 </a>
               )}
               <button
                 type="button"
                 onClick={() => void editCatalog(catalog.id)}
               >
-                {t('Edit')}
+                {t("Edit")}
               </button>
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void catalogAction(catalog.id, 'duplicate')}
+                onClick={() => void catalogAction(catalog.id, "duplicate")}
               >
                 <Copy size={14} />
-                {t('Duplicate')}
+                {t("Duplicate")}
               </button>
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void catalogAction(catalog.id, 'archive')}
+                onClick={() => void catalogAction(catalog.id, "archive")}
               >
                 <Archive size={14} />
-                {t('Archive')}
+                {t("Archive")}
               </button>
             </div>
           ) : (
-            <span className="badge">{t('Archived')}</span>
+            <span className="badge">{t("Archived")}</span>
           )}
         </article>
       ))}
       {data && !data.catalogs.length && (
         <section className="panel empty">
-          <h2>{t('No catalogs yet')}</h2>
+          <h2>{t("No catalogs yet")}</h2>
           <p>
             {t(
-              'Create a shareable collection to send selected equipment to a customer.',
+              "Create a shareable collection to send selected equipment to a customer.",
             )}
           </p>
         </section>
       )}
       {data && !data.publicBaseUrl && (
         <p className="muted">
-          {t('Public catalog URL is not configured yet.')}
+          {t("Public catalog URL is not configured yet.")}
         </p>
       )}
     </>

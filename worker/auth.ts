@@ -70,3 +70,4 @@ export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
   return next();
 };
+
