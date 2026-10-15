@@ -10,6 +10,8 @@ type CompanyProfile = {
   phone: string;
   email: string;
   taxId: string;
+  lineUrl: string;
+  facebookUrl: string;
   bankDetails: string;
   paymentTerms: string;
   deliveryTerms: string;
@@ -19,7 +21,7 @@ type CompanyProfile = {
 };
 const empty: CompanyProfile = {
   companyNameTh: '', companyNameEn: '', address: '', phone: '', email: '',
-  taxId: '', bankDetails: '', paymentTerms: '', deliveryTerms: '',
+  taxId: '', lineUrl: '', facebookUrl: '', bankDetails: '', paymentTerms: '', deliveryTerms: '',
   warrantyTerms: '', defaultVatRate: 7, hasLogo: false,
 };
 
@@ -124,6 +126,12 @@ export function QuotationSettingsPanel() {
           </Field>
           <Field label={t('Tax ID')}>
             <input value={form.taxId} onChange={(e) => update('taxId', e.target.value)} />
+          </Field>
+          <Field label={t('LINE contact URL')}>
+            <input type="url" placeholder="https://line.me/…" value={form.lineUrl} onChange={(e) => update('lineUrl', e.target.value)} />
+          </Field>
+          <Field label={t('Facebook Messenger URL')}>
+            <input type="url" placeholder="https://m.me/…" value={form.facebookUrl} onChange={(e) => update('facebookUrl', e.target.value)} />
           </Field>
           <Field label={t('Default VAT rate (%)')}>
             <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={form.defaultVatRate} onChange={(e) => update('defaultVatRate', Number(e.target.value))} />

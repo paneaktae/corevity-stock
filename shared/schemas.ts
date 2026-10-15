@@ -131,6 +131,12 @@ export type Descriptions = z.infer<typeof descriptionSchema>;
 export type Product = ProductInput & {
   id: string;
   sku: string;
+  isPublished: boolean;
+  showPrice: boolean;
+  publicSlug: string | null;
+  publicDescriptionTh: string;
+  publicDescriptionEn: string;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
   soldAt: string | null;

@@ -1,7 +1,13 @@
 import { t } from '../i18n';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Search, ArrowUpRight, Users, Trash2 } from 'lucide-react';
+import {
+  Search,
+  ArrowUpRight,
+  ExternalLink,
+  Users,
+  Trash2,
+} from 'lucide-react';
 import type {
   Customer,
   CustomerDetail,
@@ -202,7 +208,12 @@ export function CustomerForm() {
                           : [...selected, category];
                         setForm({
                           ...form,
-                          interestedIn: [...preserved, ...next.filter((value) => knownCategories.includes(value))].join(', '),
+                          interestedIn: [
+                            ...preserved,
+                            ...next.filter((value) =>
+                              knownCategories.includes(value),
+                            ),
+                          ].join(', '),
                         });
                       }}
                     />
@@ -248,6 +259,18 @@ export function CustomerPage() {
   const { id } = useParams();
   const nav = useNavigate();
   const { data: d, error } = useData<CustomerDetail>(`/customers/${id}`);
+  const { data: sharedCatalogData } = useData<{
+    catalogs: Array<{
+      id: string;
+      title: string;
+      description: string;
+      slug: string;
+      status: 'ACTIVE' | 'ARCHIVED';
+      expiresAt: string | null;
+      pageViews: number;
+    }>;
+    publicBaseUrl: string;
+  }>(`/customers/${id}/catalogs`);
   const [actionError, setActionError] = useState('');
   const [deleting, setDeleting] = useState(false);
   if (!d)
@@ -361,15 +384,73 @@ export function CustomerPage() {
             </Link>
           </div>
           {d.quotations.map((quote) => (
-            <Link className="list-row" key={quote.id} to={`/quotations/${quote.id}`}>
+            <Link
+              className="list-row"
+              key={quote.id}
+              to={`/quotations/${quote.id}`}
+            >
               <div className="grow">
                 <strong>{quote.quotationNumber}</strong>
-                <small>{date(quote.issueDate)} · {t('Valid until')} {date(quote.validUntil)}</small>
+                <small>
+                  {date(quote.issueDate)} · {t('Valid until')}{' '}
+                  {date(quote.validUntil)}
+                </small>
               </div>
-              <strong>{formatCustomerCurrency(quote.grandTotal, quote.currency)}</strong>
+              <strong>
+                {formatCustomerCurrency(quote.grandTotal, quote.currency)}
+              </strong>
               <Badge value={quote.status} />
             </Link>
           ))}
+        </section>
+      ) : null}
+      {sharedCatalogData?.catalogs.length ? (
+        <section className="panel customer-quotation-history">
+          <div className="section-heading">
+            <h2>{t('Shared catalogs')}</h2>
+            <Link className="button" to="/catalogs">
+              {t('Manage catalogs')}
+            </Link>
+          </div>
+          {sharedCatalogData.catalogs.map((catalog) => {
+            const expired =
+              catalog.expiresAt != null &&
+              Date.parse(catalog.expiresAt) < Date.now();
+            const shareable =
+              catalog.status === 'ACTIVE' &&
+              !expired &&
+              sharedCatalogData.publicBaseUrl;
+            return (
+              <div className="list-row" key={catalog.id}>
+                <div className="grow">
+                  <strong>{catalog.title}</strong>
+                  <small>{catalog.description || t('No description')}</small>
+                  <small>
+                    {catalog.pageViews} {t('Page views')}
+                    {catalog.expiresAt
+                      ? ` · ${t('Expires:')} ${date(catalog.expiresAt)}`
+                      : ''}
+                  </small>
+                </div>
+                {shareable ? (
+                  <a
+                    className="button"
+                    href={`${sharedCatalogData.publicBaseUrl.replace(/\/$/, '')}/s/${catalog.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLink size={15} /> {t('Open share link')}
+                  </a>
+                ) : (
+                  <Badge
+                    value={
+                      catalog.status === 'ARCHIVED' ? 'ARCHIVED' : 'EXPIRED'
+                    }
+                  />
+                )}
+              </div>
+            );
+          })}
         </section>
       ) : null}
       <ActivityList items={d.activities} />
@@ -377,5 +458,7 @@ export function CustomerPage() {
   );
 }
 function formatCustomerCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat('th-TH', { style: 'currency', currency }).format(amount);
+  return new Intl.NumberFormat('th-TH', { style: 'currency', currency }).format(
+    amount,
+  );
 }

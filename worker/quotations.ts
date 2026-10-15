@@ -32,6 +32,8 @@ type CompanyRow = {
   phone: string;
   email: string;
   tax_id: string;
+  line_url: string;
+  facebook_url: string;
   logo_key: string;
   bank_details: string;
   payment_terms: string;
@@ -127,6 +129,8 @@ const defaultCompany = (): QuotationSettingsInput => ({
   phone: '',
   email: '',
   taxId: '',
+  lineUrl: '',
+  facebookUrl: '',
   bankDetails: '',
   paymentTerms: '',
   deliveryTerms: '',
@@ -147,6 +151,8 @@ function companyInput(row: CompanyRow | null): QuotationSettingsInput {
         phone: row.phone,
         email: row.email,
         taxId: row.tax_id,
+        lineUrl: row.line_url,
+        facebookUrl: row.facebook_url,
         bankDetails: row.bank_details,
         paymentTerms: row.payment_terms,
         deliveryTerms: row.delivery_terms,
@@ -520,7 +526,7 @@ quotationSettingsRoutes.patch('/', async (c) => {
   const values = quotationSettingsInput.parse(await c.req.json());
   const dbNow = timestamp();
   await c.env.DB.prepare(
-    'UPDATE quotation_settings SET company_name_th=?,company_name_en=?,address=?,phone=?,email=?,tax_id=?,bank_details=?,payment_terms=?,delivery_terms=?,warranty_terms=?,default_vat_rate_bps=?,updated_at=? WHERE id=\'default\'',
+    'UPDATE quotation_settings SET company_name_th=?,company_name_en=?,address=?,phone=?,email=?,tax_id=?,line_url=?,facebook_url=?,bank_details=?,payment_terms=?,delivery_terms=?,warranty_terms=?,default_vat_rate_bps=?,updated_at=? WHERE id=\'default\'',
   )
     .bind(
       values.companyNameTh,
@@ -529,6 +535,8 @@ quotationSettingsRoutes.patch('/', async (c) => {
       values.phone,
       values.email,
       values.taxId,
+      values.lineUrl,
+      values.facebookUrl,
       values.bankDetails,
       values.paymentTerms,
       values.deliveryTerms,
