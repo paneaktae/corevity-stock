@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { PublicBindings } from './public-catalog';
@@ -61,7 +62,7 @@ async function constantTimeTextEqual(left: string, right: string) {
     crypto.subtle.digest("SHA-256", encoder.encode(left)),
     crypto.subtle.digest("SHA-256", encoder.encode(right)),
   ]);
-  return crypto.subtle.timingSafeEqual(leftHash, rightHash);
+  return timingSafeEqual(leftHash, rightHash);
 }
 
 async function jsonBody(request: Request) {
