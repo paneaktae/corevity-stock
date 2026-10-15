@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { Hono, type Context as HonoContext } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "./auth";
@@ -578,7 +577,12 @@ async function constantTimeTextEqual(left: string, right: string) {
     crypto.subtle.digest("SHA-256", encoder.encode(left)),
     crypto.subtle.digest("SHA-256", encoder.encode(right)),
   ]);
-  return timingSafeEqual(leftHash, rightHash);
+  const leftBytes = new Uint8Array(leftHash);
+  const rightBytes = new Uint8Array(rightHash);
+  let difference = 0;
+  for (let index = 0; index < leftBytes.length; index += 1)
+    difference |= leftBytes[index] ^ rightBytes[index];
+  return difference === 0;
 }
 
 async function canAccessCatalogChat(c: Context, assignedEmail: string) {
