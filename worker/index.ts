@@ -25,7 +25,7 @@ import { salespeopleRoutes } from './salespeople';
 import { chatRoutes } from './chat';
 import { lineRoutes } from './line-routes';
 import { quotationRoutes, quotationSettingsRoutes } from './quotations';
-import { catalogsRoutes } from './catalogs';
+import { catalogsRoutes, notifyCatalogChat } from './catalogs';
 import {
   allowedSales,
   handleLineWebhook,
@@ -246,7 +246,10 @@ app.use('*', async (c, next) => {
       "default-src 'self'; img-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     );
 });
-app.use('*', auth);
+app.use('*', async (c, next) => {
+  if (c.req.path === '/internal/catalog-chat-notify') return next();
+  return auth(c, next);
+});
 app.use('/api/*', async (c, next) => {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
     const origin = c.req.header('Origin');
@@ -341,6 +344,9 @@ app.route('/api/salespeople', salespeopleRoutes);
 app.route('/api/quotations', quotationRoutes);
 app.route('/api/quotation-settings', quotationSettingsRoutes);
 app.route('/api', catalogsRoutes);
+app.post('/internal/catalog-chat-notify', (c) =>
+  notifyCatalogChat(c.env, c.req.raw),
+);
 app.get('/api/exchange-rate', async (c) =>
   c.json(await exchangeRate(c.env.DB, fetch, new Date(), c.env.BOT_API_KEY)),
 );
@@ -1397,3 +1403,4 @@ export default {
     ]);
   },
 };
+

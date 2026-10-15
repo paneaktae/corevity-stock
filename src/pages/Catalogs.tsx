@@ -25,6 +25,7 @@ type CatalogRow = {
   showPrices: number | boolean;
   showSold: number | boolean;
   expiresAt: string | null;
+  assignedSalespersonEmail: string;
   productCount: number;
   pageViews: number;
   productViews: number;
@@ -53,6 +54,7 @@ export function CatalogsPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [customerId, setCustomerId] = useState("");
+  const [assignedSalespersonEmail, setAssignedSalespersonEmail] = useState("");
   const [showPrices, setShowPrices] = useState(true);
   const [showSold, setShowSold] = useState(false);
   const [expires, setExpires] = useState("");
@@ -67,6 +69,7 @@ export function CatalogsPage() {
     setTitle("");
     setDescription("");
     setCustomerId("");
+    setAssignedSalespersonEmail("");
     setShowPrices(true);
     setShowSold(false);
     setExpires("");
@@ -87,6 +90,9 @@ export function CatalogsPage() {
       setTitle(detail.catalog.title);
       setDescription(detail.catalog.description);
       setCustomerId(detail.catalog.customerId ?? "");
+      setAssignedSalespersonEmail(
+        detail.catalog.assignedSalespersonEmail ?? "",
+      );
       setShowPrices(Boolean(detail.catalog.showPrices));
       setShowSold(Boolean(detail.catalog.showSold));
       setExpires(detail.catalog.expiresAt?.slice(0, 10) ?? "");
@@ -140,6 +146,7 @@ export function CatalogsPage() {
         title,
         description,
         customerId: customerId || null,
+        assignedSalespersonEmail: assignedSalespersonEmail.trim().toLowerCase(),
         showPrices,
         showSold,
         expiresAt: expires ? `${expires}T23:59:59.999Z` : null,
@@ -267,6 +274,15 @@ export function CatalogsPage() {
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field label={t("Assigned salesperson email (optional)")}>
+                <input
+                  type="email"
+                  maxLength={254}
+                  value={assignedSalespersonEmail}
+                  onChange={(e) => setAssignedSalespersonEmail(e.target.value)}
+                  placeholder={t("Workspace member email")}
+                />
               </Field>
             </div>
             <Field label={t("Catalog description")}>

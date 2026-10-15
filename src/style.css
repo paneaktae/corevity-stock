@@ -2737,3 +2737,185 @@ html[data-theme='dark'] .catalog-status-dot { box-shadow: 0 0 0 4px #18a65a33; }
   .catalog-order-item > input { grid-column: 2 / 3; grid-row: 2; }
   .catalog-order-item > button { grid-column: 3; grid-row: 1; }
 }
+
+.catalog-chat-manager {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 65vh;
+}
+.catalog-chat-inbox,
+.catalog-chat-conversation {
+  min-width: 0;
+  padding: 16px;
+}
+.catalog-chat-inbox h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+.catalog-chat-inbox h2 span {
+  color: var(--muted, #73849a);
+  font-size: 12px;
+}
+.catalog-chat-thread {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 11px;
+  border: 1px solid var(--border, #e1e7ef);
+  border-radius: 11px;
+  background: var(--surface, #fff);
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.catalog-chat-thread.selected {
+  border-color: #1769d2;
+  box-shadow: 0 0 0 2px #1769d21c;
+}
+.catalog-chat-thread-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.catalog-chat-thread-catalog,
+.catalog-chat-thread-preview,
+.catalog-chat-thread time {
+  overflow: hidden;
+  color: var(--muted, #73849a);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.catalog-chat-thread-preview {
+  color: inherit;
+}
+.catalog-chat-thread time {
+  font-size: 10px;
+}
+.catalog-chat-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--border, #e1e7ef);
+}
+.catalog-chat-detail-header h2 {
+  margin: 0 0 4px;
+}
+.catalog-chat-detail-header p {
+  margin: 0;
+  color: var(--muted, #73849a);
+}
+.catalog-chat-detail-header small {
+  color: var(--muted, #73849a);
+}
+.catalog-chat-history {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  max-height: 50vh;
+  overflow: auto;
+  padding: 16px 2px;
+}
+.catalog-chat-message {
+  max-width: 85%;
+  padding: 11px 13px;
+  border: 1px solid var(--border, #e1e7ef);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+.catalog-chat-message.salesperson {
+  justify-self: end;
+  background: color-mix(in srgb, #1769d2 8%, var(--surface, #fff));
+}
+.catalog-chat-message-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted, #73849a);
+  font-size: 11px;
+}
+.catalog-chat-message p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.catalog-chat-message-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.catalog-chat-message-products span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #eaf2fc;
+  color: #245b9f;
+  font-size: 11px;
+}
+.catalog-chat-reply {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  border-top: 1px solid var(--border, #e1e7ef);
+  padding-top: 12px;
+}
+.catalog-chat-reply textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border, #dce5ef);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+.catalog-chat-reply small {
+  grid-column: 1/-1;
+  color: var(--muted, #73849a);
+}
+.catalog-chat-empty {
+  display: grid;
+  place-items: center;
+  min-height: 50vh;
+  color: var(--muted, #73849a);
+}
+.status-pill {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #dcfce8;
+  color: #17673c;
+  font-size: 10px;
+}
+.status-pill.closed {
+  background: #eef1f5;
+  color: #64748b;
+}
+@media (max-width: 800px) {
+  .catalog-chat-manager {
+    grid-template-columns: 1fr;
+  }
+  .catalog-chat-inbox {
+    max-height: 40vh;
+    overflow: auto;
+  }
+  .catalog-chat-detail-header {
+    flex-direction: column;
+  }
+  .catalog-chat-history {
+    max-height: 43vh;
+  }
+  .catalog-chat-reply {
+    grid-template-columns: 1fr;
+  }
+  .catalog-chat-message {
+    max-width: 95%;
+  }
+}
+

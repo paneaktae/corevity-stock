@@ -1,8 +1,12 @@
 import { Hono } from "hono";
+import { catalogChatApi } from "./public-chat-api";
+import { renderCatalogChatWidget } from "./catalog-chat-widget";
 
-type PublicBindings = Pick<Env, "DB" | "PRODUCT_IMAGES"> & {
+export type PublicBindings = Pick<Env, "DB" | "PRODUCT_IMAGES"> & {
   PUBLIC_CATALOG_BASE_URL?: string;
   PUBLIC_STOREFRONT_ORIGINS?: string;
+  CATALOG_CHAT_INTERNAL_SECRET?: string;
+  MANAGEMENT?: Fetcher;
 };
 type PublicEnv = { Bindings: PublicBindings };
 type Company = {
@@ -52,8 +56,8 @@ app.use("/api/public/*", async (c, next) => {
     if (origin) {
       c.header("Access-Control-Allow-Origin", origin);
       c.header("Vary", "Origin");
-      c.header("Access-Control-Allow-Methods", "GET, OPTIONS");
-      c.header("Access-Control-Allow-Headers", "Content-Type");
+      c.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
       c.header("Access-Control-Max-Age", "86400");
     }
     return c.body(null, 204);
@@ -136,6 +140,8 @@ function pageHtml(args: {
   content: string;
   language?: string;
   status?: number;
+  catalogSlug?: string;
+  itemId?: string;
 }) {
   const { request, env } = args;
   const base = baseUrl(request, env);
@@ -146,11 +152,18 @@ function pageHtml(args: {
     ? `\n<meta property="og:image" content="${attr(args.image)}">\n<meta name="twitter:image" content="${attr(args.image)}">`
     : "";
   const logo = `<span class="brand"><span class="brand-mark">C</span><span>COREVITY<small>${htmlEscape(text(args.language ?? "en", "FITNESS EQUIPMENT", "อุปกรณ์ฟิตเนส"))}</small></span></span>`;
+  const chat = args.catalogSlug
+    ? renderCatalogChatWidget({
+        slug: args.catalogSlug,
+        language: args.language ?? "en",
+        itemId: args.itemId,
+      })
+    : "";
   const html = `<!doctype html><html lang="${args.language ?? "en"}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0d1b2e"><title>${title}</title><meta name="description" content="${description}"><meta property="og:type" content="website"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:url" content="${attr(`${base}${url.pathname}${url.search}`)}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}">${image}<style>
 *{box-sizing:border-box}body{margin:0;background:#f3f6fb;color:#202a39;font:15px/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit;text-decoration:none}button,input,select{font:inherit}.shell{max-width:1180px;margin:auto;padding:0 22px}.top{background:#fff;border-bottom:1px solid #dce5ef}.top-inner{min-height:74px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;align-items:center;gap:10px;color:#172a45;font-weight:800;letter-spacing:1.4px}.brand small{display:block;font-size:9px;letter-spacing:1.5px;color:#73859d}.brand-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:10px;background:#1769d2;color:white;font-size:20px;font-weight:800}.top-actions,.actions,.share-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.top-actions a,.button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:8px 13px;border:1px solid #dce5ef;border-radius:9px;background:#fff;font-size:13px;font-weight:650}.button.primary{background:#1769d2;border-color:#1769d2;color:white}.hero{padding:42px 0 22px}.eyebrow{margin:0 0 6px;color:#1769d2;font-size:11px;font-weight:750;letter-spacing:1.5px;text-transform:uppercase}.hero h1{margin:0;color:#172a45;font-size:clamp(28px,5vw,44px);line-height:1.15;letter-spacing:-1.2px}.hero p{max-width:700px;margin:12px 0 0;color:#657993}.filters{display:grid;grid-template-columns:minmax(220px,2fr) repeat(3,minmax(140px,1fr)) auto;gap:9px;padding:14px;border:1px solid #dce5ef;border-radius:14px;background:#fff}.filters input,.filters select{width:100%;min-width:0;min-height:42px;padding:9px 11px;border:1px solid #dce5ef;border-radius:8px;background:#fff;color:#202a39}.filters button{min-height:42px;padding:8px 15px;border:0;border-radius:8px;background:#1769d2;color:#fff;font-weight:700}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:18px 0 32px}.card{overflow:hidden;border:1px solid #dce5ef;border-radius:13px;background:#fff;box-shadow:0 4px 15px #1422380b;transition:transform .15s,box-shadow .15s}.card:hover{transform:translateY(-2px);box-shadow:0 8px 24px #14223818}.photo{position:relative;display:grid;place-items:center;aspect-ratio:4/3;background:#e8eef6;color:#71839b}.photo img{width:100%;height:100%;object-fit:cover}.card-body{padding:15px}.meta{display:flex;gap:7px;flex-wrap:wrap;color:#657993;font-size:11px}.pill{display:inline-flex;padding:4px 9px;border-radius:999px;background:#eaf2fc;color:#245b9f;font-size:11px;font-weight:700}.pill.available{background:#dcfce8;color:#17673c}.pill.reserved{background:#fff1cb;color:#8e5b00}.pill.sold{background:#fee2e2;color:#a22b2b}.pill.not_available{background:#fee2e2;color:#a22b2b}.card h2{margin:8px 0 4px;font-size:17px;line-height:1.35}.price{margin:11px 0;color:#1458ad;font-size:20px;font-weight:800}.muted{color:#6d7e93;font-size:13px}.detail{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr);gap:25px;margin:27px 0 42px}.gallery-main{overflow:hidden;aspect-ratio:4/3;border-radius:14px;background:#e8eef6}.gallery-main img{width:100%;height:100%;object-fit:contain}.thumbs{display:flex;gap:9px;margin-top:9px;overflow:auto}.thumbs img{width:75px;height:62px;object-fit:cover;border:1px solid #dce5ef;border-radius:8px}.detail-copy{padding:8px 0}.detail-copy h1{margin:8px 0;font-size:clamp(27px,4vw,38px);line-height:1.2}.detail-copy .price{font-size:25px}.description{white-space:pre-wrap;color:#52677f}.facts{display:flex;gap:8px;flex-wrap:wrap;margin:17px 0}.contact{display:flex;gap:9px;flex-wrap:wrap;margin:20px 0}.contact a,.contact button{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:10px 14px;border:0;border-radius:9px;background:#1769d2;color:#fff;font-weight:700;cursor:pointer}.contact a.secondary,.contact button.secondary{border:1px solid #dce5ef;background:#fff;color:#24415f}.share-row{margin-top:13px}.share-row a,.share-row button{border:0;background:transparent;color:#2463a9;font-weight:650;cursor:pointer}.notice{margin-top:10px;color:#17673c;font-size:13px}.empty{padding:40px;border:1px dashed #b9c8da;border-radius:13px;text-align:center;color:#6d7e93}.pagination{display:flex;justify-content:center;gap:12px;margin:25px 0 40px}.pagination a{padding:9px 13px;border:1px solid #dce5ef;border-radius:8px;background:#fff}.catalog-info{padding:20px;border:1px solid #dce5ef;border-radius:13px;background:#fff}.footer{margin-top:36px;padding:24px 0;border-top:1px solid #dce5ef;color:#71839b;font-size:12px}.footer-inner{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.hidden{display:none!important}@media(max-width:900px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.filters input{grid-column:1/-1}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.shell{padding:0 14px}.top-inner{min-height:62px}.brand-mark{width:34px;height:34px}.top-actions .optional{display:none}.hero{padding:29px 0 18px}.filters{grid-template-columns:minmax(0,1fr);padding:11px}.filters input{grid-column:auto}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}.card-body{padding:10px}.card h2{font-size:14px}.price{font-size:16px}.pill{font-size:10px;padding:3px 7px}.detail{grid-template-columns:1fr;gap:12px;margin-top:18px}.detail-copy{padding:0}.detail-copy h1{font-size:28px}.contact>*{flex:1}.catalog-info{padding:15px}}
 </style></head><body><header class="top"><div class="shell top-inner">${logo}<nav class="top-actions"><a class="optional" href="${attr(`${url.pathname}?lang=th`)}">ไทย</a><a class="optional" href="${attr(`${url.pathname}?lang=en`)}">EN</a></nav></div></header><main class="shell">${args.content}</main><footer class="footer"><div class="shell footer-inner"><span>${htmlEscape(text(args.language ?? "en", "Corevity · Commercial fitness equipment", "Corevity · อุปกรณ์ฟิตเนสเชิงพาณิชย์"))}</span><span>${htmlEscape(text(args.language ?? "en", "Availability may change. Contact our team to confirm.", "สถานะสินค้าอาจเปลี่ยนแปลง กรุณาติดต่อทีมงานเพื่อยืนยัน"))}</span></div></footer><script>
 document.querySelectorAll('[data-share]').forEach(b=>b.addEventListener('click',async()=>{const d={title:document.title,text:b.dataset.share,url:location.href};try{if(navigator.share)await navigator.share(d);else{await navigator.clipboard.writeText(location.href);b.textContent='Copied'}}catch{}}));document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(b.dataset.copy);b.textContent='Copied'}catch{}}));
-</script></body></html>`;
+</script>${chat}</body></html>`;
   return new Response(html, {
     status: args.status ?? 200,
     headers: {
@@ -283,6 +296,8 @@ app.get("/s/:slug/p/:itemSlug", async (c) => {
     image: photo ? `${base}${photo}` : undefined,
     content,
     language,
+    catalogSlug: slug,
+    itemId: item.id,
   });
 });
 
@@ -351,6 +366,7 @@ app.get("/s/:slug", async (c) => {
     image: featured,
     content,
     language,
+    catalogSlug: slug,
   });
 });
 
@@ -498,6 +514,7 @@ app.get("/api/public/catalogs/:slug", async (c) => {
     },
   );
 });
+app.route("/", catalogChatApi);
 app.all("/api/*", (c) => c.json({ error: "Not found." }, 404));
 app.notFound((c) =>
   c.text("Not found", 404, {

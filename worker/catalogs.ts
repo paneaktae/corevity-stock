@@ -1,6 +1,7 @@
 import { Hono, type Context as HonoContext } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "./auth";
+import { allowedSales, lineConfigured, lineRequest } from "./services/line";
 
 export const catalogsRoutes = new Hono<AppEnv>();
 const stamp = () => new Date().toISOString();
@@ -33,6 +34,14 @@ const catalogInput = z
     showPrices: z.boolean().default(true),
     showSold: z.boolean().default(false),
     expiresAt: z.string().datetime().nullable().default(null),
+    assignedSalespersonEmail: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(254)
+      .email()
+      .or(z.literal(""))
+      .default(""),
     items: z
       .array(
         z
@@ -49,6 +58,9 @@ const catalogInput = z
   .strict();
 
 type Context = HonoContext<AppEnv>;
+const catalogChatMessageInput = z
+  .object({ body: z.string().trim().min(1).max(2000) })
+  .strict();
 async function writeActivity(
   c: Context,
   entityType: string,
@@ -179,6 +191,7 @@ catalogsRoutes.get("/catalogs", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT c.id,c.title,c.description,c.slug,c.status,c.customer_id AS customerId,
       c.show_prices AS showPrices,c.show_sold AS showSold,c.expires_at AS expiresAt,
+      c.assigned_salesperson_email AS assignedSalespersonEmail,
       c.created_by AS createdBy,c.created_at AS createdAt,c.updated_at AS updatedAt,
       customers.name AS customerName,
       (SELECT COUNT(*) FROM catalog_items i JOIN products p ON p.id=i.product_id AND p.archived_at IS NULL WHERE i.catalog_id=c.id) AS productCount,
@@ -222,7 +235,8 @@ catalogsRoutes.get("/catalogs/analytics", async (c) => {
 catalogsRoutes.get("/catalogs/:id", async (c) => {
   const catalog = await c.env.DB.prepare(
     `SELECT id,title,description,slug,status,customer_id AS customerId,show_prices AS showPrices,
-      show_sold AS showSold,expires_at AS expiresAt,created_by AS createdBy,created_at AS createdAt,updated_at AS updatedAt
+      show_sold AS showSold,expires_at AS expiresAt,assigned_salesperson_email AS assignedSalespersonEmail,
+      created_by AS createdBy,created_at AS createdAt,updated_at AS updatedAt
      FROM catalogs WHERE id=?`,
   )
     .bind(c.req.param("id"))
@@ -245,6 +259,14 @@ catalogsRoutes.get("/catalogs/:id", async (c) => {
 
 catalogsRoutes.post("/catalogs", async (c) => {
   const input = catalogInput.parse(await c.req.json());
+  if (
+    input.assignedSalespersonEmail &&
+    !allowedSales(c.env).includes(input.assignedSalespersonEmail)
+  )
+    return c.json(
+      { error: { message: "Choose a salesperson with workspace access." } },
+      422,
+    );
   if (input.customerId) {
     const customer = await c.env.DB.prepare(
       "SELECT id FROM customers WHERE id=?",
@@ -262,8 +284,8 @@ catalogsRoutes.post("/catalogs", async (c) => {
   const time = stamp();
   const operations = [
     c.env.DB.prepare(
-      `INSERT INTO catalogs(id,title,description,slug,status,customer_id,show_prices,show_sold,expires_at,created_by,created_at,updated_at)
-       VALUES(?,?,?,?,'ACTIVE',?,?,?,?,?,?,?)`,
+      `INSERT INTO catalogs(id,title,description,slug,status,customer_id,show_prices,show_sold,expires_at,created_by,created_at,updated_at,assigned_salesperson_email)
+       VALUES(?,?,?,?,'ACTIVE',?,?,?,?,?,?,?,?)`,
     ).bind(
       id,
       input.title,
@@ -276,6 +298,7 @@ catalogsRoutes.post("/catalogs", async (c) => {
       c.get("email"),
       time,
       time,
+      input.assignedSalespersonEmail,
     ),
     ...itemStatements(c.env.DB, id, resolved),
   ];
@@ -291,15 +314,34 @@ catalogsRoutes.post("/catalogs", async (c) => {
 });
 
 catalogsRoutes.patch("/catalogs/:id", async (c) => {
-  const input = catalogInput.parse(await c.req.json());
+  const rawInput = await c.req.json();
+  const input = catalogInput.parse(rawInput);
   const id = c.req.param("id");
   const existing = await c.env.DB.prepare(
-    "SELECT id,slug FROM catalogs WHERE id=? AND status='ACTIVE'",
+    "SELECT id,slug,assigned_salesperson_email AS assignedSalespersonEmail FROM catalogs WHERE id=? AND status='ACTIVE'",
   )
     .bind(id)
-    .first<{ id: string; slug: string }>();
+    .first<{
+      id: string;
+      slug: string;
+      assignedSalespersonEmail: string;
+    }>();
   if (!existing)
     return c.json({ error: { message: "Catalog not found." } }, 404);
+  const assignedSalespersonEmail = Object.hasOwn(
+    rawInput,
+    "assignedSalespersonEmail",
+  )
+    ? input.assignedSalespersonEmail
+    : existing.assignedSalespersonEmail;
+  if (
+    assignedSalespersonEmail &&
+    !allowedSales(c.env).includes(assignedSalespersonEmail)
+  )
+    return c.json(
+      { error: { message: "Choose a salesperson with workspace access." } },
+      422,
+    );
   if (input.customerId) {
     const customer = await c.env.DB.prepare(
       "SELECT id FROM customers WHERE id=?",
@@ -357,7 +399,7 @@ catalogsRoutes.patch("/catalogs/:id", async (c) => {
   });
   const statements = [
     c.env.DB.prepare(
-      `UPDATE catalogs SET title=?,description=?,customer_id=?,show_prices=?,show_sold=?,expires_at=?,updated_at=? WHERE id=?`,
+      `UPDATE catalogs SET title=?,description=?,customer_id=?,show_prices=?,show_sold=?,expires_at=?,assigned_salesperson_email=?,updated_at=? WHERE id=?`,
     ).bind(
       input.title,
       input.description,
@@ -365,6 +407,7 @@ catalogsRoutes.patch("/catalogs/:id", async (c) => {
       Number(input.showPrices),
       Number(input.showSold),
       input.expiresAt,
+      assignedSalespersonEmail,
       stamp(),
       id,
     ),
@@ -384,7 +427,7 @@ catalogsRoutes.patch("/catalogs/:id", async (c) => {
 
 catalogsRoutes.post("/catalogs/:id/duplicate", async (c) => {
   const source = await c.env.DB.prepare(
-    "SELECT title,description,show_prices,show_sold FROM catalogs WHERE id=? AND status='ACTIVE'",
+    "SELECT title,description,show_prices,show_sold,assigned_salesperson_email FROM catalogs WHERE id=? AND status='ACTIVE'",
   )
     .bind(c.req.param("id"))
     .first<{
@@ -392,6 +435,7 @@ catalogsRoutes.post("/catalogs/:id/duplicate", async (c) => {
       description: string;
       show_prices: number;
       show_sold: number;
+      assigned_salesperson_email: string;
     }>();
   if (!source) return c.json({ error: { message: "Catalog not found." } }, 404);
   const id = crypto.randomUUID();
@@ -404,8 +448,8 @@ catalogsRoutes.post("/catalogs/:id/duplicate", async (c) => {
     .all<Record<string, unknown>>();
   const statements = [
     c.env.DB.prepare(
-      `INSERT INTO catalogs(id,title,description,slug,status,customer_id,show_prices,show_sold,expires_at,created_by,created_at,updated_at)
-       VALUES(?,?,?,?,'ACTIVE',NULL,?,?,NULL,?,?,?)`,
+      `INSERT INTO catalogs(id,title,description,slug,status,customer_id,show_prices,show_sold,expires_at,created_by,created_at,updated_at,assigned_salesperson_email)
+       VALUES(?,?,?,?,'ACTIVE',NULL,?,?,NULL,?,?,?,?)`,
     ).bind(
       id,
       `${source.title} (copy)`.slice(0, 160),
@@ -416,6 +460,7 @@ catalogsRoutes.post("/catalogs/:id/duplicate", async (c) => {
       c.get("email"),
       time,
       time,
+      source.assigned_salesperson_email,
     ),
     ...sourceItems.map((item, index) =>
       c.env.DB.prepare(
@@ -525,3 +570,193 @@ catalogsRoutes.post("/products/:id/unpublish", async (c) => {
   );
   return c.json({ ok: true });
 });
+
+async function constantTimeTextEqual(left: string, right: string) {
+  const encoder = new TextEncoder();
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(left)),
+    crypto.subtle.digest("SHA-256", encoder.encode(right)),
+  ]);
+  const leftBytes = new Uint8Array(leftHash);
+  const rightBytes = new Uint8Array(rightHash);
+  let difference = 0;
+  for (let index = 0; index < leftBytes.length; index += 1)
+    difference |= leftBytes[index] ^ rightBytes[index];
+  return difference === 0;
+}
+
+async function canAccessCatalogChat(c: Context, assignedEmail: string) {
+  const email = c.get("email").toLowerCase();
+  const admin = (c.env.AUTH_ADMIN_EMAIL ?? allowedSales(c.env)[0] ?? "")
+    .trim()
+    .toLowerCase();
+  return (!!admin && email === admin) || email === assignedEmail.toLowerCase();
+}
+
+catalogsRoutes.get("/catalog-chats", async (c) => {
+  const email = c.get("email").toLowerCase();
+  const admin = (c.env.AUTH_ADMIN_EMAIL ?? allowedSales(c.env)[0] ?? "")
+    .trim()
+    .toLowerCase();
+  const threadId = c.req.query("thread") ?? "";
+  const canViewAll = !!admin && email === admin;
+  const filter = canViewAll ? "1=1" : "lower(t.assigned_email)=?";
+  const statement = c.env.DB.prepare(
+    `SELECT t.id,t.catalog_slug AS catalogSlug,t.catalog_title AS catalogTitle,
+      t.visitor_name AS visitorName,t.visitor_phone AS visitorPhone,t.status,
+      t.assigned_email AS assignedEmail,t.last_message_at AS lastMessageAt,
+      (SELECT body FROM catalog_chat_messages m WHERE m.chat_id=t.id ORDER BY m.id DESC LIMIT 1) AS lastMessage,
+      (SELECT sender_type FROM catalog_chat_messages m WHERE m.chat_id=t.id ORDER BY m.id DESC LIMIT 1) AS lastSender
+     FROM catalog_chats t WHERE ${filter} AND (?='' OR t.id=?)
+     ORDER BY t.last_message_at DESC LIMIT 100`,
+  );
+  const { results } = await (
+    canViewAll
+      ? statement.bind(threadId, threadId)
+      : statement.bind(email, threadId, threadId)
+  ).all();
+  return c.json({ threads: results });
+});
+
+catalogsRoutes.get("/catalog-chats/:id", async (c) => {
+  const id = c.req.param("id");
+  const thread = await c.env.DB.prepare(
+    `SELECT id,catalog_slug AS catalogSlug,catalog_title AS catalogTitle,
+      visitor_name AS visitorName,visitor_phone AS visitorPhone,status,
+      assigned_email AS assignedEmail,created_at AS createdAt,last_message_at AS lastMessageAt
+     FROM catalog_chats WHERE id=?`,
+  )
+    .bind(id)
+    .first<{ assignedEmail: string } & Record<string, unknown>>();
+  if (!thread || !(await canAccessCatalogChat(c, thread.assignedEmail)))
+    return c.json({ error: { message: "Conversation not found." } }, 404);
+  const { results } = await c.env.DB.prepare(
+    `SELECT id,sender_type AS senderType,sender_email AS senderEmail,body,
+      products,created_at AS createdAt FROM catalog_chat_messages
+     WHERE chat_id=? ORDER BY id ASC LIMIT 200`,
+  )
+    .bind(id)
+    .all<{ products: string } & Record<string, unknown>>();
+  return c.json({
+    thread,
+    messages: results.map(({ products, ...message }) => ({
+      ...message,
+      products: JSON.parse(products || "[]"),
+    })),
+  });
+});
+
+catalogsRoutes.post("/catalog-chats/:id/messages", async (c) => {
+  const { body } = catalogChatMessageInput.parse(await c.req.json());
+  const id = c.req.param("id");
+  const thread = await c.env.DB.prepare(
+    "SELECT status,assigned_email AS assignedEmail FROM catalog_chats WHERE id=?",
+  )
+    .bind(id)
+    .first<{ status: string; assignedEmail: string }>();
+  if (!thread || !(await canAccessCatalogChat(c, thread.assignedEmail)))
+    return c.json({ error: { message: "Conversation not found." } }, 404);
+  if (thread.status !== "OPEN")
+    return c.json({ error: { message: "Conversation is closed." } }, 409);
+  const createdAt = stamp();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      "INSERT INTO catalog_chat_messages(chat_id,sender_type,sender_email,body,products,created_at) VALUES(?,'SALESPERSON',?,?,'[]',?)",
+    ).bind(id, c.get("email"), body, createdAt),
+    c.env.DB.prepare(
+      "UPDATE catalog_chats SET updated_at=?,last_message_at=? WHERE id=?",
+    ).bind(createdAt, createdAt, id),
+  ]);
+  return c.json({ ok: true, createdAt }, 201);
+});
+
+catalogsRoutes.patch("/catalog-chats/:id", async (c) => {
+  const { status } = z
+    .object({ status: z.enum(["OPEN", "CLOSED"]) })
+    .strict()
+    .parse(await c.req.json());
+  const id = c.req.param("id");
+  const thread = await c.env.DB.prepare(
+    "SELECT assigned_email AS assignedEmail FROM catalog_chats WHERE id=?",
+  )
+    .bind(id)
+    .first<{ assignedEmail: string }>();
+  if (!thread || !(await canAccessCatalogChat(c, thread.assignedEmail)))
+    return c.json({ error: { message: "Conversation not found." } }, 404);
+  await c.env.DB.prepare(
+    "UPDATE catalog_chats SET status=?,updated_at=? WHERE id=?",
+  )
+    .bind(status, stamp(), id)
+    .run();
+  return c.json({ ok: true, status });
+});
+
+export async function notifyCatalogChat(
+  env: AppEnv["Bindings"],
+  request: Request,
+) {
+  const providedSecret =
+    request.headers.get("x-catalog-chat-secret") ?? "";
+  if (
+    !env.CATALOG_CHAT_INTERNAL_SECRET ||
+    !(await constantTimeTextEqual(
+      providedSecret,
+      env.CATALOG_CHAT_INTERNAL_SECRET,
+    ))
+  )
+    return new Response("Unauthorized", { status: 401 });
+  if (!lineConfigured(env))
+    return Response.json({ sent: 0, configured: false });
+  if (Number(request.headers.get("content-length")) > 12000)
+    return Response.json({ error: "Invalid message." }, { status: 413 });
+  const value = (await request.json().catch(() => null)) as {
+    threadId?: unknown;
+    body?: unknown;
+    products?: unknown;
+  } | null;
+  if (
+    !value ||
+    typeof value.threadId !== "string" ||
+    typeof value.body !== "string" ||
+    value.body.length > 2000 ||
+    !Array.isArray(value.products) ||
+    value.products.length > 3 ||
+    value.products.some((product) => typeof product !== "string")
+  )
+    return Response.json({ error: "Invalid message." }, { status: 400 });
+  const thread = await env.DB.prepare(
+    "SELECT catalog_title,visitor_name,visitor_phone,assigned_email FROM catalog_chats WHERE id=?",
+  )
+    .bind(value.threadId)
+    .first<{
+      catalog_title: string;
+      visitor_name: string;
+      visitor_phone: string;
+      assigned_email: string;
+    }>();
+  if (!thread)
+    return Response.json({ error: "Conversation not found." }, { status: 404 });
+  const account = await env.DB.prepare(
+    "SELECT line_user_id FROM line_accounts WHERE enabled=1 AND lower(email)=lower(?) LIMIT 1",
+  )
+    .bind(thread.assigned_email)
+    .first<{ line_user_id: string }>();
+  if (!account) return Response.json({ sent: 0, configured: true });
+  const origin = env.APP_URL || "https://management.corevityusedgym.com";
+  const products = value.products.length
+    ? `\nProducts: ${value.products.map((product) => String(product).slice(0, 120)).join(", ")}`
+    : "";
+  const message = `Catalog inquiry · ${thread.catalog_title || "Corevity catalog"}\nFrom: ${thread.visitor_name || "Catalog visitor"}\nPhone: ${thread.visitor_phone || "Not provided"}\n${value.body.slice(0, 700)}${value.body.length > 700 ? "…" : ""}${products}\n\nReply in workspace: ${origin}/catalog-chats?thread=${encodeURIComponent(value.threadId)}`;
+  try {
+    const response = await lineRequest(env, "message/push", {
+      method: "POST",
+      body: JSON.stringify({
+        to: account.line_user_id,
+        messages: [{ type: "text", text: message }],
+      }),
+    });
+    return Response.json({ sent: response.ok ? 1 : 0, configured: true });
+  } catch {
+    return Response.json({ sent: 0, configured: true });
+  }
+}

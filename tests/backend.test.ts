@@ -196,7 +196,7 @@ describe("D1-backed inventory and sales", () => {
     );
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get("Access-Control-Allow-Methods")).toBe(
-      "GET, OPTIONS",
+      "GET, POST, OPTIONS",
     );
     const deniedPreflight = await publicCatalogWorker.fetch(
       new Request(`http://catalog.test/api/public/catalogs/${catalog.slug}`, {
@@ -1262,6 +1262,164 @@ describe("D1-backed inventory and sales", () => {
   });
 });
 
+describe('Catalog inquiry chat', () => {
+  it('keeps chats scoped to a Sales catalog and protects visitor sessions', async () => {
+    const item = await product('Catalog chat');
+    await product('Outside catalog');
+    const created = await request('/catalogs', 'POST', {
+      title: 'Assigned catalog chat',
+      assignedSalespersonEmail: 'tester@example.test',
+      items: [{ productId: item.id }],
+    });
+    expect(created.status).toBe(201);
+    const catalog = await json<{ id: string; slug: string }>(created);
+    const legacyEdit = await request(`/catalogs/${catalog.id}`, 'PATCH', {
+      title: 'Assigned catalog chat',
+      items: [{ productId: item.id }],
+    });
+    expect(legacyEdit.status).toBe(200);
+    const catalogDetail = await json<{
+      catalog: { assignedSalespersonEmail: string };
+    }>(await request(`/catalogs/${catalog.id}`));
+    expect(catalogDetail.catalog.assignedSalespersonEmail).toBe(
+      'tester@example.test',
+    );
+    const database = await mf.getD1Database('DB');
+    const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
+    const context = {
+      waitUntil: (promise: Promise<unknown>) => void promise,
+    } as ExecutionContext;
+    const fetchPublic = (path: string, init: RequestInit = {}) =>
+      publicCatalogWorker.fetch(
+        new Request(`http://catalog.test${path}`, init),
+        {
+          DB: database,
+          PRODUCT_IMAGES: bucket,
+          PUBLIC_CATALOG_BASE_URL: 'https://catalog.corevityusedgym.com',
+          PUBLIC_STOREFRONT_ORIGINS: 'https://corevityusedgym.com',
+          CATALOG_CHAT_INTERNAL_SECRET: 'test-only-secret',
+        },
+        context,
+      );
+
+    const preflight = await fetchPublic('/api/public/chat', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://corevityusedgym.com',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('Access-Control-Allow-Methods')).toContain(
+      'POST',
+    );
+    expect(preflight.headers.get('Access-Control-Allow-Headers')).toContain(
+      'Authorization',
+    );
+
+    const catalogProducts = await fetchPublic(
+      `/api/public/chat/products?catalog=${catalog.slug}`,
+    );
+    expect(catalogProducts.status).toBe(200);
+    const publicItems = (await catalogProducts.json()) as {
+      products: Array<{ itemId: string; label: string }>;
+    };
+    expect(publicItems.products).toHaveLength(1);
+
+    const start = await fetchPublic('/api/public/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-connecting-ip': '192.0.2.1',
+      },
+      body: JSON.stringify({
+        catalogSlug: catalog.slug,
+        visitorName: 'International buyer',
+        visitorPhone: '+66812345678',
+        body: 'Could you quote shipping to Singapore?',
+        itemIds: [publicItems.products[0].itemId],
+        website: '',
+      }),
+    });
+    expect(start.status).toBe(201);
+    const { session } = (await start.json()) as {
+      session: { id: string; token: string };
+    };
+    expect((await fetchPublic(`/api/public/chat/${session.id}`)).status).toBe(
+      404,
+    );
+
+    const visitorHeaders = { Authorization: `Bearer ${session.token}` };
+    const wrongToken =
+      session.token.slice(0, -1) +
+      (session.token.endsWith("0") ? "1" : "0");
+    expect(
+      (
+        await fetchPublic(`/api/public/chat/${session.id}`, {
+          headers: { Authorization: `Bearer ${wrongToken}` },
+        })
+      ).status,
+    ).toBe(404);
+    const managerDetail = await request(`/catalog-chats/${session.id}`);
+    expect(managerDetail.status).toBe(200);
+    const threadData = (await managerDetail.json()) as {
+      thread: { visitorPhone: string; assignedEmail: string };
+      messages: Array<{ body: string }>;
+    };
+    expect(
+      (
+        await mf.dispatchFetch(
+          `https://example.test/api/catalog-chats/${session.id}`,
+        )
+      ).status,
+    ).toBe(503);
+    expect(threadData.thread).toMatchObject({
+      visitorPhone: '+66812345678',
+      assignedEmail: 'tester@example.test',
+    });
+    expect(threadData.messages[0].body).toContain('Singapore');
+
+    const reply = await request(
+      `/catalog-chats/${session.id}/messages`,
+      'POST',
+      {
+        body: 'We will prepare a shipping quote.',
+      },
+    );
+    expect(reply.status).toBe(201);
+    const visitorMessages = await fetchPublic(
+      `/api/public/chat/${session.id}`,
+      {
+        headers: visitorHeaders,
+      },
+    );
+    expect(visitorMessages.status).toBe(200);
+    expect(await visitorMessages.text()).toContain(
+      'We will prepare a shipping quote.',
+    );
+
+    const closed = await request(`/catalog-chats/${session.id}`, 'PATCH', {
+      status: 'CLOSED',
+    });
+    expect(closed.status).toBe(200);
+    const rejectedReply = await fetchPublic(
+      `/api/public/chat/${session.id}/messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...visitorHeaders },
+        body: JSON.stringify({
+          body: 'Another question',
+          itemIds: [],
+          website: '',
+        }),
+      },
+    );
+    expect(rejectedReply.status).toBe(409);
+  });
+});
+
+
 describe("quotation workflow", () => {
   it("protects quotation endpoints with Cloudflare Access authentication", async () => {
     expect(
@@ -1792,3 +1950,4 @@ describe("Private shared team chat", () => {
     expect((await request("/chat?after=0&before=1")).status).toBe(422);
   });
 });
+

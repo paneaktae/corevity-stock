@@ -17,6 +17,7 @@ import {
   BookOpenText,
   FileText,
   Share2,
+  MessageSquareText,
 } from 'lucide-react';
 import { DashboardPage } from './pages/Dashboard';
 import { InventoryPage, ProductPage, ProductForm } from './pages/Inventory';
@@ -30,11 +31,13 @@ import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
 import { QuotationsPage, QuotationForm, QuotationPage } from './pages/Quotations';
 import { CatalogsPage } from './pages/Catalogs';
+import { CatalogChatsPage } from './pages/CatalogChats';
 import './style.css';
 const navigation = [
   ['/', 'Dashboard', LayoutDashboard],
   ['/inventory', 'Inventory', Dumbbell],
   ['/catalogs', 'Catalogs', Share2],
+  ['/catalog-chats', 'Catalog inquiries', MessageSquareText],
   ['/equipment-guide', 'Equipment guide', BookOpenText],
   ['/customers', 'Customers', Users],
   ['/sales', 'Sales', Kanban],
@@ -138,6 +141,7 @@ function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
               <Route path="/catalogs" element={<CatalogsPage />} />
+              <Route path="/catalog-chats" element={<CatalogChatsPage />} />
               <Route path="/equipment-guide" element={<EquipmentGuidePage />} />
               <Route path="/inventory/new" element={<ProductForm />} />
               <Route path="/inventory/:id" element={<ProductPage />} />

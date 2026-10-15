@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { primaryKey } from 'drizzle-orm/sqlite-core';
 const timestamps = {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
@@ -261,6 +262,9 @@ export const catalogs = sqliteTable('catalogs', {
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
+  assignedSalespersonEmail: text('assigned_salesperson_email')
+    .notNull()
+    .default(''),
 });
 export const catalogItems = sqliteTable('catalog_items', {
   id: text('id').primaryKey(),
@@ -288,3 +292,46 @@ export const catalogEvents = sqliteTable('catalog_events', {
   hour: text('hour').notNull(),
   count: integer('count').notNull().default(0),
 });
+
+export const catalogChats = sqliteTable('catalog_chats', {
+  id: text('id').primaryKey(),
+  tokenHash: text('token_hash').notNull(),
+  catalogSlug: text('catalog_slug').notNull().default(''),
+  catalogTitle: text('catalog_title').notNull().default(''),
+  assignedEmail: text('assigned_email').notNull().default(''),
+  visitorName: text('visitor_name').notNull().default(''),
+  status: text('status', { enum: ['OPEN', 'CLOSED'] })
+    .notNull()
+    .default('OPEN'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  lastMessageAt: text('last_message_at').notNull(),
+  visitorPhone: text('visitor_phone').notNull().default(''),
+});
+export const catalogChatMessages = sqliteTable('catalog_chat_messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  chatId: text('chat_id')
+    .notNull()
+    .references(() => catalogChats.id, { onDelete: 'cascade' }),
+  senderType: text('sender_type', {
+    enum: ['VISITOR', 'SALESPERSON'],
+  }).notNull(),
+  senderEmail: text('sender_email').notNull().default(''),
+  body: text('body').notNull(),
+  products: text('products').notNull().default('[]'),
+  createdAt: text('created_at').notNull(),
+});
+export const catalogChatRateLimits = sqliteTable(
+  'catalog_chat_rate_limits',
+  {
+    visitorHash: text('visitor_hash').notNull(),
+    scope: text('scope', { enum: ['thread', 'message'] }).notNull(),
+    windowStart: text('window_start').notNull(),
+    requestCount: integer('request_count').notNull().default(0),
+  },
+  (table) => ({
+    pk: primaryKey({
+      columns: [table.visitorHash, table.scope, table.windowStart],
+    }),
+  }),
+);
