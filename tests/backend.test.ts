@@ -340,7 +340,7 @@ describe("D1-backed inventory and sales", () => {
     expect(htmlText).toContain('property="og:title"');
     expect(htmlText).toContain('property="og:description"');
     expect(htmlText).toContain('property="og:image"');
-    expect(htmlText).toContain(`/media/catalogs/${catalog.slug}/0`);
+    expect(htmlText).toContain(`/media/catalogs/${catalog.slug}/items/`);
 
     const publicItem = publicData.products[0] as {
       itemId: string;
