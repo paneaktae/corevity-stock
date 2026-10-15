@@ -1,10 +1,5 @@
-import {
-  sqliteTable,
-  text,
-  integer,
-  real,
-  primaryKey,
-} from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { primaryKey } from 'drizzle-orm/sqlite-core';
 const timestamps = {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
@@ -202,14 +197,17 @@ export const quotationItems = sqliteTable('quotation_items', {
   lineTotalMinor: integer('line_total_minor').notNull(),
   sortOrder: integer('sort_order').notNull(),
 });
-export const quotationStatusHistory = sqliteTable('quotation_status_history', {
-  id: text('id').primaryKey(),
-  quotationId: text('quotation_id').notNull(),
-  fromStatus: text('from_status'),
-  toStatus: text('to_status').notNull(),
-  changedBy: text('changed_by').notNull(),
-  createdAt: text('created_at').notNull(),
-});
+export const quotationStatusHistory = sqliteTable(
+  'quotation_status_history',
+  {
+    id: text('id').primaryKey(),
+    quotationId: text('quotation_id').notNull(),
+    fromStatus: text('from_status'),
+    toStatus: text('to_status').notNull(),
+    changedBy: text('changed_by').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+);
 export const productSales = sqliteTable('product_sales', {
   productId: text('product_id')
     .primaryKey()
@@ -294,6 +292,7 @@ export const catalogEvents = sqliteTable('catalog_events', {
   hour: text('hour').notNull(),
   count: integer('count').notNull().default(0),
 });
+
 export const catalogChats = sqliteTable('catalog_chats', {
   id: text('id').primaryKey(),
   tokenHash: text('token_hash').notNull(),
@@ -336,4 +335,3 @@ export const catalogChatRateLimits = sqliteTable(
     }),
   }),
 );
-
