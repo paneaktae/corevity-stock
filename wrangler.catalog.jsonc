@@ -8,21 +8,22 @@
   "preview_urls": false,
   "observability": { "enabled": true },
   "vars": {
-    "PUBLIC_CATALOG_BASE_URL": "https://fitness-equipment-catalog.analyziie.workers.dev"
+    "PUBLIC_CATALOG_BASE_URL": "https://fitness-equipment-catalog.analyziie.workers.dev",
+    "PUBLIC_STOREFRONT_ORIGINS": "https://corevityusedgym.com,https://www.corevityusedgym.com",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "fitness-equipment-manager",
       "database_id": "de34955b-5a97-47a9-9169-3dbed136cb75",
-      "migrations_dir": "drizzle/migrations"
-    }
+      "migrations_dir": "drizzle/migrations",
+    },
   ],
   "r2_buckets": [
     {
       "binding": "PRODUCT_IMAGES",
-      "bucket_name": "fitness-equipment-manager-images"
-    }
+      "bucket_name": "fitness-equipment-manager-images",
+    },
   ],
-  "account_id": "7e8a63993a65056ced687bb043f254ca"
+  "account_id": "7e8a63993a65056ced687bb043f254ca",
 }
