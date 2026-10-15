@@ -16,7 +16,6 @@ import {
   Eye,
   Star,
   Trash2,
-  Copy,
 } from "lucide-react";
 import type {
   Product,
