@@ -100,6 +100,23 @@ async function json<T>(response: Awaited<ReturnType<typeof request>>) {
   return (await response.json()) as T;
 }
 describe('password sign-in migration', () => {
+  it('rejects a still-valid session once the account is no longer allowed', async () => {
+    const db = await mf.getD1Database('DB');
+    const token = 'removed-account-session';
+    await db
+      .prepare("INSERT INTO auth_users(email,password_salt,password_hash,password_iterations,created_at,updated_at) VALUES(?,'test-only-salt','test-only-hash',100000,'','')")
+      .bind('removed@example.test')
+      .run();
+    await db
+      .prepare('INSERT INTO auth_sessions(token_hash,email,created_at,expires_at,last_seen_at) VALUES(?,?,?,?,?)')
+      .bind(await digest(token), 'removed@example.test', new Date().toISOString(), '2099-01-01T00:00:00Z', new Date().toISOString())
+      .run();
+    for (const path of ['/products', '/customers', '/dashboard'])
+      expect((await request(path, 'GET', undefined, { Cookie: `corevity_session=${token}` })).status).toBe(403);
+    const session = await request('/auth/session', 'GET', undefined, { Cookie: `corevity_session=${token}` });
+    expect(await json(session)).toMatchObject({ authenticated: false });
+  });
+
   it('lets an existing authorized user set a password and sign in with a session cookie', async () => {
     const enrolled = await request('/auth/password', 'POST', {
       password: 'aB3!xy',

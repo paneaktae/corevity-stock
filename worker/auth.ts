@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { MetaEnvironment } from './services/meta/config';
+import { workspaceSalesEmails } from './services/line';
 export type Bindings = Env & MetaEnvironment & {
   LOCAL_MOCK_EMAIL?: string;
   AI_API_KEY?: string;
@@ -39,9 +40,19 @@ export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {
       'SELECT email FROM auth_sessions WHERE token_hash=? AND expires_at>? LIMIT 1',
     ).bind(tokenHash, new Date().toISOString()).first<{ email: string }>();
     if (session) {
-      c.set('email', session.email);
-      c.set('authMethod', 'password');
-      return next();
+      // A session outlives access changes, so re-check the account on every request.
+      if ((await workspaceSalesEmails(c.env)).includes(session.email.toLowerCase())) {
+        c.set('email', session.email);
+        c.set('authMethod', 'password');
+        return next();
+      }
+      c.set('email', '');
+      c.set('authMethod', 'none');
+      if (optional) return next();
+      return c.json(
+        { error: { message: 'This account no longer has access.', code: 'FORBIDDEN' } },
+        403,
+      );
     }
   }
   if (
