@@ -28,3 +28,15 @@ Production before this deploy was the 2026-10-31 full build (`6eeefffc…`) plus
 ## Rollback
 
 `npx wrangler rollback d7abb3fe-4d3a-4e74-b961-f50b9a16bada --env production`
+
+## Follow-up deploy: constant-time internal secret — 2026-11-08
+
+Deployed with user approval after reviewing the unmerged 2026-10-15 branches. Of the 12 commits on `main`, `feature/shareable-product-catalog`, `fix/catalog-production-parity` and `integration/catalog-only-public-api`, only one change was missing from production: `/internal/catalog-chat-notify` (reachable from the internet) compared `x-catalog-chat-secret` with `!==`. Commit `00acc13` now compares SHA-256 digests in constant time. A new test checks that a wrong, longer or missing secret gets 401 and sends no LINE push.
+
+| Worker | Previous version | New version |
+| --- | --- | --- |
+| fitness-equipment-manager | 9dbb20c5-62f6-4c45-8c96-a40c009a6732 | 5c0129b3-fa4e-46a4-a614-c59870af6d2f |
+
+Checks: `npm run check` passed with 146 of 146 tests, and the build and dry run passed. There were no pending migrations. On live, `/` returned 200, `/api/products` returned 401, the notify endpoint returned 401 both with no secret and with a wrong secret, and the public catalog API and the website returned 200. The real catalog-to-CRM notification, which uses the correct secret, was not triggered. It will be exercised by the next real customer message.
+
+Rollback: `npx wrangler rollback 9dbb20c5-62f6-4c45-8c96-a40c009a6732 --env production`
