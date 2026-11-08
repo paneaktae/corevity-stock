@@ -13,3 +13,17 @@ Changing dates, reporting page, or the CPL target clears prior analysis. Respons
 The existing server-side `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` configuration is used. The key is stored in ignored `.dev.vars` for local development. Production uses its existing Worker secret configuration and must be configured separately if needed. No database migration is required. Analysis saves an audit-backed draft and does not edit ads or budgets.
 
 Validated with TypeScript, ESLint, the application build, 34 campaign and Meta workflow tests, a browser demo including invalid-target rejection and clearing stale results, and a successful live AI request using a synthetic campaign. The browser demo is not evidence of actual campaign results. Deployed to production on 2026-11-01 (Asia/Bangkok); see `campaign-ai-deployment-2026-11-01.md`.
+
+## Ads analysis v2 (2026-11-08, local only — not deployed)
+
+`GET /api/meta/ads/analysis` and `GET /api/meta/ads/breakdown` power the Ads dashboard.
+
+- **Objective-aware results.** Each campaign's result follows its Meta `objective`: Messenger conversations started (`onsite_conversion.messaging_conversation_started_7d`), lead-form leads (`lead`), link clicks (traffic) or reach (awareness). The cost per result and the optional target use that result. Traffic and awareness campaigns are `NOT_APPLICABLE` to a lead/chat target. Account cost per lead/chat only uses spend from campaigns optimised for that result.
+- **More fields.** `reach`, `frequency`, `inline_link_clicks` (link CTR, cost per link click) and `objective` are requested. Reach is never added across rows.
+- **Period comparison.** The same campaigns are fetched for the previous range of equal length (filtered by campaign ID), with percent changes.
+- **Daily trend.** Account-level `time_increment=1` for the selected range (first reporting page only).
+- **Rule-based alerts** (`shared/ads-analytics.ts`, thresholds in `ADS_THRESHOLDS`): low data, spend or clicks without results, creative fatigue, high frequency, link CTR drop, CPM rise, cost-per-result rise, low link CTR or click-to-result rate vs peers in the same report, above target, top performer. Rules point to tests; they do not prove causes.
+- **Drill-down** per campaign by ad set, ad, age, gender, platform, placement (`publisher_platform,platform_position`) or region. Up to 100 rows.
+- The AI receives results, previous period, changes, alerts and thresholds; numeric claims are still checked against them.
+
+Each dashboard load costs up to 3 Graph insight calls (cached 5 minutes). Demo mode uses deterministic simulated data (`worker/services/meta/demo-insights.ts`). Live Meta data has not been checked with this version.

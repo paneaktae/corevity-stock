@@ -6,25 +6,36 @@ import { digest } from '../../auth';
 import type { MetaReport } from '../../../shared/meta-domain';
 import { metaContext, type MetaContext } from './context';
 import type { MetaResource } from './provider';
-import { object, string } from './graph';
+import { string } from './graph';
 import { timestamp, rateLimit } from './store';
-import type { CampaignPerformance } from '../../../shared/campaign-analysis';
-export const metricNumber = (value: unknown): number | null => {
-  if ((typeof value !== 'number' && typeof value !== 'string') || value === '')
-    return null;
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : null;
-};
+import type {
+  AdsAnalysis,
+  AdsBreakdown,
+  BreakdownDimension,
+  CampaignPerformance,
+} from '../../../shared/campaign-analysis';
+import { breakdownDimensions } from '../../../shared/campaign-analysis';
+import {
+  LEAD_ACTION,
+  actionValue,
+  adsAlerts,
+  dailyPoints,
+  divide,
+  metricNumber,
+  peerBenchmarks,
+  performanceMetrics,
+  periodChanges,
+  periodMetrics,
+  previousRange,
+  totalMetrics,
+} from '../../../shared/ads-analytics';
+export { metricNumber };
 export function adsMetrics(rows: Record<string, unknown>[]) {
   const total = (key: string) =>
     rows.length && rows.every((v) => metricNumber(v[key]) !== null)
       ? rows.reduce((sum, row) => sum + metricNumber(row[key])!, 0)
       : null;
-  const leadCounts = rows.map((row) => {
-    if (!Array.isArray(row.actions)) return null;
-    const lead = row.actions.map(object).find((v) => v.action_type === 'lead');
-    return lead ? metricNumber(lead.value) : null;
-  });
+  const leadCounts = rows.map((row) => actionValue(row, LEAD_ACTION));
   const leads =
     leadCounts.length && leadCounts.every((v) => v !== null)
       ? leadCounts.reduce<number>((sum, v) => sum + v!, 0)
@@ -32,8 +43,6 @@ export function adsMetrics(rows: Record<string, unknown>[]) {
   const spend = total('spend'),
     impressions = total('impressions'),
     clicks = total('clicks');
-  const divide = (a: number | null, b: number | null, multiplier = 1) =>
-    a !== null && b !== null && b > 0 ? (a / b) * multiplier : null;
   return {
     spend,
     impressions,
@@ -45,41 +54,53 @@ export function adsMetrics(rows: Record<string, unknown>[]) {
     costPerLead: divide(spend, leads),
   };
 }
+function groupRows(
+  rows: Record<string, unknown>[],
+  key: (row: Record<string, unknown>) => string,
+) {
+  const grouped = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows) {
+    const id = key(row);
+    if (id) grouped.set(id, [...(grouped.get(id) ?? []), row]);
+  }
+  return [...grouped];
+}
 export function campaignPerformance(
   rows: Record<string, unknown>[],
   targetCostPerLead?: number,
 ): CampaignPerformance[] {
-  const grouped = new Map<string, Record<string, unknown>[]>();
-  for (const row of rows) {
-    const id = string(row.campaign_id);
-    if (id) grouped.set(id, [...(grouped.get(id) ?? []), row]);
-  }
-  return [...grouped].map(([campaignId, entries]) => {
-    const metrics = adsMetrics(entries);
-    const { clicks, leads, costPerLead } = metrics;
-    return {
-      campaignId,
-      name: string(entries[0].campaign_name) || campaignId,
-      ...metrics,
-      leadConversionRate:
-        clicks !== null && clicks > 0 && leads !== null
-          ? (leads / clicks) * 100
-          : null,
-      assessment:
-        metrics.spend === null ||
-        metrics.impressions === null ||
-        metrics.impressions === 0 ||
-        clicks === null
-          ? 'INSUFFICIENT_DATA'
-          : targetCostPerLead === undefined
-            ? 'NO_TARGET'
-            : costPerLead === null
-              ? 'INSUFFICIENT_DATA'
-              : costPerLead > targetCostPerLead
-                ? 'ABOVE_TARGET'
-                : 'ON_TARGET',
-    };
-  });
+  return groupRows(rows, (row) => string(row.campaign_id)).map(
+    ([campaignId, entries]) => {
+      const objective = string(entries[0].objective) || null;
+      const metrics = performanceMetrics(entries, objective);
+      const { clicks, leads, costPerResult, resultType } = metrics;
+      return {
+        campaignId,
+        name: string(entries[0].campaign_name) || campaignId,
+        objective,
+        ...metrics,
+        leadConversionRate:
+          clicks !== null && clicks > 0 && leads !== null
+            ? (leads / clicks) * 100
+            : null,
+        assessment:
+          metrics.spend === null ||
+          metrics.impressions === null ||
+          metrics.impressions === 0 ||
+          clicks === null
+            ? 'INSUFFICIENT_DATA'
+            : targetCostPerLead === undefined
+              ? 'NO_TARGET'
+              : resultType !== 'LEAD' && resultType !== 'MESSAGING'
+                ? 'NOT_APPLICABLE'
+                : costPerResult === null
+                  ? 'INSUFFICIENT_DATA'
+                  : costPerResult > targetCostPerLead
+                    ? 'ABOVE_TARGET'
+                    : 'ON_TARGET',
+      };
+    },
+  );
 }
 export function reportRange(
   query: Record<string, string>,
@@ -147,11 +168,26 @@ function safeRows(resource: MetaResource, rows: Record<string, unknown>[]) {
     insights: [
       'campaign_id',
       'campaign_name',
+      'adset_id',
+      'adset_name',
+      'ad_id',
+      'ad_name',
+      'objective',
+      'date_start',
+      'date_stop',
       'spend',
       'impressions',
+      'reach',
+      'frequency',
       'clicks',
+      'inline_link_clicks',
       'actions',
       'account_currency',
+      'age',
+      'gender',
+      'publisher_platform',
+      'platform_position',
+      'region',
     ],
     forms: ['id', 'name', 'status', 'questions'],
     formLeads: ['id', 'form_id', 'created_time', 'field_data'],
@@ -239,7 +275,186 @@ export async function readMetaReport(
     .run();
   return report;
 }
+const campaignIdPattern = /^\d+$|^demo:[\w-]+$/;
+/** Current period, the previous period of equal length and daily account totals. */
+export async function buildAdsAnalysis(
+  env: Bindings,
+  ctx: MetaContext,
+  range: { since: string; until: string; after?: string },
+  targetCostPerResult?: number,
+): Promise<AdsAnalysis & { report: MetaReport }> {
+  const report = await readMetaReport(env, ctx, 'insights', range);
+  const campaigns = campaignPerformance(report.data, targetCostPerResult);
+  const prior = previousRange(range.since, range.until);
+  const warnings: string[] = [];
+  const ids = campaigns
+    .map((c) => c.campaignId)
+    .filter((id) => campaignIdPattern.test(id));
+  const [previous, daily] = await Promise.all([
+    ids.length
+      ? readMetaReport(env, ctx, 'insights', {
+          ...prior,
+          campaignIds: ids.join(','),
+        }).catch(() => {
+          warnings.push('PREVIOUS_PERIOD_UNAVAILABLE');
+          return null;
+        })
+      : Promise.resolve(null),
+    range.after
+      ? Promise.resolve(null)
+      : readMetaReport(env, ctx, 'insights', {
+          since: range.since,
+          until: range.until,
+          level: 'account',
+          timeIncrement: '1',
+        }).catch(() => {
+          warnings.push('DAILY_UNAVAILABLE');
+          return null;
+        }),
+  ]);
+  const previousById = new Map(
+    campaignPerformance(previous?.data ?? []).map((c) => [c.campaignId, c]),
+  );
+  for (const campaign of campaigns) {
+    const before = previousById.get(campaign.campaignId);
+    campaign.previous = before ? periodMetrics(before) : null;
+    campaign.changes = before
+      ? periodChanges(periodMetrics(campaign), periodMetrics(before))
+      : {};
+  }
+  const benchmarks = peerBenchmarks(campaigns);
+  for (const campaign of campaigns)
+    campaign.alerts = adsAlerts(campaign, benchmarks, targetCostPerResult);
+  return {
+    report,
+    mode: report.mode,
+    fetchedAt: report.fetchedAt,
+    currency: report.currency,
+    timezone: report.timezone,
+    notice: report.notice,
+    after: report.after,
+    range: { since: range.since, until: range.until },
+    previousRange: prior,
+    campaigns,
+    totals: {
+      current: totalMetrics(report.data),
+      previous: previous
+        ? totalMetrics(
+            previous.data.filter((row) =>
+              ids.includes(string(row.campaign_id)),
+            ),
+          )
+        : null,
+    },
+    daily: daily ? dailyPoints(daily.data) : null,
+    targetCostPerResult: targetCostPerResult ?? null,
+    warnings,
+  };
+}
+const breakdownParams: Record<BreakdownDimension, Record<string, string>> = {
+  adset: { level: 'adset' },
+  ad: { level: 'ad' },
+  age: { breakdowns: 'age' },
+  gender: { breakdowns: 'gender' },
+  publisher_platform: { breakdowns: 'publisher_platform' },
+  platform_position: { breakdowns: 'publisher_platform,platform_position' },
+  region: { breakdowns: 'region' },
+};
+function breakdownKey(
+  dimension: BreakdownDimension,
+  row: Record<string, unknown>,
+) {
+  if (dimension === 'adset')
+    return [
+      string(row.adset_id),
+      string(row.adset_name) || string(row.adset_id),
+    ];
+  if (dimension === 'ad')
+    return [string(row.ad_id), string(row.ad_name) || string(row.ad_id)];
+  if (dimension === 'platform_position') {
+    const label = [
+      string(row.publisher_platform),
+      string(row.platform_position),
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    return [label, label];
+  }
+  const value = string(row[dimension]);
+  return [value, value];
+}
+export async function readAdsBreakdown(
+  env: Bindings,
+  ctx: MetaContext,
+  range: { since: string; until: string },
+  campaignId: string,
+  dimension: BreakdownDimension,
+): Promise<AdsBreakdown> {
+  const report = await readMetaReport(env, ctx, 'insights', {
+    since: range.since,
+    until: range.until,
+    campaignIds: campaignId,
+    ...breakdownParams[dimension],
+  });
+  const rows = groupRows(
+    report.data,
+    (row) => breakdownKey(dimension, row)[0],
+  ).map(([key, entries]) => ({
+    key,
+    label: breakdownKey(dimension, entries[0])[1] || key,
+    campaignId: string(entries[0].campaign_id) || null,
+    ...performanceMetrics(entries, string(entries[0].objective) || null),
+  }));
+  rows.sort((a, b) => (b.spend ?? 0) - (a.spend ?? 0));
+  return {
+    mode: report.mode,
+    dimension,
+    campaignId,
+    rows,
+    hasMore: Boolean(report.after),
+    currency: report.currency,
+    fetchedAt: report.fetchedAt,
+  };
+}
 export const metaReportRoutes = new Hono<AppEnv>();
+metaReportRoutes.get('/ads/analysis', async (c) => {
+  const ctx = await metaContext(c, 'readAds', true);
+  await rateLimit(c.env, ctx.email, 'reports', 60);
+  const query = c.req.query();
+  const params = reportRange(
+    query,
+    ctx.status.adAccount?.timezone ?? 'Asia/Bangkok',
+  );
+  const target = query.target
+    ? z.coerce.number().finite().positive().max(1e10).parse(query.target)
+    : undefined;
+  const { report: _report, ...analysis } = await buildAdsAnalysis(
+    c.env,
+    ctx,
+    params,
+    target,
+  );
+  return c.json(analysis);
+});
+metaReportRoutes.get('/ads/breakdown', async (c) => {
+  const ctx = await metaContext(c, 'readAds', true);
+  await rateLimit(c.env, ctx.email, 'reports', 60);
+  const query = c.req.query();
+  const params = reportRange(
+    query,
+    ctx.status.adAccount?.timezone ?? 'Asia/Bangkok',
+  );
+  const campaignId = z
+    .string()
+    .max(100)
+    .regex(campaignIdPattern)
+    .parse(query.campaignId);
+  const dimension = z.enum(breakdownDimensions).parse(query.dimension);
+  return c.json(
+    await readAdsBreakdown(c.env, ctx, params, campaignId, dimension),
+  );
+});
+
 for (const [path, resource] of [
   ['/ads/campaigns', 'campaigns'],
   ['/ads/adsets', 'adsets'],

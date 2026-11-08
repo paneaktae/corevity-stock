@@ -1,5 +1,6 @@
 import type { MetaStatus } from '../../../shared/meta';
 import { MetaGraphClient, object, string, providerId } from './graph';
+import { demoInsights } from './demo-insights';
 
 export type MetaResource =
   | 'campaigns'
@@ -50,22 +51,34 @@ export class MockMetaProvider implements MetaProvider {
       },
     };
   }
-  async list(resource: MetaResource): Promise<ProviderPage> {
+  async list(
+    resource: MetaResource,
+    params: Record<string, string> = {},
+  ): Promise<ProviderPage> {
+    if (resource === 'insights')
+      return { data: demoInsights(params), after: null };
     const data: Record<MetaResource, Record<string, unknown>[]> = {
       campaigns: [
         {
           id: 'demo:campaign-1',
-          name: 'Demo · Cardio equipment',
+          name: 'Demo · Cardio equipment (Messenger)',
           status: 'PAUSED',
-          objective: 'OUTCOME_LEADS',
+          objective: 'OUTCOME_ENGAGEMENT',
           daily_budget: '50000',
         },
         {
           id: 'demo:campaign-2',
-          name: 'Demo · Strength equipment',
+          name: 'Demo · Strength equipment (Lead form)',
+          status: 'PAUSED',
+          objective: 'OUTCOME_LEADS',
+          daily_budget: '30000',
+        },
+        {
+          id: 'demo:campaign-3',
+          name: 'Demo · Clearance sale (Website)',
           status: 'PAUSED',
           objective: 'OUTCOME_TRAFFIC',
-          daily_budget: '30000',
+          daily_budget: '20000',
         },
       ],
       adsets: [
@@ -87,26 +100,7 @@ export class MockMetaProvider implements MetaProvider {
           adset_id: 'demo:adset',
         },
       ],
-      insights: [
-        {
-          campaign_id: 'demo:campaign-1',
-          campaign_name: 'Demo · Cardio equipment',
-          spend: '4820',
-          impressions: '12400',
-          clicks: '380',
-          actions: [{ action_type: 'lead', value: '18' }],
-          account_currency: 'THB',
-        },
-        {
-          campaign_id: 'demo:campaign-2',
-          campaign_name: 'Demo · Strength equipment',
-          spend: '3150',
-          impressions: '8900',
-          clicks: '190',
-          actions: [{ action_type: 'lead', value: '11' }],
-          account_currency: 'THB',
-        },
-      ],
+      insights: [],
       forms: [
         {
           id: 'demo:form',
@@ -266,14 +260,7 @@ export class GraphAPIMetaProvider implements MetaProvider {
         ...cursor,
       });
     }
-    return this.client.list(account() + '/insights', {
-      fields:
-        'campaign_id,campaign_name,spend,impressions,clicks,actions,account_currency',
-      level: 'campaign',
-      time_range: JSON.stringify({ since: params.since, until: params.until }),
-      use_account_attribution_setting: 'true',
-      ...cursor,
-    });
+    return this.client.list(account() + '/insights', insightQuery(params));
   }
   async write(operation: MetaWrite, params: Record<string, string>) {
     if (!this.client) throw new Error('META_NOT_CONFIGURED');
@@ -346,4 +333,74 @@ export class GraphAPIMetaProvider implements MetaProvider {
       fields: 'id,created_time,form_id,field_data',
     });
   }
+}
+
+const insightLevels = ['account', 'campaign', 'adset', 'ad'] as const;
+const allowedBreakdowns = new Set([
+  'age',
+  'gender',
+  'publisher_platform',
+  'publisher_platform,platform_position',
+  'region',
+]);
+/** Graph API query for account insights. Unknown params are never forwarded. */
+export function insightQuery(params: Record<string, string>) {
+  const level = insightLevels.find((v) => v === params.level) ?? 'campaign';
+  const ids: Record<(typeof insightLevels)[number], string[]> = {
+    account: [],
+    campaign: ['campaign_id', 'campaign_name', 'objective'],
+    adset: [
+      'campaign_id',
+      'campaign_name',
+      'objective',
+      'adset_id',
+      'adset_name',
+    ],
+    ad: [
+      'campaign_id',
+      'campaign_name',
+      'objective',
+      'adset_id',
+      'adset_name',
+      'ad_id',
+      'ad_name',
+    ],
+  };
+  const daily = params.timeIncrement === '1';
+  const breakdowns = allowedBreakdowns.has(params.breakdowns ?? '')
+    ? params.breakdowns
+    : '';
+  const campaignIds = (params.campaignIds ?? '')
+    .split(',')
+    .filter((id) => /^\d+$/.test(id));
+  return {
+    fields: [
+      ...ids[level],
+      ...(daily ? ['date_start'] : []),
+      'spend',
+      'impressions',
+      'reach',
+      'frequency',
+      'clicks',
+      'inline_link_clicks',
+      'actions',
+      'account_currency',
+    ].join(','),
+    level,
+    time_range: JSON.stringify({ since: params.since, until: params.until }),
+    use_account_attribution_setting: 'true',
+    ...(daily ? { time_increment: '1' } : {}),
+    ...(breakdowns ? { breakdowns } : {}),
+    ...(campaignIds.length
+      ? {
+          filtering: JSON.stringify([
+            { field: 'campaign.id', operator: 'IN', value: campaignIds },
+          ]),
+        }
+      : {}),
+    ...(daily || breakdowns || level === 'ad' || level === 'adset'
+      ? { limit: '100' }
+      : {}),
+    ...(params.after ? { after: params.after } : {}),
+  };
 }

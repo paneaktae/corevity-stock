@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -24,6 +24,8 @@ import type { Customer, Salesperson } from '../../shared/schemas';
 import { api, date, money, label, useData, useDebounce } from '../lib';
 import { Header, ErrorBox, Loading, Field, Empty } from '../components/ui';
 import { SalespersonSelect } from '../components/SalespersonSelect';
+import { DateFilters, dateDefaults } from '../components/MetaDateFilters';
+import { AdsDashboard } from '../components/AdsDashboard';
 import { useLanguage } from '../i18n';
 import {
   metaCopy as copy,
@@ -1321,81 +1323,6 @@ function MetaLeads({ status }: { status: MetaStatus }) {
     </section>
   );
 }
-function dateDefaults() {
-  const until = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Bangkok',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-  return {
-    until,
-    since: new Date(Date.parse(until) - 6 * 86400000)
-      .toISOString()
-      .slice(0, 10),
-  };
-}
-function DateFilters({
-  since,
-  until,
-  onChange,
-}: {
-  since: string;
-  until: string;
-  onChange: (from: string, to: string) => void;
-}) {
-  return (
-    <div className="meta-date-filters">
-      <label>
-        {copy('From', 'เริ่ม')}
-        <input
-          type="date"
-          value={since}
-          onChange={(e) => onChange(e.target.value, until)}
-        />
-      </label>
-      <label>
-        {copy('To', 'ถึง')}
-        <input
-          type="date"
-          value={until}
-          onChange={(e) => onChange(since, e.target.value)}
-        />
-      </label>
-      <select
-        aria-label={copy('Date preset', 'ช่วงเวลา')}
-        defaultValue="7"
-        onChange={(e) => {
-          const today = dateDefaults().until,
-            day = 86400000;
-          const value = e.target.value;
-          if (value === 'custom') return;
-          if (value === 'yesterday') {
-            const y = new Date(Date.parse(today) - day)
-              .toISOString()
-              .slice(0, 10);
-            onChange(y, y);
-          } else if (value === 'month')
-            onChange(today.slice(0, 8) + '01', today);
-          else
-            onChange(
-              new Date(Date.parse(today) - (Number(value) - 1) * day)
-                .toISOString()
-                .slice(0, 10),
-              today,
-            );
-        }}
-      >
-        <option value="1">{copy('Today', 'วันนี้')}</option>
-        <option value="yesterday">{copy('Yesterday', 'เมื่อวาน')}</option>
-        <option value="7">{copy('Last 7 days', '7 วันล่าสุด')}</option>
-        <option value="30">{copy('Last 30 days', '30 วันล่าสุด')}</option>
-        <option value="month">{copy('This month', 'เดือนนี้')}</option>
-        <option value="custom">{copy('Custom', 'กำหนดเอง')}</option>
-      </select>
-    </div>
-  );
-}
 function MetaAnalytics({
   page,
   status,
@@ -1403,28 +1330,14 @@ function MetaAnalytics({
   page: boolean;
   status: MetaStatus;
 }) {
-  const language = useLanguage();
-  const analysisRequest = useRef(0);
+  if (!page) return <AdsDashboard status={status} />;
+  return <PageInsights />;
+}
+function PageInsights() {
   const [range, setRange] = useState(dateDefaults),
-    [after, setAfter] = useState<string | null>(null),
-    [ai, setAi] = useState<AiDraftResponse | null>(null),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
-    [targetCpl, setTargetCpl] = useState('');
-  const target = targetCpl.trim() ? Number(targetCpl) : undefined;
-  const validTarget =
-    target === undefined ||
-    (Number.isFinite(target) && target > 0 && target <= 1e10);
-  function resetAnalysis() {
-    analysisRequest.current++;
-    setAi(null);
-    setBusy(false);
-    setError('');
-  }
+    [after, setAfter] = useState<string | null>(null);
   const query = new URLSearchParams({ ...range, ...(after ? { after } : {}) }),
-    result = useMetaData<MetaReport>(
-      (page ? '/meta/page/insights?' : '/meta/ads/insights?') + query,
-    );
+    result = useMetaData<MetaReport>('/meta/page/insights?' + query);
   return (
     <section className="panel">
       <DateFilters
@@ -1432,403 +1345,70 @@ function MetaAnalytics({
         onChange={(since, until) => {
           setRange({ since, until });
           setAfter(null);
-          resetAnalysis();
         }}
       />
-      <ErrorBox message={error || result.error} />
+      <ErrorBox message={result.error} />
       {!result.data && !result.error && <Loading />}
       {result.data && (
         <>
           <p className="muted">{result.data.notice}</p>
           <small>
             {copy('Current page · fetched', 'ข้อมูลหน้านี้ · ดึงเมื่อ')}:{' '}
-            {date(result.data.fetchedAt)} · {result.data.currency ?? '—'} ·{' '}
+            {date(result.data.fetchedAt)} ·{' '}
             {result.data.timezone ?? copy('Page timezone', 'เวลาเพจ')}
           </small>
-          {!page && (
-            <div className="meta-kpis">
-              {Object.entries(result.data.metrics ?? {}).map(([key, value]) => (
-                <article key={key}>
-                  <span>{key}</span>
-                  <strong>
-                    {value === null
-                      ? copy('Unavailable', 'ไม่มีข้อมูล')
-                      : new Intl.NumberFormat(undefined, {
-                          maximumFractionDigits: 2,
-                        }).format(value)}
-                  </strong>
-                </article>
-              ))}
-            </div>
-          )}
-          {page ? (
-            <div className="meta-page-metrics">
-              {result.data.data.map((row, index) => (
-                <article key={text(row.name) + index}>
-                  <h3>{text(row.name)}</h3>
-                  {Array.isArray(row.values) &&
-                    row.values.map((item: unknown, i: number) => {
-                      const value =
-                        item && typeof item === 'object'
-                          ? (item as Record<string, unknown>)
-                          : {};
-                      return (
-                        <div key={i} className="meta-trend-row">
-                          <span>{text(value.end_time)}</span>
-                          <meter
-                            aria-label={text(row.name)}
-                            min={0}
-                            max={Math.max(
-                              1,
-                              ...(row.values as Record<string, unknown>[]).map(
-                                (v) => Number(v.value) || 0,
-                              ),
-                            )}
-                            value={Number(value.value) || 0}
-                          />
-                          <strong>{text(value.value)}</strong>
-                        </div>
-                      );
-                    })}
-                </article>
-              ))}
-              {result.data.data.length === 0 && (
-                <p>
-                  {copy(
-                    'No supported metrics are configured or available. Configure verified metric names for the selected API version.',
-                    'ยังไม่มี Metric ที่รองรับหรือพร้อมใช้งาน กรุณาตั้งชื่อ Metric ที่ตรวจแล้วสำหรับ API version ที่เลือก',
-                  )}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="meta-table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{copy('Campaign', 'แคมเปญ')}</th>
-                    <th>{copy('Spend', 'ค่าใช้จ่าย')}</th>
-                    <th>{copy('Impressions', 'การแสดงผล')}</th>
-                    <th>{copy('Clicks', 'คลิก')}</th>
-                    <th>{copy('Lead actions', 'Lead actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.data.data.map((row, i) => (
-                    <tr key={text(row.campaign_id) + i}>
-                      <td>{text(row.campaign_name)}</td>
-                      <td>{text(row.spend)}</td>
-                      <td>{text(row.impressions)}</td>
-                      <td>{text(row.clicks)}</td>
-                      <td>
-                        {Array.isArray(row.actions)
-                          ? text(
-                              (row.actions as Record<string, unknown>[]).find(
-                                (v) => v.action_type === 'lead',
-                              )?.value,
-                            )
-                          : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="meta-page-metrics">
+            {result.data.data.map((row, index) => (
+              <article key={text(row.name) + index}>
+                <h3>{text(row.name)}</h3>
+                {Array.isArray(row.values) &&
+                  row.values.map((item: unknown, i: number) => {
+                    const value =
+                      item && typeof item === 'object'
+                        ? (item as Record<string, unknown>)
+                        : {};
+                    return (
+                      <div key={i} className="meta-trend-row">
+                        <span>{text(value.end_time)}</span>
+                        <meter
+                          aria-label={text(row.name)}
+                          min={0}
+                          max={Math.max(
+                            1,
+                            ...(row.values as Record<string, unknown>[]).map(
+                              (v) => Number(v.value) || 0,
+                            ),
+                          )}
+                          value={Number(value.value) || 0}
+                        />
+                        <strong>{text(value.value)}</strong>
+                      </div>
+                    );
+                  })}
+              </article>
+            ))}
+            {result.data.data.length === 0 && (
+              <p>
+                {copy(
+                  'No supported metrics are configured or available. Configure verified metric names for the selected API version.',
+                  'ยังไม่มี Metric ที่รองรับหรือพร้อมใช้งาน กรุณาตั้งชื่อ Metric ที่ตรวจแล้วสำหรับ API version ที่เลือก',
+                )}
+              </p>
+            )}
+          </div>
           {result.data.after && (
-            <button
-              onClick={() => {
-                resetAnalysis();
-                setAfter(result.data!.after);
-              }}
-            >
+            <button onClick={() => setAfter(result.data!.after)}>
               {copy('Next reporting page', 'หน้ารายงานถัดไป')}
             </button>
           )}
           {after && (
-            <button
-              onClick={() => {
-                resetAnalysis();
-                setAfter(null);
-              }}
-            >
+            <button onClick={() => setAfter(null)}>
               {copy('First reporting page', 'หน้ารายงานแรก')}
             </button>
-          )}
-          {!page && (
-            <div className="meta-analysis-controls">
-              <Field
-                label={copy(
-                  'Target cost per lead (optional, account currency)',
-                  'ต้นทุนต่อลีดเป้าหมาย (ไม่บังคับ ใช้สกุลเงินบัญชี)',
-                )}
-              >
-                <input
-                  type="number"
-                  min="0.01"
-                  max="10000000000"
-                  step="any"
-                  value={targetCpl}
-                  placeholder={copy(
-                    'Leave blank if no lead target',
-                    'เว้นว่างหากไม่ได้ตั้งเป้าลีด',
-                  )}
-                  aria-invalid={!validTarget}
-                  onChange={(event) => {
-                    resetAnalysis();
-                    setTargetCpl(event.target.value);
-                  }}
-                />
-              </Field>
-              <p className="muted">
-                {copy(
-                  'Use a CPL target only for campaigns measured on lead generation. Analysis covers this reporting page and selected dates.',
-                  'ใส่เป้าต้นทุนลีดเมื่อแคมเปญวัดผลด้วยลีดเท่านั้น วิเคราะห์ตามช่วงวันที่และหน้ารายงานนี้',
-                )}
-              </p>
-              <button
-                disabled={
-                  !status.capabilities.useAI ||
-                  busy ||
-                  !validTarget ||
-                  result.data.data.length === 0
-                }
-                aria-busy={busy}
-                onClick={async () => {
-                  const requestId = ++analysisRequest.current;
-                  setBusy(true);
-                  setAi(null);
-                  setError('');
-                  try {
-                    const response = await api<AiDraftResponse>(
-                      '/meta/ai/analyze-campaign',
-                      {
-                        method: 'POST',
-                        body: json({
-                          ...range,
-                          ...(after ? { after } : {}),
-                          language,
-                          ...(target !== undefined
-                            ? { targetCostPerLead: target }
-                            : {}),
-                        }),
-                      },
-                    );
-                    if (analysisRequest.current === requestId) setAi(response);
-                  } catch (reason) {
-                    if (analysisRequest.current === requestId)
-                      setError((reason as Error).message);
-                  } finally {
-                    if (analysisRequest.current === requestId) setBusy(false);
-                  }
-                }}
-              >
-                <Sparkles size={16} />
-                {busy
-                  ? copy('Analyzing campaigns…', 'กำลังวิเคราะห์แคมเปญ…')
-                  : copy('Analyze each campaign', 'วิเคราะห์แยกแต่ละแคมเปญ')}
-              </button>
-            </div>
-          )}
-          {ai && (
-            <div className="meta-ai-review">
-              <h3>
-                {copy(
-                  'Campaign performance and next actions',
-                  'ผลประเมินและสิ่งที่ควรปรับรายแคมเปญ',
-                )}
-              </h3>
-              <p>
-                {copy(
-                  'Observed data and calculated metrics appear above. These suggestions do not establish causation or change campaigns.',
-                  'ข้อมูลสังเกตและค่าคำนวณอยู่ด้านบน คำแนะนำนี้ไม่ได้ยืนยันเหตุและผลหรือแก้แคมเปญ',
-                )}
-              </p>
-              <CampaignAnalysisResults analysis={ai} />
-              <p>{ai.content.budgetSuggestion}</p>
-              {ai.content.ideas?.map((idea) => (
-                <article key={idea.productId}>
-                  <h4>
-                    {copy(
-                      'Copy and creative proposal',
-                      'แนวคิดข้อความและชิ้นงาน',
-                    )}
-                  </h4>
-                  <p>{idea.copy}</p>
-                  <p>{idea.creative}</p>
-                  <p>{idea.audience}</p>
-                </article>
-              ))}
-              <Link
-                to={
-                  '/meta/campaigns?name=' +
-                  encodeURIComponent(ai.content.suggestedCampaignName ?? '')
-                }
-              >
-                {copy(
-                  'Create a reviewed campaign draft',
-                  'สร้างร่างแคมเปญเพื่อตรวจทาน',
-                )}
-              </Link>
-            </div>
           )}
         </>
       )}
     </section>
-  );
-}
-function CampaignAnalysisResults({ analysis }: { analysis: AiDraftResponse }) {
-  const scope = analysis.content.reportScope;
-  const format = (value: number | null, percent = false) =>
-    value === null
-      ? copy('Unavailable', 'ไม่มีข้อมูล')
-      : new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(
-          value,
-        ) + (percent ? '%' : '');
-  const assessment = {
-    NO_TARGET: copy('No CPL target set', 'ยังไม่ได้ตั้งเป้าต้นทุนลีด'),
-    INSUFFICIENT_DATA: copy(
-      'Insufficient data to assess CPL',
-      'ข้อมูลยังไม่พอประเมินต้นทุนลีด',
-    ),
-    ON_TARGET: copy(
-      'Observed CPL meets target',
-      'ต้นทุนลีดที่รายงานอยู่ในเป้า',
-    ),
-    ABOVE_TARGET: copy(
-      'Observed CPL exceeds target',
-      'ต้นทุนลีดที่รายงานสูงกว่าเป้า',
-    ),
-  };
-  const areas = {
-    CREATIVE: copy('Creative and copy', 'ภาพและข้อความโฆษณา'),
-    AUDIENCE: copy('Audience', 'กลุ่มเป้าหมาย'),
-    LANDING_PAGE: copy('Landing page / lead form', 'หน้าปลายทาง / ฟอร์มลีด'),
-    BUDGET: copy('Budget', 'งบประมาณ'),
-    TRACKING: copy('Tracking and lead quality', 'การติดตามผลและคุณภาพลีด'),
-  };
-  return (
-    <div className="meta-campaign-analysis">
-      {analysis.simulated && (
-        <p className="meta-window-warning">
-          {copy(
-            'DEMO: simulated data and advice',
-            'DEMO: ข้อมูลและคำแนะนำจำลอง',
-          )}
-        </p>
-      )}
-      {scope && (
-        <p className="muted">
-          {scope.since} – {scope.until} · {scope.currency ?? '—'} ·{' '}
-          {scope.timezone ?? '—'}
-          {' · '}
-          {copy('Data fetched', 'ข้อมูลดึงเมื่อ')} {date(scope.fetchedAt)}
-          {scope.targetCostPerLead !== null && (
-            <>
-              {' '}
-              · {copy('CPL target', 'ต้นทุนลีดเป้าหมาย')}:{' '}
-              {format(scope.targetCostPerLead)}
-            </>
-          )}
-          {scope.hasMore && (
-            <>
-              <br />
-              {copy(
-                'More campaigns are on the next reporting page. Analyze that page separately.',
-                'ยังมีแคมเปญในหน้ารายงานถัดไป กรุณาเปิดหน้านั้นเพื่อวิเคราะห์เพิ่มเติม',
-              )}
-            </>
-          )}
-        </p>
-      )}
-      {(analysis.content.comparison ?? []).map((campaign) => {
-        const recommendation = analysis.content.recommendations?.find(
-          (row) => row.campaignId === campaign.campaignId,
-        );
-        const metrics = [
-          [copy('Spend', 'ค่าใช้จ่าย'), format(campaign.spend)],
-          [copy('Impressions', 'การแสดงผล'), format(campaign.impressions)],
-          [copy('All clicks', 'คลิกทั้งหมด'), format(campaign.clicks)],
-          [copy('Lead actions', 'จำนวน Lead actions'), format(campaign.leads)],
-          ['CTR', format(campaign.ctr, true)],
-          ['CPC', format(campaign.cpc)],
-          ['CPM', format(campaign.cpm)],
-          [copy('Cost per lead', 'ต้นทุนต่อลีด'), format(campaign.costPerLead)],
-          [
-            copy('Lead actions / all clicks', 'Lead actions / คลิกทั้งหมด'),
-            format(campaign.leadConversionRate, true),
-          ],
-        ];
-        return (
-          <article key={campaign.campaignId} className="meta-campaign-card">
-            <div className="meta-draft-heading">
-              <h4>{campaign.name}</h4>
-              <span
-                className={
-                  'meta-assessment ' + campaign.assessment.toLowerCase()
-                }
-              >
-                {assessment[campaign.assessment]}
-              </span>
-            </div>
-            <small>{campaign.campaignId}</small>
-            <dl className="meta-campaign-metrics">
-              {metrics.map(([name, value]) => (
-                <div key={name}>
-                  <dt>{name}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ))}
-            </dl>
-            <h5>
-              {copy(
-                'Assessment from available evidence',
-                'ประเมินจากข้อมูลที่มี',
-              )}
-            </h5>
-            <p>
-              {recommendation?.suggestion ||
-                copy(
-                  'No AI advice available. Retry analysis.',
-                  'ยังไม่มีคำแนะนำ AI กรุณาลองวิเคราะห์ใหม่',
-                )}
-            </p>
-            {Boolean(recommendation?.improvements?.length) && (
-              <>
-                <h5>
-                  {copy('What to test next', 'สิ่งที่ควรปรับและทดสอบต่อ')}
-                </h5>
-                <ol className="meta-campaign-actions">
-                  {recommendation!.improvements!.map((improvement, index) => (
-                    <li key={index}>
-                      <strong>{areas[improvement.area]}</strong>
-                      <p>{improvement.action}</p>
-                      <p className="muted">
-                        {copy('Measure', 'ติดตามผล')}: {improvement.measure}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
-              </>
-            )}
-          </article>
-        );
-      })}
-      {!analysis.content.comparison?.length && (
-        <p>
-          {copy(
-            'No campaigns reported for these dates.',
-            'ไม่มีข้อมูลแคมเปญในช่วงวันที่เลือก',
-          )}
-        </p>
-      )}
-      <p className="muted">
-        {copy(
-          'CTR uses all clicks. Lead actions are attributed actions, not deduplicated CRM customers. Revenue and ROAS are unavailable. Missing values are not zero.',
-          'CTR ใช้คลิกทั้งหมด Lead actions เป็นการกระทำที่ Meta ระบุแหล่งที่มา ไม่ใช่จำนวนลูกค้า CRM ที่ตัดซ้ำแล้ว ยังไม่มียอดขายและ ROAS ค่าที่ไม่มีข้อมูลไม่ได้หมายถึงศูนย์',
-        )}
-      </p>
-    </div>
   );
 }
 function MetaPublishing({

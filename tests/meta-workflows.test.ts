@@ -1101,13 +1101,53 @@ describe('Complete Demo isolation and human-reviewed AI', () => {
     );
     expect(demoEgress).toBe(0);
   });
+  it('serves period comparison, daily trend, alerts and breakdowns in Demo without egress', async () => {
+    const analysis = await read<
+      import('../shared/campaign-analysis').AdsAnalysis
+    >(
+      await demoRequest(
+        '/meta/ads/analysis?since=2026-10-01&until=2026-10-07&target=165',
+      ),
+    );
+    expect(analysis).toMatchObject({
+      mode: 'DEMO',
+      previousRange: { since: '2026-09-24', until: '2026-09-30' },
+      targetCostPerResult: 165,
+    });
+    expect(analysis.daily).toHaveLength(7);
+    expect(analysis.totals.previous).not.toBeNull();
+    expect(analysis.campaigns.every((c) => c.previous && c.alerts)).toBe(true);
+    expect(
+      analysis.campaigns
+        .find((c) => c.campaignId === 'demo:campaign-1')
+        ?.alerts?.map((a) => a.code),
+    ).toContain('HIGH_FREQUENCY');
+    const breakdown = await read<
+      import('../shared/campaign-analysis').AdsBreakdown
+    >(
+      await demoRequest(
+        '/meta/ads/breakdown?since=2026-10-01&until=2026-10-07&campaignId=demo:campaign-1&dimension=ad',
+      ),
+    );
+    expect(breakdown.rows.map((r) => r.label)).toContain(
+      'Video · equipment in use',
+    );
+    expect(
+      (
+        await demoRequest(
+          '/meta/ads/breakdown?campaignId=demo:campaign-1&dimension=device',
+        )
+      ).status,
+    ).toBe(422);
+    expect(demoEgress).toBe(0);
+  });
   it('returns grounded per-campaign metrics, target assessment and actionable advice without ad writes', async () => {
     const writesBefore = writes;
     const response = await demoRequest('/meta/ai/analyze-campaign', 'POST', {
       since: '2026-10-01',
       until: '2026-10-07',
       language: 'th',
-      targetCostPerLead: 270,
+      targetCostPerLead: 165,
     });
     expect(response.status).toBe(201);
     const draft = await read<import('../src/meta').AiDraftResponse>(response);
@@ -1115,18 +1155,27 @@ describe('Complete Demo isolation and human-reviewed AI', () => {
     expect(draft.content.reportScope).toMatchObject({
       since: '2026-10-01',
       until: '2026-10-07',
-      targetCostPerLead: 270,
+      targetCostPerLead: 165,
       currency: 'THB',
       hasMore: false,
     });
-    expect(draft.content.comparison).toHaveLength(2);
+    expect(draft.content.comparison).toHaveLength(3);
     expect(draft.content.comparison?.[0]).toMatchObject({
       campaignId: 'demo:campaign-1',
-      spend: 4820,
-      leads: 18,
+      resultType: 'MESSAGING',
+      spend: 4865.42,
+      results: 30,
       assessment: 'ON_TARGET',
     });
-    expect(draft.content.comparison?.[1].assessment).toBe('ABOVE_TARGET');
+    expect(draft.content.comparison?.[1]).toMatchObject({
+      resultType: 'LEAD',
+      leads: 19,
+      assessment: 'ABOVE_TARGET',
+    });
+    expect(draft.content.comparison?.[2]).toMatchObject({
+      resultType: 'LINK_CLICK',
+      assessment: 'NOT_APPLICABLE',
+    });
     expect(draft.content.recommendations?.map((v) => v.campaignId)).toEqual(
       draft.content.comparison?.map((v) => v.campaignId),
     );
