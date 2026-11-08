@@ -144,6 +144,17 @@ describe('LINE linking and reminders', () => {
     expect(pushes).toHaveLength(5);
     expect(pushes[4].to).toBe(userId);
     expect(pushes[4].messages[0].text).toContain('Catalog inquiry · Private catalog');
+
+    // The internal endpoint is publicly reachable, so a wrong or missing secret must be refused.
+    const forged: Record<string, string>[] = [{ 'x-catalog-chat-secret': 'internal-tesX' }, { 'x-catalog-chat-secret': 'internal-test-extra' }, {}];
+    for (const headers of forged) {
+      const refused = await notifyCatalogChat(env, new Request('https://management.internal/internal/catalog-chat-notify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ threadId: session.id, body: 'Forged', products: [] }),
+      }));
+      expect(refused.status).toBe(401);
+    }
+    expect(pushes).toHaveLength(5);
   });
 
   it('retries team chat mention alerts and links directly to the mentioned message', async () => {

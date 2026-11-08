@@ -22,6 +22,21 @@ export async function digest(value: string) {
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+// Compare secrets without leaking how many leading characters match.
+// Hashing first gives both sides the same length; the XOR loop runs on Workers and in tests.
+export async function secretsEqual(provided: string, expected: string) {
+  const encoder = new TextEncoder();
+  const [left, right] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(provided)),
+    crypto.subtle.digest('SHA-256', encoder.encode(expected)),
+  ]);
+  const a = new Uint8Array(left);
+  const b = new Uint8Array(right);
+  let difference = 0;
+  for (let index = 0; index < a.length; index += 1) difference |= a[index] ^ b[index];
+  return difference === 0;
+}
+
 function cookieValue(header: string | undefined, name: string) {
   for (const item of (header ?? '').split(';')) {
     const [key, ...value] = item.trim().split('=');

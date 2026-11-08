@@ -2,6 +2,7 @@ import { Hono, type Context as HonoContext } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 import type { AppEnv } from './auth';
+import { secretsEqual } from './auth';
 import { lineConfigured, lineRequest, workspaceSalesEmails } from './services/line';
 
 export const catalogsRoutes = new Hono<AppEnv>();
@@ -704,7 +705,7 @@ catalogsRoutes.patch('/catalog-chats/:id', async (c) => {
 });
 
 export async function notifyCatalogChat(env: AppEnv['Bindings'], request: Request) {
-  if (!env.CATALOG_CHAT_INTERNAL_SECRET || request.headers.get('x-catalog-chat-secret') !== env.CATALOG_CHAT_INTERNAL_SECRET)
+  if (!env.CATALOG_CHAT_INTERNAL_SECRET || !(await secretsEqual(request.headers.get('x-catalog-chat-secret') ?? '', env.CATALOG_CHAT_INTERNAL_SECRET)))
     return new Response('Unauthorized', { status: 401 });
   if (!lineConfigured(env)) return Response.json({ sent: 0, configured: false });
   const payload = z.object({ threadId: z.string().uuid(), body: z.string().max(2000), products: z.array(z.string().max(120)).max(3) }).strict().safeParse(await request.json().catch(() => null));
