@@ -14,7 +14,7 @@ The existing server-side `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` configurati
 
 Validated with TypeScript, ESLint, the application build, 34 campaign and Meta workflow tests, a browser demo including invalid-target rejection and clearing stale results, and a successful live AI request using a synthetic campaign. The browser demo is not evidence of actual campaign results. Deployed to production on 2026-11-01 (Asia/Bangkok); see `campaign-ai-deployment-2026-11-01.md`.
 
-## Ads analysis v2 (2026-11-08, local only — not deployed)
+## Ads analysis v2 (deployed 2026-11-08, see `ads-analysis-deployment-2026-11-08.md`)
 
 `GET /api/meta/ads/analysis` and `GET /api/meta/ads/breakdown` power the Ads dashboard.
 
