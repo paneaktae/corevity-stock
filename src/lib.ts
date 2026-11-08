@@ -4,6 +4,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public fields: Record<string, string[]> = {},
+    public code = '',
+    public conflicts: Array<{ eventId: string; title: string; startsAt: string; endsAt: string | null; attendeeEmail: string; attendeeName: string }> = [],
   ) {
     super(message);
   }
@@ -26,11 +28,16 @@ export async function api<T>(
       message:
         'The server did not return data. Check your sign-in and connection.',
     },
-  }))) as { error?: { message?: string; fields?: Record<string, string[]> } };
+  }))) as { error?: {
+    message?: string; fields?: Record<string, string[]>; code?: string;
+    conflicts?: Array<{ eventId: string; title: string; startsAt: string; endsAt: string | null; attendeeEmail: string; attendeeName: string }>;
+  } };
   if (!response.ok)
     throw new ApiError(
       data.error?.message ?? 'Request failed',
       data.error?.fields,
+      data.error?.code,
+      data.error?.conflicts,
     );
   return data as T;
 }

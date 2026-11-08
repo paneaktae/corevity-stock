@@ -13,7 +13,7 @@ import {
   Sparkles,
   ArrowLeft,
   ArrowRight,
-  Eye,
+  Pencil,
   Star,
   Trash2,
   Copy,
@@ -58,6 +58,7 @@ export function InventoryPage() {
     category: params.get('category') ?? '',
     status: params.get('status') ?? '',
     condition: '',
+    targetBodyPart: '',
     sort: 'newest',
   });
   const { data, error, reload } = useData<Product[]>(
@@ -143,7 +144,7 @@ export function InventoryPage() {
           />
         </label>
         <div className="filters">
-          {(['brand', 'category', 'status', 'condition'] as const).map((k) => (
+          {(['brand', 'category', 'status', 'condition', 'targetBodyPart'] as const).map((k) => (
             <select
               key={k}
               aria-label={t(
@@ -152,6 +153,7 @@ export function InventoryPage() {
                   category: 'All categories',
                   status: 'All statuses',
                   condition: 'All conditions',
+                  targetBodyPart: 'All specifications',
                 }[k],
               )}
               value={filters[k]}
@@ -164,6 +166,7 @@ export function InventoryPage() {
                     category: 'All categories',
                     status: 'All statuses',
                     condition: 'All conditions',
+                    targetBodyPart: 'All specifications',
                   }[k],
                 )}
               </option>
@@ -206,11 +209,12 @@ export function InventoryPage() {
                 <tr>
                   {[
                     t('Equipment'),
+                    t('Specification'),
                     t('Category / Condition'),
                     t('Cost'),
                     t('Selling price'),
                     t('Status'),
-                    t('Location'),
+                    t('Internal notes'),
                     '',
                   ].map((h, i) => (
                     <th key={i}>{h}</th>
@@ -233,6 +237,7 @@ export function InventoryPage() {
                         </div>
                       </Link>
                     </td>
+                    <td>{p.targetBodyPart || '—'}</td>
                     <td>
                       {p.category || '—'}
                       <small>{t(p.condition) || t('Not specified')}</small>
@@ -251,17 +256,19 @@ export function InventoryPage() {
                         <small>{p.reservedCustomerName}</small>
                       )}
                     </td>
-                    <td>{p.location || '—'}</td>
+                    <td className="inventory-note-cell">
+                      <span title={p.notes}>{p.notes || '—'}</span>
+                    </td>
                     <td>
                       <Link
                         className="icon-button"
                         aria-label={localized(
-                          `Open ${p.model}`,
-                          `เปิด ${p.model}`,
+                          `Edit ${p.model}`,
+                          `แก้ไข ${p.model}`,
                         )}
                         to={`/inventory/${p.id}`}
                       >
-                        <Eye size={18} />
+                        <Pencil size={18} />
                       </Link>
                     </td>
                   </tr>
@@ -281,6 +288,9 @@ export function InventoryPage() {
                   <small>{p.sku}</small>
                   <h3>{p.brand}</h3>
                   <p>{p.model}</p>
+                  <small>
+                    {t('Specification')}: {p.targetBodyPart || '—'}
+                  </small>
                   <strong>{money(p.sellingPrice)}</strong>
                   <UsdPrice amount={p.sellingPrice} />
                   <Badge value={p.status} />
@@ -288,6 +298,11 @@ export function InventoryPage() {
                     <small>
                       {t('Reserved for')}
                       {p.reservedCustomerName}
+                    </small>
+                  )}
+                  {p.notes && (
+                    <small className="inventory-note-preview">
+                      {t('Internal notes')}: {p.notes}
                     </small>
                   )}
                 </div>
@@ -349,6 +364,7 @@ async function compressProductPhoto(file: File): Promise<File> {
 const blank: ProductFormValues = {
   brand: '',
   model: '',
+  targetBodyPart: '',
   status: 'AVAILABLE',
   sku: '',
   category: '',
@@ -357,6 +373,7 @@ const blank: ProductFormValues = {
   purchaseCost: '',
   sellingPrice: '',
   location: '',
+  catalogDetail: '',
   descriptionTh: '',
   descriptionEn: '',
   shortDescription: '',
@@ -366,8 +383,9 @@ const blank: ProductFormValues = {
 const textFields = [
   ['brand', 'Brand *'],
   ['model', 'Model *'],
+  ['targetBodyPart', 'Specification'],
   ['sku', 'SKU'],
-  ['category', 'Category'],
+  ['category', 'Category *'],
   ['serialNumber', 'Serial number'],
   ['location', 'Location'],
 ] as const;
@@ -513,9 +531,29 @@ export function ProductForm() {
   );
   const { data: settings } = useData<Settings>('/settings');
   const [form, setForm] = useState<ProductFormValues>(blank);
+  const [categorySuggestionsOpen, setCategorySuggestionsOpen] = useState(false);
+  const [activeCategorySuggestion, setActiveCategorySuggestion] = useState(-1);
+  const [brandSuggestionsOpen, setBrandSuggestionsOpen] = useState(false);
+  const [activeBrandSuggestion, setActiveBrandSuggestion] = useState(-1);
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
+  const categorySuggestions = (settings?.categories ?? []).filter((category) =>
+    category.toLocaleLowerCase().includes(form.category.trim().toLocaleLowerCase()),
+  );
+  const brandSuggestions = (settings?.brands ?? []).filter((brand) =>
+    brand.toLocaleLowerCase().includes(form.brand.trim().toLocaleLowerCase()),
+  );
+  function selectCategory(category: string) {
+    setForm((current) => ({ ...current, category }));
+    setCategorySuggestionsOpen(false);
+    setActiveCategorySuggestion(-1);
+  }
+  function selectBrand(brand: string) {
+    setForm((current) => ({ ...current, brand }));
+    setBrandSuggestionsOpen(false);
+    setActiveBrandSuggestion(-1);
+  }
   useEffect(() => {
     if (id && detail) setForm(detail.product);
   }, [id, detail]);
@@ -604,26 +642,80 @@ export function ProductForm() {
                   </>
                 ) : k === 'brand' ? (
                   <>
-                    <input
-                      list="product-brand-options"
-                      required
-                      value={form.brand}
-                      placeholder={t('Search or type a brand')}
-                      onChange={(e) =>
-                        setForm({ ...form, brand: e.target.value })
-                      }
-                    />
-                    <datalist id="product-brand-options">
-                      {[
-                        ...new Set(
-                          [...(settings?.brands ?? []), form.brand].filter(
-                            Boolean,
-                          ),
-                        ),
-                      ].map((brand) => (
-                        <option key={brand} value={brand} />
-                      ))}
-                    </datalist>
+                    <div className="product-brand-autocomplete">
+                      <input
+                        id="product-brand-input"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-expanded={brandSuggestionsOpen}
+                        aria-controls="product-brand-suggestions"
+                        aria-activedescendant={
+                          activeBrandSuggestion >= 0
+                            ? `product-brand-option-${activeBrandSuggestion}`
+                            : undefined
+                        }
+                        autoComplete="off"
+                        required
+                        value={form.brand}
+                        placeholder={t('Search or type a brand')}
+                        onFocus={() => setBrandSuggestionsOpen(true)}
+                        onBlur={() => setBrandSuggestionsOpen(false)}
+                        onChange={(e) => {
+                          setForm({ ...form, brand: e.target.value });
+                          setBrandSuggestionsOpen(true);
+                          setActiveBrandSuggestion(-1);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setBrandSuggestionsOpen(false);
+                            setActiveBrandSuggestion(-1);
+                          } else if (e.key === 'ArrowDown' && brandSuggestions.length) {
+                            e.preventDefault();
+                            setBrandSuggestionsOpen(true);
+                            setActiveBrandSuggestion((current) =>
+                              Math.min(current + 1, brandSuggestions.length - 1),
+                            );
+                          } else if (e.key === 'ArrowUp' && brandSuggestions.length) {
+                            e.preventDefault();
+                            setActiveBrandSuggestion((current) => Math.max(current - 1, 0));
+                          } else if (
+                            e.key === 'Enter' &&
+                            brandSuggestionsOpen &&
+                            activeBrandSuggestion >= 0
+                          ) {
+                            e.preventDefault();
+                            selectBrand(brandSuggestions[activeBrandSuggestion]);
+                          }
+                        }}
+                      />
+                      {brandSuggestionsOpen && (
+                        <div
+                          id="product-brand-suggestions"
+                          className="product-brand-suggestions"
+                          role="listbox"
+                          aria-label={t('Available brands')}
+                        >
+                          {brandSuggestions.length ? (
+                            brandSuggestions.map((brand, index) => (
+                              <button
+                                id={`product-brand-option-${index}`}
+                                key={brand}
+                                type="button"
+                                role="option"
+                                aria-selected={activeBrandSuggestion === index}
+                                className={activeBrandSuggestion === index ? 'active' : ''}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => selectBrand(brand)}
+                              >
+                                {brand}
+                              </button>
+                            ))
+                          ) : (
+                            <p>{t('No matching brands')}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <small>
                       <Link to="/settings">
                         {t('Manage brands in Settings')}
@@ -632,26 +724,79 @@ export function ProductForm() {
                   </>
                 ) : k === 'category' ? (
                   <>
-                    <input
-                      list="product-category-options"
-                      value={form.category}
-                      placeholder={t('Search or type a category')}
-                      onChange={(e) =>
-                        setForm({ ...form, category: e.target.value })
-                      }
-                    />
-                    <datalist id="product-category-options">
-                      {[
-                        ...new Set(
-                          [
-                            ...(settings?.categories ?? []),
-                            form.category,
-                          ].filter(Boolean),
-                        ),
-                      ].map((category) => (
-                        <option key={category} value={category} />
-                      ))}
-                    </datalist>
+                    <div className="product-category-autocomplete">
+                      <input
+                        id="product-category-input"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-expanded={categorySuggestionsOpen}
+                        aria-controls="product-category-suggestions"
+                        aria-activedescendant={
+                          activeCategorySuggestion >= 0
+                            ? `product-category-option-${activeCategorySuggestion}`
+                            : undefined
+                        }
+                        autoComplete="off"
+                        required
+                        value={form.category}
+                        placeholder={t('Search or type a category')}
+                        onFocus={() => setCategorySuggestionsOpen(true)}
+                        onChange={(e) => {
+                          setForm({ ...form, category: e.target.value });
+                          setCategorySuggestionsOpen(true);
+                          setActiveCategorySuggestion(-1);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setCategorySuggestionsOpen(false);
+                            setActiveCategorySuggestion(-1);
+                          } else if (e.key === 'ArrowDown' && categorySuggestions.length) {
+                            e.preventDefault();
+                            setCategorySuggestionsOpen(true);
+                            setActiveCategorySuggestion((current) =>
+                              Math.min(current + 1, categorySuggestions.length - 1),
+                            );
+                          } else if (e.key === 'ArrowUp' && categorySuggestions.length) {
+                            e.preventDefault();
+                            setActiveCategorySuggestion((current) => Math.max(current - 1, 0));
+                          } else if (
+                            e.key === 'Enter' &&
+                            categorySuggestionsOpen &&
+                            activeCategorySuggestion >= 0
+                          ) {
+                            e.preventDefault();
+                            selectCategory(categorySuggestions[activeCategorySuggestion]);
+                          }
+                        }}
+                      />
+                      {categorySuggestionsOpen && (
+                        <div
+                          id="product-category-suggestions"
+                          className="product-category-suggestions"
+                          role="listbox"
+                          aria-label={t('Available categories')}
+                        >
+                          {categorySuggestions.length ? (
+                            categorySuggestions.map((category, index) => (
+                              <button
+                                id={`product-category-option-${index}`}
+                                key={category}
+                                type="button"
+                                role="option"
+                                aria-selected={activeCategorySuggestion === index}
+                                className={activeCategorySuggestion === index ? 'active' : ''}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => selectCategory(category)}
+                              >
+                                {category}
+                              </button>
+                            ))
+                          ) : (
+                            <p>{t('No matching categories')}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <small>
                       <Link to="/settings">
                         {t('Manage categories in Settings')}
@@ -661,6 +806,7 @@ export function ProductForm() {
                 ) : (
                   <input
                     required={k === 'model'}
+                    placeholder={k === 'targetBodyPart' ? t('e.g. Bicep') : undefined}
                     value={form[k]}
                     onChange={(e) => setForm({ ...form, [k]: e.target.value })}
                   />
@@ -760,6 +906,19 @@ export function ProductForm() {
           </Field>
         </section>
         <section className="panel">
+          <h2>Catalog Detail</h2>
+          <p className="muted">{t('Enter catalog details manually. AI will never overwrite this text.')}</p>
+          <Field label="Catalog Detail" error={fields.catalogDetail}>
+            <textarea
+              rows={8}
+              maxLength={10000}
+              value={form.catalogDetail || ''}
+              disabled={busy}
+              onChange={(e) => setForm({ ...form, catalogDetail: e.target.value })}
+            />
+          </Field>
+        </section>
+        <section className="panel">
           <h2>{t('Descriptions & sales copy')}</h2>
           <p className="muted">
             {t(
@@ -806,6 +965,7 @@ export function ProductPage() {
     error: loadError,
     reload,
   } = useData<ProductDetail>(`/products/${id}`);
+  const { data: financeCost } = useData<{ purchaseCost: number; allocatedProductCosts: number; totalCost: number; estimatedGrossProfit: number; estimatedGrossMargin: number | null; realizedSellingPrice: number | null; realizedGrossProfit: number | null }>(id ? `/finance/products/${id}/cost` : null);
   const { data: customers } = useData<Customer[]>('/customers');
   const { data: catalogConfig } = useData<{ publicBaseUrl: string }>(
     '/catalogs/config',
@@ -819,19 +979,6 @@ export function ProductPage() {
   const [reserveNotes, setReserveNotes] = useState('');
   const [draft, setDraft] = useState<Partial<Descriptions> | null>(null);
   const [notice, setNotice] = useState('');
-  const [publicDraft, setPublicDraft] = useState({
-    showPrice: false,
-    publicDescriptionTh: '',
-    publicDescriptionEn: '',
-  });
-  useEffect(() => {
-    if (d?.product)
-      setPublicDraft({
-        showPrice: d.product.showPrice,
-        publicDescriptionTh: d.product.publicDescriptionTh,
-        publicDescriptionEn: d.product.publicDescriptionEn,
-      });
-  }, [d?.product]);
   async function action(path: string, body?: unknown, method = 'POST') {
     setBusy(true);
     setError('');
@@ -872,7 +1019,7 @@ export function ProductPage() {
     try {
       await api(`/products/${id}/publish`, {
         method: 'POST',
-        body: JSON.stringify(publicDraft),
+        body: JSON.stringify({ showPrice: false }),
       });
       reload();
       setNotice(t('Product published to the public catalog.'));
@@ -909,7 +1056,7 @@ export function ProductPage() {
     ([key]) => typeof p[key] === 'number' && Number.isFinite(p[key]),
   );
   const main = d.images.find((i) => i.isPrimary) ?? d.images[0];
-  const profit = p.sellingPrice - p.purchaseCost;
+  const profit = financeCost?.estimatedGrossProfit ?? p.sellingPrice - p.purchaseCost;
   async function order(imageIds: string[], primaryId: string) {
     await action(`/products/${id}/images`, { imageIds, primaryId }, 'PATCH');
   }
@@ -1076,44 +1223,82 @@ export function ProductPage() {
             {t('Photos are compressed automatically · up to 5 per upload')}
           </small>
         </section>
-        <section className="panel">
-          <Badge value={p.status} />
-          <div className="detail-price">{money(p.sellingPrice)}</div>
-          <UsdPrice amount={p.sellingPrice} />
-          <ExchangeRateNote />
-          <div className="facts">
-            <div>
-              <span>{t('Purchase cost')}</span>
-              <div className="fact-value">
-                <strong>{money(p.purchaseCost)}</strong>
-                <UsdPrice amount={p.purchaseCost} />
+        <section className="product-summary-panel">
+          <div className="product-status-row">
+            <Badge value={p.status} />
+          </div>
+          <div className="product-price-summary">
+            <span>{t('Selling price')}</span>
+            <strong className="detail-price">{money(p.sellingPrice)}</strong>
+            <UsdPrice amount={p.sellingPrice} />
+          </div>
+          <details className="product-fx-details">
+            <summary>{t('Exchange rate details')}</summary>
+            <ExchangeRateNote />
+          </details>
+          <div className="product-info-group">
+            <h3>{t('Cost and profitability')}</h3>
+            <div className="facts facts-financial">
+              <div>
+                <span>{t('Purchase cost')}</span>
+                <div className="fact-value">
+                  <strong>{money(p.purchaseCost)}</strong>
+                  <UsdPrice amount={p.purchaseCost} />
+                </div>
               </div>
-            </div>
-            <div>
-              <span>{t('Estimated gross profit')}</span>
-              <div className="fact-value">
-                <strong>{money(profit)}</strong>
-                <UsdPrice amount={profit} />
+              {financeCost && <>
+                <div>
+                  <span>{t('Allocated product costs')}</span>
+                  <strong>{money(financeCost.allocatedProductCosts)}</strong>
+                </div>
+                <div>
+                  <span>{t('Total product cost')}</span>
+                  <strong>{money(financeCost.totalCost)}</strong>
+                </div>
+              </>}
+              <div>
+                <span>{t('Estimated gross profit')}</span>
+                <div className="fact-value">
+                  <strong>{money(profit)}</strong>
+                  <UsdPrice amount={profit} />
+                </div>
               </div>
-            </div>
-            <div>
-              <span>{t('Estimated margin')}</span>
-              <strong>
-                {p.sellingPrice
-                  ? `${((profit / p.sellingPrice) * 100).toFixed(1)}%`
-                  : '—'}
-              </strong>
-            </div>
-            <div>
-              <span>{t('Location')}</span>
-              <strong>{p.location || t('Not set')}</strong>
-            </div>
-            <div>
-              <span>{t('Serial number')}</span>
-              <strong>{p.serialNumber || t('Not set')}</strong>
+              <div>
+                <span>{t('Estimated margin')}</span>
+                <strong>
+                  {financeCost?.estimatedGrossMargin != null
+                    ? `${financeCost.estimatedGrossMargin.toFixed(1)}%`
+                    : p.sellingPrice
+                      ? `${((profit / p.sellingPrice) * 100).toFixed(1)}%`
+                      : '—'}
+                </strong>
+              </div>
+              {financeCost?.realizedGrossProfit != null && <div>
+                <span>{t('Realized gross profit')}</span>
+                <strong>{money(financeCost.realizedGrossProfit)}</strong>
+              </div>}
             </div>
           </div>
-          {d.reservation && (
+          <div className="product-info-group">
+            <h3>{t('Equipment details')}</h3>
+            <div className="facts facts-details">
+              <div>
+                <span>{t('Specification')}</span>
+                <strong>{p.targetBodyPart || t('Not set')}</strong>
+              </div>
+              <div>
+                <span>{t('Location')}</span>
+                <strong>{p.location || t('Not set')}</strong>
+              </div>
+              <div>
+                <span>{t('Serial number')}</span>
+                <strong>{p.serialNumber || t('Not set')}</strong>
+              </div>
+            </div>
+          </div>
+          <div className="product-actions">
+            <h3>{t('Inventory actions')}</h3>
+            {d.reservation && (
             <div className="reservation">
               <strong>
                 {t('Reserved for')}
@@ -1130,48 +1315,48 @@ export function ProductPage() {
               {d.reservation.notes && <p>{d.reservation.notes}</p>}
             </div>
           )}
-          <div className="stack">
-            {p.status === 'AVAILABLE' && (
-              <button disabled={busy} onClick={() => setReserve(!reserve)}>
-                {t('Reserve for a customer')}
-              </button>
-            )}
-            {p.status === 'RESERVED' && (
-              <button
-                disabled={busy}
-                onClick={() => {
-                  if (
-                    confirm(
-                      t(
-                        'Release this reservation and make the equipment available?',
-                      ),
+            <div className="stack">
+              {p.status === 'AVAILABLE' && (
+                <button disabled={busy} onClick={() => setReserve(!reserve)}>
+                  {t('Reserve for a customer')}
+                </button>
+              )}
+              {p.status === 'RESERVED' && (
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        t(
+                          'Release this reservation and make the equipment available?',
+                        ),
+                      )
                     )
-                  )
-                    void action(`/products/${id}/release-reservation`);
-                }}
-              >
-                {t('Release reservation')}
-              </button>
-            )}
-            {(p.status === 'AVAILABLE' || p.status === 'RESERVED') && (
-              <button
-                disabled={busy}
-                className="primary"
-                onClick={() => {
-                  if (
-                    confirm(
-                      t(
-                        'Mark this equipment as sold? This cannot be undone in the app.',
-                      ),
+                      void action(`/products/${id}/release-reservation`);
+                  }}
+                >
+                  {t('Release reservation')}
+                </button>
+              )}
+              {(p.status === 'AVAILABLE' || p.status === 'RESERVED') && (
+                <button
+                  disabled={busy}
+                  className="primary"
+                  onClick={() => {
+                    if (
+                      confirm(
+                        t(
+                          'Mark this equipment as sold? This cannot be undone in the app.',
+                        ),
+                      )
                     )
-                  )
-                    void action(`/products/${id}/mark-sold`);
-                }}
-              >
-                {t('Mark as sold')}
-              </button>
-            )}
-          </div>
+                      void action(`/products/${id}/mark-sold`);
+                  }}
+                >
+                  {t('Mark as sold')}
+                </button>
+              )}
+            </div>
           {reserve && (
             <form
               className="inline-form"
@@ -1216,6 +1401,7 @@ export function ProductPage() {
               </button>
             </form>
           )}
+          </div>
         </section>
       </div>
       <section className="panel catalog-publish-panel">
@@ -1223,65 +1409,30 @@ export function ProductPage() {
           <div>
             <h2>{t('Public catalog')}</h2>
             <p className="muted">
-              {t('Products stay private until you publish them here.')}
+              {t('All non-archived products appear publicly by category. Prices are hidden.')}
             </p>
           </div>
-          <ExternalLink size={20} />
         </div>
-        {p.isPublished && p.publicSlug ? (
-          <div className="catalog-publish-status">
-            <span className="catalog-status-dot" />
-            <span>{t('Published')}</span>
-            <a
-              className="text-link"
-              href={`${catalogConfig?.publicBaseUrl.replace(/\/$/, '')}/catalog/products/${p.publicSlug}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t('Preview')}
-              <ExternalLink size={14} />
-            </a>
-          </div>
-        ) : (
-          <p className="muted">{t('This product is private.')}</p>
-        )}
-        <label className="quotation-check catalog-show-price">
-          <input
-            type="checkbox"
-            checked={publicDraft.showPrice}
-            onChange={(e) =>
-              setPublicDraft({ ...publicDraft, showPrice: e.target.checked })
-            }
-          />
-          {t('Show selling price publicly')}
-        </label>
-        <div className="form-grid">
-          <Field label={t('Public description (Thai)')}>
-            <textarea
-              rows={4}
-              value={publicDraft.publicDescriptionTh}
-              onChange={(e) =>
-                setPublicDraft({
-                  ...publicDraft,
-                  publicDescriptionTh: e.target.value,
-                })
-              }
-            />
-          </Field>
-          <Field label={t('Public description (English)')}>
-            <textarea
-              rows={4}
-              value={publicDraft.publicDescriptionEn}
-              onChange={(e) =>
-                setPublicDraft({
-                  ...publicDraft,
-                  publicDescriptionEn: e.target.value,
-                })
-              }
-            />
-          </Field>
-        </div>
-        <div className="button-row">
+        <div className="catalog-publish-controls">
+          {p.isPublished && p.publicSlug ? (
+            <div className="catalog-publish-status">
+              <span className="catalog-status-dot" />
+              <span>{t('Published')}</span>
+              <a
+                className="text-link"
+                href={`${catalogConfig?.publicBaseUrl.replace(/\/$/, '')}/catalog/products/${p.publicSlug}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t('Preview')}
+                <ExternalLink size={14} />
+              </a>
+            </div>
+          ) : (
+            <span className="muted">{t('This product is private.')}</span>
+          )}
+          <div className="catalog-publish-actions">
+          <div className="button-row">
           <button className="primary" type="button" disabled={busy} onClick={() => void publishProduct()}>
             {busy ? t('Working…') : p.isPublished ? t('Save catalog settings') : t('Publish to catalog')}
           </button>
@@ -1295,7 +1446,16 @@ export function ProductPage() {
               </button>
             </>
           )}
+          </div>
+          </div>
         </div>
+      </section>
+      <section className="panel">
+        <div className="section-heading">
+          <h2>Catalog Detail</h2>
+          <Link className="button" to={`/inventory/${id}/edit`}>{t('Edit equipment')}</Link>
+        </div>
+        <p className="description" style={{ whiteSpace: 'pre-wrap' }}>{p.catalogDetail || t('No catalog detail yet.')}</p>
       </section>
       <section className="panel">
         <div className="section-heading">
@@ -1416,7 +1576,9 @@ export function ProductPage() {
         )}
         <div className="product-ratings">
           <div className="section-heading">
-            <div>
+            <div className="product-ai-title">
+              <span className="product-ai-icon"><Sparkles size={18} /></span>
+              <div>
               <h3>{t('AI rating')}</h3>
               <p className="muted">
                 {t(
@@ -1425,6 +1587,7 @@ export function ProductPage() {
                     : 'No AI rating yet. Generate a description to create scores.',
                 )}
               </p>
+              </div>
             </div>
           </div>
           <RatingCards values={p} reasons={p.ratingReasons} />

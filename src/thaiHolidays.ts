@@ -1,0 +1,52 @@
+export type ThaiHoliday = { en: string; th: string };
+
+// National calendar and substitute holidays. Regional-only closures are not included.
+const holidays: Record<string, ThaiHoliday> = {
+  '2026-01-01': { en: "New Year's Day", th: 'วันขึ้นปีใหม่' },
+  '2026-01-02': { en: 'Special public holiday', th: 'วันหยุดราชการกรณีพิเศษ' },
+  '2026-03-03': { en: 'Makha Bucha Day', th: 'วันมาฆบูชา' },
+  '2026-04-06': { en: 'Chakri Memorial Day', th: 'วันจักรี' },
+  '2026-04-13': { en: 'Songkran Festival', th: 'วันสงกรานต์' },
+  '2026-04-14': { en: 'Songkran Festival', th: 'วันสงกรานต์' },
+  '2026-04-15': { en: 'Songkran Festival', th: 'วันสงกรานต์' },
+  '2026-05-01': { en: 'National Labour Day', th: 'วันแรงงานแห่งชาติ' },
+  '2026-05-04': { en: 'Coronation Day', th: 'วันฉัตรมงคล' },
+  '2026-05-31': { en: 'Visakha Bucha Day', th: 'วันวิสาขบูชา' },
+  '2026-06-01': { en: 'Substitute holiday for Visakha Bucha Day', th: 'วันหยุดชดเชยวันวิสาขบูชา' },
+  '2026-06-03': { en: 'Queen Suthida’s Birthday', th: 'วันเฉลิมพระชนมพรรษาสมเด็จพระนางเจ้าสุทิดา' },
+  '2026-07-28': { en: 'King Vajiralongkorn’s Birthday', th: 'วันเฉลิมพระชนมพรรษาพระบาทสมเด็จพระเจ้าอยู่หัว' },
+  '2026-07-29': { en: 'Asalha Bucha Day', th: 'วันอาสาฬหบูชา' },
+  '2026-07-30': { en: 'Buddhist Lent Day', th: 'วันเข้าพรรษา' },
+  '2026-08-12': { en: 'Queen Sirikit’s Birthday / Mother’s Day', th: 'วันแม่แห่งชาติ' },
+  '2026-10-13': { en: 'King Bhumibol Memorial Day', th: 'วันนวมินทรมหาราช' },
+  '2026-10-23': { en: 'Chulalongkorn Day', th: 'วันปิยมหาราช' },
+  '2026-12-05': { en: 'King Bhumibol’s Birthday / National Day / Father’s Day', th: 'วันชาติและวันพ่อแห่งชาติ' },
+  '2026-12-07': { en: 'Substitute holiday for Father’s Day', th: 'วันหยุดชดเชยวันพ่อแห่งชาติ' },
+  '2026-12-10': { en: 'Constitution Day', th: 'วันรัฐธรรมนูญ' },
+  '2026-12-31': { en: "New Year's Eve", th: 'วันสิ้นปี' },
+  '2027-01-01': { en: "New Year's Day", th: 'วันขึ้นปีใหม่' },
+  '2027-02-21': { en: 'Makha Bucha Day', th: 'วันมาฆบูชา' },
+  '2027-02-22': { en: 'Substitute holiday for Makha Bucha Day', th: 'วันหยุดชดเชยวันมาฆบูชา' },
+  '2027-04-06': { en: 'Chakri Memorial Day', th: 'วันจักรี' },
+  '2027-04-13': { en: 'Songkran Festival', th: 'วันสงกรานต์' },
+  '2027-04-14': { en: 'Songkran Festival', th: 'วันสงกรานต์' },
+  '2027-04-15': { en: 'Songkran Festival', th: 'วันสงกรานต์' },
+  '2027-05-03': { en: 'Substitute holiday for National Labour Day', th: 'วันหยุดชดเชยวันแรงงานแห่งชาติ' },
+  '2027-05-04': { en: 'Coronation Day', th: 'วันฉัตรมงคล' },
+  '2027-05-20': { en: 'Visakha Bucha Day', th: 'วันวิสาขบูชา' },
+  '2027-06-03': { en: 'Queen Suthida’s Birthday', th: 'วันเฉลิมพระชนมพรรษาสมเด็จพระนางเจ้าสุทิดา' },
+  '2027-07-18': { en: 'Asalha Bucha Day', th: 'วันอาสาฬหบูชา' },
+  '2027-07-19': { en: 'Substitute holiday for Asalha Bucha Day', th: 'วันหยุดชดเชยวันอาสาฬหบูชา' },
+  '2027-07-28': { en: 'King Vajiralongkorn’s Birthday', th: 'วันเฉลิมพระชนมพรรษาพระบาทสมเด็จพระเจ้าอยู่หัว' },
+  '2027-08-12': { en: 'Queen Sirikit’s Birthday / Mother’s Day', th: 'วันแม่แห่งชาติ' },
+  '2027-10-13': { en: 'King Bhumibol Memorial Day', th: 'วันนวมินทรมหาราช' },
+  '2027-10-25': { en: 'Substitute holiday for Chulalongkorn Day', th: 'วันหยุดชดเชยวันปิยมหาราช' },
+  '2027-12-05': { en: 'King Bhumibol’s Birthday / National Day / Father’s Day', th: 'วันชาติและวันพ่อแห่งชาติ' },
+  '2027-12-06': { en: 'Substitute holiday for Father’s Day', th: 'วันหยุดชดเชยวันพ่อแห่งชาติ' },
+  '2027-12-10': { en: 'Constitution Day', th: 'วันรัฐธรรมนูญ' },
+  '2027-12-31': { en: "New Year's Eve", th: 'วันสิ้นปี' },
+};
+
+export function thaiHoliday(date: string) {
+  return holidays[date];
+}

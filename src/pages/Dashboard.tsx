@@ -110,7 +110,15 @@ export function DashboardPage() {
               <span>{name}</span>
               <Icon size={19} />
             </div>
-            <strong>{value}</strong>
+            <strong
+              className={
+                name === t('Inventory cost value')
+                  ? 'metric-value-money'
+                  : undefined
+              }
+            >
+              {value}
+            </strong>
             <small>{note}</small>
           </Link>
         ))}

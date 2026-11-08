@@ -94,6 +94,7 @@ export function QuotationSettingsPanel() {
       <div className="quotation-logo-setting">
         {form.hasLogo ? (
           <img
+            className="quotation-logo-preview"
             src={`/api/quotation-settings/logo?v=${logoVersion}`}
             alt={t('Company logo')}
           />

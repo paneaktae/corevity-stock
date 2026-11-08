@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { parseDescriptions } from '../worker/services/ai';
 import { exchangeRate } from '../worker/services/exchange-rate';
 import { generateSkus, nextSku } from '../worker/services/sku';
+import { digest } from '../worker/auth';
 import type { ChatMessage } from '../shared/schemas';
 import type { Quotation } from '../shared/quotations';
 let mf: Miniflare;
@@ -15,8 +16,10 @@ let publicCatalogWorker: {
     ctx: unknown,
   ) => Promise<{
     status: number;
+    headers: Headers;
     text: () => Promise<string>;
     json: () => Promise<unknown>;
+    arrayBuffer: () => Promise<ArrayBuffer>;
   }>;
 };
 beforeAll(async () => {
@@ -50,8 +53,6 @@ beforeAll(async () => {
       bindings: {
         ENVIRONMENT: 'development',
         LOCAL_MOCK_EMAIL: 'tester@example.test',
-        ACCESS_TEAM_DOMAIN: '',
-        ACCESS_AUD: '',
         ALLOWED_EMAILS: 'tester@example.test,second@example.test',
         AI_MODEL: '',
         AI_BASE_URL: '',
@@ -98,10 +99,84 @@ async function request(
 async function json<T>(response: Awaited<ReturnType<typeof request>>) {
   return (await response.json()) as T;
 }
+describe('password sign-in migration', () => {
+  it('lets an existing authorized user set a password and sign in with a session cookie', async () => {
+    const enrolled = await request('/auth/password', 'POST', {
+      password: 'aB3!xy',
+    });
+    expect(enrolled.status).toBe(200);
+    const cookie = enrolled.headers.get('Set-Cookie')?.split(';', 1)[0];
+    expect(cookie).toMatch(/^corevity_session=/);
+
+    const session = await request('/auth/session', 'GET', undefined, {
+      Cookie: cookie!,
+    });
+    expect(session.status).toBe(200);
+    expect(await json(session)).toMatchObject({
+      authenticated: true,
+      email: 'tester@example.test',
+      method: 'password',
+      hasPassword: true,
+    });
+
+    const login = await request('/auth/login', 'POST', {
+      username: 'tester@example.test',
+      password: 'aB3!xy',
+    });
+    expect(login.status).toBe(200);
+    const loginCookie = login.headers.get('Set-Cookie')?.split(';', 1)[0];
+    expect(loginCookie).toMatch(/^corevity_session=/);
+
+    const logout = await request('/auth/logout', 'POST', undefined, {
+      Cookie: loginCookie!,
+    });
+    expect(logout.status).toBe(200);
+    expect(logout.headers.get('Set-Cookie')).toContain('Max-Age=0');
+    const db = await mf.getD1Database('DB');
+    const sessions = await db.prepare('SELECT COUNT(*) AS count FROM auth_sessions WHERE token_hash=?')
+      .bind(await digest(loginCookie!.slice('corevity_session='.length)))
+      .first<{ count: number }>();
+    expect(sessions?.count).toBe(0);
+  });
+
+  it('lets only the workspace administrator create a salesperson login with a temporary password', async () => {
+    const created = await request('/auth/users', 'POST', {
+      email: 'new.sales@example.test',
+      firstName: 'New',
+      lastName: 'Sales',
+      phone: '0812345678',
+    });
+    expect(created.status).toBe(201);
+    const account = await json<{ email: string; temporaryPassword: string }>(created);
+    expect(account.email).toBe('new.sales@example.test');
+    expect(account.temporaryPassword.length).toBeGreaterThanOrEqual(6);
+    const salespeople = await json<{ email: string; firstName: string }[]>(
+      await request('/salespeople'),
+    );
+    expect(salespeople).toContainEqual(expect.objectContaining({
+      email: account.email,
+      firstName: 'New',
+    }));
+    const login = await request('/auth/login', 'POST', {
+      username: account.email,
+      password: account.temporaryPassword,
+    });
+    expect(login.status).toBe(200);
+    const memberCookie = login.headers.get('Set-Cookie')?.split(';', 1)[0];
+    const denied = await request('/auth/users', 'POST', {
+      email: 'second.new@example.test',
+      firstName: 'Second',
+      lastName: 'User',
+    }, { Cookie: memberCookie! });
+    expect(denied.status).toBe(403);
+  });
+});
 async function product(brand = 'Matrix') {
   const r = await request('/products', 'POST', {
     brand,
     model: 'Test model',
+    targetBodyPart: 'Bicep',
+    category: 'Other',
     purchaseCost: 100,
     sellingPrice: 150,
   });
@@ -114,11 +189,271 @@ async function customer() {
   return json<{ id: string }>(r);
 }
 describe('D1-backed inventory and sales', () => {
+  it('lets signed-in users enter manual Catalog Detail and uses it in new catalog snapshots', async () => {
+    const manual = 'Admin catalog detail\nDimensions: 120 × 80 cm';
+    const createdProduct = await request('/products', 'POST', {
+      brand: 'Manual catalog copy', model: 'Test model', category: 'Other', catalogDetail: manual,
+    });
+    expect(createdProduct.status).toBe(201);
+    const p = await json<{ id: string; catalogDetail: string }>(createdProduct);
+    expect(p.catalogDetail).toBe(manual);
+    const save = await request(`/products/${p.id}/catalog-detail`, 'PATCH', { catalogDetail: manual });
+    expect(save.status).toBe(200);
+    expect(await json<{ catalogDetail: string }>(save)).toMatchObject({ catalogDetail: manual });
+
+    const database = await mf.getD1Database('DB');
+    const account = await json<{ email: string; temporaryPassword: string }>(await request('/auth/users', 'POST', {
+      email: 'catalog.member@example.test', firstName: 'Catalog', lastName: 'Member',
+    }));
+    const login = await request('/auth/login', 'POST', { username: account.email, password: account.temporaryPassword });
+    const memberCookie = login.headers.get('Set-Cookie')!.split(';', 1)[0];
+    const memberSave = await request(`/products/${p.id}/catalog-detail`, 'PATCH', { catalogDetail: manual }, { Cookie: memberCookie });
+    expect(memberSave.status).toBe(200);
+    expect((await request(`/products/${p.id}/catalog-detail`, 'PATCH', { catalogDetail: 'x'.repeat(10001) })).status).toBe(422);
+    const memberCreated = await request('/products', 'POST', {
+      brand: 'Member product', model: 'Test', category: 'Other', catalogDetail: manual,
+    }, { Cookie: memberCookie });
+    expect(memberCreated.status).toBe(201);
+    expect(await json<{ catalogDetail: string }>(memberCreated)).toMatchObject({ catalogDetail: manual });
+    expect((await request(`/products/${p.id}`, 'PATCH', {
+      catalogDetail: manual,
+    }, { Cookie: memberCookie })).status).toBe(200);
+    expect((await request(`/products/${p.id}`, 'PATCH', {
+      catalogDetail: manual + ' edited',
+    })).status).toBe(200);
+    await request(`/products/${p.id}`, 'PATCH', { catalogDetail: manual });
+    // Saving AI descriptions has no Catalog Detail field and preserves manual copy.
+    expect((await request(`/products/${p.id}`, 'PATCH', {
+      descriptionEn: 'AI draft saved after review',
+    })).status).toBe(200);
+    const invalidTarget = await request(`/products/${p.id}/generate-description`, 'POST', { target: 'catalogDetail' });
+    expect(invalidTarget.status).toBe(422);
+    await request(`/products/${p.id}/generate-description`, 'POST', { target: 'all' });
+    const detail = await json<{ product: { catalogDetail: string } }>(await request(`/products/${p.id}`));
+    expect(detail.product.catalogDetail).toBe(manual);
+    const published = await database.prepare('SELECT public_slug AS slug FROM products WHERE id=?')
+      .bind(p.id).first<{ slug: string }>();
+    const publicPage = await publicCatalogWorker.fetch(
+      new Request(`http://catalog.test/catalog/products/${published!.slug}?lang=en`),
+      { DB: database, PRODUCT_IMAGES: await mf.getR2Bucket('PRODUCT_IMAGES') },
+      { waitUntil: (promise: Promise<unknown>) => void promise },
+    );
+    expect(publicPage.status).toBe(200);
+    expect(await publicPage.text()).toContain(manual);
+
+    const created = await request('/catalogs', 'POST', { title: 'Manual catalog', items: [{ productId: p.id }] });
+    expect(created.status).toBe(201);
+    const catalog = await json<{ id: string }>(created);
+    const snapshot = await database.prepare('SELECT description_snapshot AS description FROM catalog_items WHERE catalog_id=?')
+      .bind(catalog.id).first<{ description: string }>();
+    expect(snapshot?.description).toBe(manual);
+    await request(`/products/${p.id}/catalog-detail`, 'PATCH', { catalogDetail: 'Changed manually' });
+    const preserved = await database.prepare('SELECT description_snapshot AS description FROM catalog_items WHERE catalog_id=?')
+      .bind(catalog.id).first<{ description: string }>();
+    expect(preserved?.description).toBe(manual);
+    expect((await request(`/products/${p.id}/catalog-detail`, 'PATCH', { catalogDetail: '' })).status).toBe(200);
+  });
+
+  it('allows an empty specification and filters products that have one', async () => {
+    const created = await request('/products', 'POST', {
+      brand: 'Matrix',
+      model: 'Chest Press',
+      targetBodyPart: 'Chest',
+      category: 'Other',
+      purchaseCost: 100,
+      sellingPrice: 150,
+    });
+    expect(created.status).toBe(201);
+    const product = await json<{ id: string; targetBodyPart: string }>(created);
+    expect(product.targetBodyPart).toBe('Chest');
+
+    const search = await json<{ id: string; targetBodyPart: string }[]>(
+      await request('/products?targetBodyPart=Chest'),
+    );
+    expect(search).toContainEqual(expect.objectContaining({ id: product.id, targetBodyPart: 'Chest' }));
+
+    const missing = await request('/products', 'POST', {
+        brand: 'Matrix', model: 'Legacy product', category: 'Other', purchaseCost: 0, sellingPrice: 0,
+      });
+    expect(missing.status).toBe(201);
+    const legacy = await json<{ targetBodyPart: string }>(missing);
+    expect(legacy.targetBodyPart).toBe('');
+  });
+
+  it('requires a category when creating a product', async () => {
+    const response = await request('/products', 'POST', {
+      brand: 'Matrix',
+      model: 'Uncategorized press',
+      category: '   ',
+    });
+    expect(response.status).toBe(422);
+    expect(await json<{ error: { fields: { category: string[] } } }>(response)).toMatchObject({
+      error: { fields: { category: ['Category is required'] } },
+    });
+  });
+
+  it('saves a selected category from Settings at the configured maximum length', async () => {
+    const category = `Custom ${'strength '.repeat(12)}`.trim();
+    expect(category.length).toBeLessThanOrEqual(120);
+    const initial = await json<{ categories: string[] }>(await request('/settings'));
+    const settings = await request('/settings', 'PATCH', {
+      categories: [...initial.categories, category],
+    });
+    expect(settings.status).toBe(200);
+    try {
+      const created = await request('/products', 'POST', {
+        brand: 'Matrix',
+        model: 'Category save regression',
+        category,
+        purchaseCost: 100,
+        sellingPrice: 150,
+      });
+      expect(created.status).toBe(201);
+      expect(await json<{ category: string }>(created)).toMatchObject({ category });
+    } finally {
+      await request('/settings', 'PATCH', { categories: initial.categories });
+    }
+  });
+
+  it('skips short OpenStreetMap searches and rejects oversized search terms', async () => {
+    const shortQuery = await request('/calendar/locations?q=ab');
+    expect(shortQuery.status).toBe(200);
+    expect(await json(shortQuery)).toEqual({ suggestions: [], configured: true });
+    const longQuery = await request(`/calendar/locations?q=${'a'.repeat(121)}`);
+    expect(longQuery.status).toBe(422);
+  });
+
+  it('shares team calendar events, validates invited teammates, and removes deleted events', async () => {
+    const startsAt = new Date(Date.now() + 2 * 86400000).toISOString();
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date(startsAt));
+    const created = await request('/calendar', 'POST', {
+      title: 'Team planning', details: 'Plan next month', location: 'Meeting room',
+      locationPlaceId: 'ChIJ-test-place-id',
+      locationMapUrl: '<iframe src="https://www.google.com/maps/embed?pb=test-map&amp;entry=ttu" width="600" height="450" style="border:0" allowfullscreen="" loading="lazy"></iframe>',
+      startsAt, endsAt: new Date(new Date(startsAt).getTime() + 3600000).toISOString(),
+      reminderMinutes: 1440, attendeeEmails: ['second@example.test'],
+    });
+    expect(created.status).toBe(201);
+    const { id } = await json<{ id: string }>(created);
+    const sentAt = new Date(Date.now() - 3600000).toISOString();
+    await (await mf.getD1Database('DB')).prepare(
+      "INSERT INTO calendar_reminders(id,event_id,email,line_user_id,starts_at,reminder_minutes,remind_at,status,attempts,created_at,next_attempt_at,sent_at) VALUES(?,?,?,?,?,?,?,'sent',1,?,?,?)",
+    ).bind('test-calendar-reminder', id, 'second@example.test', 'U' + '1'.repeat(32), startsAt, 1440, startsAt, sentAt, sentAt, sentAt).run();
+    const list = await request(`/calendar?from=${day}&to=${day}`);
+    expect(list.status).toBe(200);
+    expect(await json<Array<{ id: string; locationPlaceId: string; locationMapUrl: string; reminderDelivery: { sentCount: number; sentAt: string }; attendees: { email: string }[] }>>(list)).toEqual([
+      expect.objectContaining({ id, locationPlaceId: 'ChIJ-test-place-id', locationMapUrl: 'https://www.google.com/maps/embed?pb=test-map&entry=ttu', reminderDelivery: { sentCount: 1, sentAt }, attendees: expect.arrayContaining([
+        expect.objectContaining({ email: 'tester@example.test' }),
+        expect.objectContaining({ email: 'second@example.test' }),
+      ]) }),
+    ]);
+    const updated = await request(`/calendar/${id}`, 'PUT', {
+      title: 'Team planning updated', details: 'Agenda finalized', location: 'Meeting room',
+      locationMapUrl: '',
+      startsAt, endsAt: null, reminderMinutes: 30, attendeeEmails: [],
+    });
+    expect(updated.status).toBe(200);
+    const afterUpdate = await json<Array<{ id: string; title: string; attendees: { email: string }[] }>>(
+      await request(`/calendar?from=${day}&to=${day}`),
+    );
+    expect(afterUpdate[0]).toMatchObject({
+      id, title: 'Team planning updated',
+      attendees: [expect.objectContaining({ email: 'tester@example.test' })],
+    });
+    const conflict = await request('/calendar', 'POST', {
+      title: 'Overlapping event', startsAt,
+      endsAt: new Date(new Date(startsAt).getTime() + 30 * 60000).toISOString(),
+      attendeeEmails: [],
+    });
+    expect(conflict.status).toBe(409);
+    expect(await json<{ error: { code: string; conflicts: { attendeeEmail: string; title: string }[] } }>(conflict)).toMatchObject({
+      error: { code: 'EVENT_CONFLICT', conflicts: [expect.objectContaining({ attendeeEmail: 'tester@example.test', title: 'Team planning updated' })] },
+    });
+    const invalidInvite = await request('/calendar', 'POST', {
+      title: 'Invalid invite', startsAt, attendeeEmails: ['outsider@example.test'],
+    });
+    expect(invalidInvite.status).toBe(422);
+    const invalidMapLink = await request('/calendar', 'POST', {
+      title: 'Unsafe map link', startsAt, locationMapUrl: 'https://maps.example.test/embed',
+    });
+    expect(invalidMapLink.status).toBe(422);
+    const deleted = await request(`/calendar/${id}`, 'DELETE');
+    expect(deleted.status).toBe(200);
+    expect(await request(`/calendar?from=${day}&to=${day}`).then((response) => response.json())).toEqual([]);
+  });
+  it('adds finance records without changing inventory and prevents overpayment or voiding paid expenses', async () => {
+    const db = await mf.getD1Database('DB');
+    const before = await db.prepare('SELECT COUNT(*) AS count FROM products').first<{ count: number }>();
+    const categories = await request('/expense-categories');
+    expect(categories.status).toBe(200);
+    const categoryList = await json<Array<{ id: string }>>(categories);
+    expect(categoryList.some((item) => item.id === 'software-subscription')).toBe(true);
+    const idempotencyKey = crypto.randomUUID();
+    const created = await request('/expenses', 'POST', {
+      expenseDate: '2026-10-12', description: 'Finance test subscription',
+      categoryId: 'software-subscription', amount: 100, currency: 'THB',
+      exchangeRate: 1, vendor: 'Test vendor', dueDate: '2026-10-15',
+      idempotencyKey,
+    });
+    expect(created.status).toBe(201);
+    const expense = await json<{ id: string; expenseNumber: string; status: string; outstanding: number }>(created);
+    expect(expense).toMatchObject({ expenseNumber: expect.stringMatching(/^EXP-2026-\d{4}$/), status: 'UNPAID', outstanding: 100 });
+    const replay = await request('/expenses', 'POST', {
+      expenseDate: '2026-10-12', description: 'Finance test subscription',
+      categoryId: 'software-subscription', amount: 100, currency: 'THB',
+      exchangeRate: 1, vendor: 'Test vendor', dueDate: '2026-10-15',
+      idempotencyKey,
+    });
+    expect((await json<{ id: string }>(replay)).id).toBe(expense.id);
+    const paymentKey = crypto.randomUUID();
+    const paidPart = await request(`/expenses/${expense.id}/payments`, 'POST', {
+      amount: 40, paymentDate: '2026-10-12', paymentMethod: 'BANK_TRANSFER',
+      idempotencyKey: paymentKey,
+    });
+    expect((await json<{ status: string; outstanding: number }>(paidPart)).status).toBe('PARTIALLY_PAID');
+    const overpayment = await request(`/expenses/${expense.id}/payments`, 'POST', {
+      amount: 61, paymentDate: '2026-10-12', paymentMethod: 'BANK_TRANSFER',
+      idempotencyKey: crypto.randomUUID(),
+    });
+    expect(overpayment.status).toBe(422);
+    const voidPaid = await request(`/expenses/${expense.id}/void`, 'POST', { reason: 'Paid record' });
+    expect(voidPaid.status).toBe(409);
+    const after = await db.prepare('SELECT COUNT(*) AS count FROM products').first<{ count: number }>();
+    expect(after?.count).toBe(before?.count);
+    const overview = await request('/finance/overview?from=2026-10-01&to=2026-10-31');
+    expect(overview.status).toBe(200);
+    expect((await json<{ expenseRecognition: { operatingExpenses: number }; cashPaid: number }>(overview)).expenseRecognition.operatingExpenses).toBeGreaterThanOrEqual(100);
+  });
+
+  it('converts foreign currency using the saved rate and allocates product costs with exact deterministic rounding', async () => {
+    const items = await Promise.all([product('Cost allocation A'), product('Cost allocation B'), product('Cost allocation C')]);
+    const expenseResponse = await request('/expenses', 'POST', {
+      expenseDate: '2026-10-12', description: 'Imported freight', categoryId: 'international-shipping',
+      expenseType: 'PRODUCT_COST', amount: 10.01, currency: 'USD', exchangeRate: 35.5,
+      exchangeRateDate: '2026-10-10', idempotencyKey: crypto.randomUUID(),
+    });
+    expect(expenseResponse.status).toBe(201);
+    const expense = await json<{ id: string; convertedThb: number }>(expenseResponse);
+    expect(expense.convertedThb).toBe(355.36);
+    const allocationResponse = await request(`/expenses/${expense.id}/allocations`, 'POST', {
+      method: 'EQUAL', allocations: items.map((item) => ({ productId: item.id })),
+    });
+    expect(allocationResponse.status).toBe(200);
+    const allocations = await json<{ allocations: { amountThb: number }[]; totalThb: number }>(allocationResponse);
+    expect(allocations.totalThb).toBe(355.36);
+    expect(allocations.allocations.map((item) => item.amountThb)).toEqual([118.46,118.45,118.45]);
+    expect(allocations.allocations.reduce((sum,item)=>sum+item.amountThb,0)).toBe(355.36);
+    const costs = await json<{ allocatedProductCosts: number; totalCost: number; estimatedGrossMargin: number }>(await request(`/finance/products/${items[0].id}/cost`));
+    expect(costs.allocatedProductCosts).toBe(118.46);
+    expect(costs.totalCost).toBe(218.46);
+    expect(Number.isFinite(costs.estimatedGrossMargin)).toBe(true);
+  });
+
   it('keeps unpublished products private and exposes only approved public fields', async () => {
     const item = await product('Public boundary');
     const database = await mf.getD1Database('DB');
     await database
-      .prepare("UPDATE products SET notes='confidential test note' WHERE id=?")
+      .prepare("UPDATE products SET is_published=0,public_slug=NULL,notes='confidential test note',description_en='Saved English description',description_th='คำบรรยายภาษาไทย' WHERE id=?")
       .bind(item.id)
       .run();
     const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
@@ -136,9 +471,19 @@ describe('D1-backed inventory and sales', () => {
 
     const publish = await request(`/products/${item.id}/publish`, 'POST', {
       showPrice: false,
-      publicDescriptionEn: 'Reviewed public description',
     });
     expect(publish.status).toBe(200);
+    const imageId = crypto.randomUUID();
+    const imageKey = `test-public-catalog/${imageId}.jpg`;
+    await bucket.put(imageKey, new Uint8Array([255, 216, 255, 217]), {
+      httpMetadata: { contentType: 'image/jpeg' },
+    });
+    await database
+      .prepare(
+        'INSERT INTO product_images(id,product_id,r2_key,file_name,mime_type,file_size,sort_order,is_primary,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+      )
+      .bind(imageId, item.id, imageKey, 'sample.jpg', 'image/jpeg', 4, 0, 1, new Date().toISOString())
+      .run();
     const storedPublicProduct = await database
       .prepare('SELECT public_slug,is_published FROM products WHERE id=?')
       .bind(item.id)
@@ -162,7 +507,7 @@ describe('D1-backed inventory and sales', () => {
     expect(payload.product).toMatchObject({
       slug: productRow.publicSlug,
       showPrice: false,
-      description: 'Reviewed public description',
+      description: 'Saved English description',
     });
     expect(payload.product).not.toHaveProperty('price');
     expect(payload.product).not.toHaveProperty('purchaseCost');
@@ -182,7 +527,7 @@ describe('D1-backed inventory and sales', () => {
       listPayload.products.find(
         (product) => product.slug === productRow.publicSlug,
       ),
-    ).toHaveProperty('price', null);
+    ).not.toHaveProperty('price');
     const skuSearch = await publicCatalogWorker.fetch(
       new Request(`http://catalog.test/catalog?q=${encodeURIComponent(item.sku)}`),
       { DB: database, PRODUCT_IMAGES: bucket },
@@ -191,6 +536,18 @@ describe('D1-backed inventory and sales', () => {
     const skuSearchHtml = await skuSearch.text();
     expect(skuSearchHtml).toContain('1 products');
     expect(skuSearchHtml).toContain('Public boundary Test model');
+    expect(skuSearchHtml).toContain(
+      `/media/products/${productRow.publicSlug}/image/${imageId}`,
+    );
+    const publicImage = await publicCatalogWorker.fetch(
+      new Request(`http://catalog.test/media/products/${productRow.publicSlug}/image/${imageId}`),
+      { DB: database, PRODUCT_IMAGES: bucket },
+      ctx,
+    );
+    expect(publicImage.status).toBe(200);
+    expect(new Uint8Array(await publicImage.arrayBuffer())).toEqual(
+      new Uint8Array([255, 216, 255, 217]),
+    );
     expect(skuSearchHtml).toContain("addEventListener('input',updateCatalog)");
 
     const unpublish = await request(`/products/${item.id}/unpublish`, 'POST');
@@ -214,22 +571,101 @@ describe('D1-backed inventory and sales', () => {
       ctx,
     );
     expect(hiddenAgain.status).toBe(404);
+    const bulkPublish = await request('/products/publish-all', 'POST');
+    expect(bulkPublish.status).toBe(200);
+    const bulkResult = await json<{ published: number; showPrices: boolean }>(
+      bulkPublish,
+    );
+    expect(bulkResult.published).toBeGreaterThan(0);
+    expect(bulkResult.showPrices).toBe(false);
+    const republished = await database
+      .prepare('SELECT is_published,show_price,public_slug FROM products WHERE id=?')
+      .bind(item.id)
+      .first<{ is_published: number; show_price: number; public_slug: string }>();
+    expect(republished).toMatchObject({ is_published: 1, show_price: 0 });
+    expect(republished?.public_slug).toBeTruthy();
   });
-  it('creates and duplicates CRM-linked catalogs with snapshot pricing, live availability, expiry, and share metadata', async () => {
+  it('publishes multiple customer catalogs to the website and removes archived or expired ones', async () => {
+    const item = await product('Website collection');
+    const customerRecord = await customer();
+    expect((await request(`/products/${item.id}/publish`, 'POST', {showPrice: false})).status).toBe(200);
+    const createCatalog = async (title: string) => json<{id: string; slug: string}>(await request('/catalogs','POST',{
+      title, description: 'Website description', customerId: customerRecord.id,
+      assignedSalespersonEmail: 'tester@example.test', showPrices: false, showSold: false,
+      expiresAt: '2099-12-31T23:59:59.999Z', items: [{productId: item.id}],
+    }));
+    const first = await createCatalog('Website first');
+    const second = await createCatalog('Website second');
+    const database = await mf.getD1Database('DB');
+    const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
+    const ctx = {waitUntil: (promise: Promise<unknown>) => void promise} as ExecutionContext;
+    const fetchPublic = (path: string) => publicCatalogWorker.fetch(
+      new Request(`http://catalog.test${path}`), {DB: database, PRODUCT_IMAGES: bucket}, ctx,
+    );
+    const list = async () => (await (await fetchPublic('/api/public/storefront/catalogs')).json()) as {catalogs: Array<{slug: string}>};
+    expect((await list()).catalogs).not.toEqual(expect.arrayContaining([{slug: first.slug}]));
+    expect((await fetchPublic(`/api/public/storefront/catalogs/${first.slug}`)).status).toBe(404);
+    expect((await request(`/catalogs/${first.id}/publish-to-web`,'POST')).status).toBe(200);
+    expect((await request(`/catalogs/${second.id}/publish-to-web`,'POST')).status).toBe(200);
+    await database.prepare('UPDATE catalogs SET published_to_web_at=? WHERE id=?').bind('2020-01-01T00:00:00.000Z',first.id).run();
+    expect((await list()).catalogs.map((value) => value.slug).slice(0,2)).toEqual([second.slug,first.slug]);
+    const latest = await fetchPublic('/api/public/storefront');
+    expect(((await latest.json()) as {slug: string}).slug).toBe(second.slug);
+    const duplicate = await json<{id: string; slug: string}>(await request(`/catalogs/${first.id}/duplicate`,'POST'));
+    expect((await list()).catalogs.some((value) => value.slug === duplicate.slug)).toBe(false);
+    const detail = await fetchPublic(`/api/public/storefront/catalogs/${first.slug}`);
+    const payload = await detail.json() as { products: Array<{productSlug: string}> };
+    expect(detail.status).toBe(200);
+    expect(payload.products[0].productSlug).toBeTruthy();
+    expect(JSON.stringify(payload)).not.toContain(customerRecord.id);
+    expect(JSON.stringify(payload)).not.toContain('customerId');
+    expect(JSON.stringify(payload)).not.toContain('purchaseCost');
+    expect((await fetchPublic(`/s/${first.slug}`)).status).toBe(200);
+    expect((await request(`/catalogs/${first.id}/unpublish-from-web`,'POST')).status).toBe(200);
+    expect((await fetchPublic(`/api/public/storefront/catalogs/${first.slug}`)).status).toBe(404);
+    expect((await fetchPublic(`/s/${first.slug}`)).status).toBe(200);
+    expect((await request(`/catalogs/${second.id}/archive`,'POST')).status).toBe(200);
+    expect((await list()).catalogs.some((value) => value.slug === second.slug)).toBe(false);
+    const expired = await createCatalog('Website expired');
+    await database.prepare('UPDATE catalogs SET expires_at=? WHERE id=?').bind('2020-01-01T00:00:00.000Z',expired.id).run();
+    expect((await request(`/catalogs/${expired.id}/publish-to-web`,'POST')).status).toBe(409);
+  });
+
+  it('allows website chat preflight only from the approved origin', async () => {
+    const database = await mf.getD1Database('DB');
+    const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
+    const ctx = {waitUntil: (promise: Promise<unknown>) => void promise} as ExecutionContext;
+    const invoke = (origin: string) => publicCatalogWorker.fetch(
+      new Request('http://catalog.test/api/public/chat', {method: 'OPTIONS', headers: {Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type,authorization'}}),
+      {DB: database, PRODUCT_IMAGES: bucket}, ctx,
+    );
+    const allowed = await invoke('https://corevityusedgym.com');
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get('Access-Control-Allow-Origin')).toBe('https://corevityusedgym.com');
+    expect(allowed.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
+    const refused = await invoke('https://other.example');
+    expect(refused.status).toBe(403);
+    expect(refused.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  it('creates and duplicates CRM-linked catalogs without public prices, with live availability and share metadata', async () => {
     const item = await product('Catalog snapshot');
     const customerRecord = await customer();
+    const database = await mf.getD1Database('DB');
+    await database
+      .prepare("UPDATE products SET description_en='Saved catalog description' WHERE id=?")
+      .bind(item.id)
+      .run();
     expect(
       (
         await request(`/products/${item.id}/publish`, 'POST', {
           showPrice: true,
-          publicDescriptionEn: 'Public item description',
         })
       ).status,
     ).toBe(200);
     const { product: published } = await json<{
       product: { publicSlug: string };
     }>(await request(`/products/${item.id}`));
-    const database = await mf.getD1Database('DB');
     const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
     const imageKey = `test-catalog/${item.id}.jpg`;
     await bucket.put(imageKey, new Uint8Array([255, 216, 255, 217]), {
@@ -255,6 +691,7 @@ describe('D1-backed inventory and sales', () => {
       title: 'Snapshot collection',
       description: 'Selected products for a customer',
       customerId: customerRecord.id,
+      assignedSalespersonEmail: 'tester@example.test',
       showPrices: true,
       showSold: false,
       expiresAt: '2099-12-31T23:59:59.999Z',
@@ -268,6 +705,8 @@ describe('D1-backed inventory and sales', () => {
     });
     expect(created.status).toBe(201);
     const catalog = await json<{ id: string; slug: string }>(created);
+    const catalogDetail = await json<{ catalog: { assignedSalespersonEmail: string } }>(await request(`/catalogs/${catalog.id}`));
+    expect(catalogDetail.catalog.assignedSalespersonEmail).toBe('tester@example.test');
     const sharedCatalogs = await json<{
       catalogs: Array<{ id: string; slug: string }>;
       publicBaseUrl: string;
@@ -290,16 +729,20 @@ describe('D1-backed inventory and sales', () => {
       showPrices: true,
       showSold: false,
       expiresAt: '2099-12-31T23:59:59.999Z',
-      items: [{ productId: item.id }],
+      items: [{ productId: item.id, description: '' }],
     });
     expect(editedCatalog.status).toBe(200);
     const ctx = {
       waitUntil: (promise: Promise<unknown>) => void promise,
     } as ExecutionContext;
-    const fetchPublic = (path: string) =>
+    const fetchPublic = (path: string, options: RequestInit = {}) =>
       publicCatalogWorker.fetch(
-        new Request(`http://catalog.test${path}`),
-        { DB: database, PRODUCT_IMAGES: bucket },
+        new Request(`http://catalog.test${path}`, options),
+        {
+          DB: database,
+          PRODUCT_IMAGES: bucket,
+          PUBLIC_CATALOG_BASE_URL: 'https://catalog.corevityusedgym.com',
+        },
         ctx,
       );
     const publicApi = await fetchPublic(`/api/public/catalogs/${catalog.slug}`);
@@ -312,18 +755,183 @@ describe('D1-backed inventory and sales', () => {
       brand: 'Catalog snapshot',
       model: 'Test model',
       description: 'Catalog-specific snapshot copy',
-      price: 12345,
       availability: 'AVAILABLE',
     });
+    expect(publicData.products[0]).not.toHaveProperty('price');
     expect(publicData.products[0]).not.toHaveProperty('productId');
     expect(publicData.products[0]).not.toHaveProperty('purchaseCost');
+
+    const publicCatalogHtml = await fetchPublic('/catalog?lang=en');
+    const publicCatalogText = await publicCatalogHtml.text();
+    expect(publicCatalogText).toContain('class="catalog-product-photo"');
+    expect(publicCatalogText).toContain('object-fit:contain');
+    expect(publicCatalogText).toContain('<dt>Brand</dt>');
+    expect(publicCatalogText).not.toContain('<dt>Model</dt>');
+    expect(publicCatalogText).not.toContain('<dt>Specification</dt>');
+    expect(publicCatalogText).toContain('<dt>Status</dt>');
+    expect(publicCatalogText).not.toContain('<dt>Category</dt>');
+    expect(publicCatalogText).not.toContain('<dt>Quality</dt>');
+    expect(publicCatalogText).toContain('<dd>Renamed brand · Renamed model · Bicep</dd>');
+    expect(publicCatalogText).not.toContain('class="catalog-chat-fab"');
+
+    const genericProductHtml = await fetchPublic(`/catalog/products/${published.publicSlug}`);
+    expect(await genericProductHtml.text()).not.toContain('class="catalog-chat-fab"');
 
     const html = await fetchPublic(`/s/${catalog.slug}`);
     const htmlText = await html.text();
     expect(htmlText).toContain('property="og:title"');
     expect(htmlText).toContain('property="og:description"');
     expect(htmlText).toContain('property="og:image"');
-    expect(htmlText).toContain('/media/catalogs/');
+    expect(htmlText).toContain(
+      `property="og:url" content="https://catalog.corevityusedgym.com/s/${catalog.slug}"`,
+    );
+    expect(htmlText).toContain(`href="/s/${catalog.slug}?lang=th"`);
+    expect(htmlText).toContain(`href="/s/${catalog.slug}?lang=en"`);
+    expect(htmlText).not.toContain('>Equipment catalog</a>');
+    expect(htmlText).toContain(`/media/catalogs/${catalog.slug}/item/`);
+    expect(htmlText).toContain('class="catalog-chat-fab"');
+    expect(htmlText).toContain('class="catalog-chat-badge"');
+    expect(htmlText).toContain('function updateBadge(messages)');
+    expect(htmlText).toContain('data-catalog-slug="' + catalog.slug + '"');
+    expect(htmlText).toContain('class="private-catalog"');
+    expect(htmlText).toContain('class="editorial-products"');
+    expect(htmlText).toContain('class="ebook-toolbar"');
+    expect(htmlText).toContain('data-book-contents');
+    expect(htmlText).toContain('data-book-next');
+    expect(htmlText).toContain('class="editorial-photo"');
+    expect(htmlText).toContain('class="editorial-brand">Catalog snapshot');
+    expect(htmlText).toContain('class="editorial-availability">1 UNIT AVAILABLE');
+    expect(htmlText).toContain('Catalog-specific snapshot copy');
+    expect(htmlText).toContain('<strong>12,345</strong>');
+    expect(htmlText).not.toContain('purchaseCost');
+    expect(publicCatalogText).not.toContain('class="private-catalog"');
+    const catalogItem = await database
+      .prepare('SELECT i.id,p.public_slug AS product_slug FROM catalog_items i JOIN products p ON p.id=i.product_id WHERE i.catalog_id=? AND i.product_id=?')
+      .bind(catalog.id, item.id)
+      .first<{ id: string; product_slug: string }>();
+    expect(catalogItem?.id).toBeTruthy();
+    const detailHtml = await fetchPublic(
+      `/s/${catalog.slug}/p/${catalogItem!.product_slug}?lang=en`,
+    );
+    const detailText = await detailHtml.text();
+    expect(detailText).toContain(
+      `href="/s/${catalog.slug}/p/${catalogItem!.product_slug}?lang=th"`,
+    );
+    expect(detailText).toContain(
+      `href="/s/${catalog.slug}/p/${catalogItem!.product_slug}?lang=en"`,
+    );
+    expect(detailText).toContain('<h1>Test model</h1>');
+    expect(detailText).toContain('class="private-catalog"');
+    expect(detailText).toContain('class="editorial-brand">Catalog snapshot');
+    expect(detailText).toContain('class="editorial-specification">Bicep');
+    expect(detailText).toContain('class="editorial-availability">1 UNIT AVAILABLE');
+    expect(detailText).toContain('<strong>12,345</strong>');
+    expect(detailText).not.toContain('Contact details are being updated.');
+    expect(detailText).toContain('Catalog-specific snapshot copy');
+    await database
+      .prepare("UPDATE catalog_items SET description_snapshot='' WHERE catalog_id=? AND product_id=?")
+      .bind(catalog.id, item.id)
+      .run();
+    const detailWithLegacyDescription = await fetchPublic(
+      `/s/${catalog.slug}/p/${catalogItem!.product_slug}?lang=en`,
+    );
+    expect(await detailWithLegacyDescription.text()).toContain(
+      'Saved catalog description',
+    );
+    const catalogImage = await fetchPublic(
+      `/media/catalogs/${catalog.slug}/item/${catalogItem!.id}`,
+    );
+    expect(catalogImage.status).toBe(200);
+    expect(catalogImage.headers.get('Content-Type')).toBe('image/jpeg');
+    expect(new Uint8Array(await catalogImage.arrayBuffer())).toEqual(
+      new Uint8Array([255, 216, 255, 217]),
+    );
+
+    // Catalog snapshots survive image replacement, then recover using only this
+    // product's current photo if their original object has been removed.
+    const replacementKey = `test-catalog/${item.id}-replacement.png`;
+    const replacementPhoto = new Uint8Array([137, 80, 78, 71]);
+    await bucket.put(replacementKey, replacementPhoto, { httpMetadata: { contentType: 'image/png' } });
+    await database.prepare('UPDATE product_images SET r2_key=?,mime_type=? WHERE product_id=?')
+      .bind(replacementKey, 'image/png', item.id).run();
+    const preserved = await fetchPublic(`/media/catalogs/${catalog.slug}/item/${catalogItem!.id}`);
+    expect(preserved.headers.get('Content-Type')).toBe('image/jpeg');
+    await bucket.delete(imageKey);
+    const recovered = await fetchPublic(`/media/catalogs/${catalog.slug}/item/${catalogItem!.id}`);
+    expect(recovered.status).toBe(200);
+    expect(recovered.headers.get('Content-Type')).toBe('image/png');
+    expect(recovered.headers.get('Cache-Control')).toBe('public, max-age=60, s-maxage=60');
+    expect(new Uint8Array(await recovered.arrayBuffer())).toEqual(replacementPhoto);
+    const positional = await fetchPublic(`/media/catalogs/${catalog.slug}/0`);
+    expect(positional.status).toBe(200);
+    expect(positional.headers.get('Cache-Control')).toBe('no-store');
+    await database.prepare("UPDATE catalog_items SET image_key_snapshot='',image_mime_snapshot='' WHERE id=?")
+      .bind(catalogItem!.id).run();
+    expect((await fetchPublic(`/s/${catalog.slug}`)).status).toBe(200);
+    expect(await (await fetchPublic(`/s/${catalog.slug}`)).text()).toContain(`/media/catalogs/${catalog.slug}/item/${catalogItem!.id}`);
+    expect((await fetchPublic(`/media/catalogs/${catalog.slug}/item/${catalogItem!.id}`)).status).toBe(200);
+    await database.prepare('UPDATE catalogs SET publish_to_web=1 WHERE id=?').bind(catalog.id).run();
+    const photoRecord = await database.prepare('SELECT id FROM product_images WHERE product_id=?').bind(item.id).first<{id: string}>();
+    const storefrontImages = await (await fetchPublic(`/api/public/storefront/catalogs/${catalog.slug}`)).json() as {products: {imageUrl: string}[]};
+    expect(storefrontImages.products[0].imageUrl).toContain(`?v=${photoRecord!.id}`);
+    const covers = await (await fetchPublic('/api/public/storefront/catalogs')).json() as {catalogs: {slug: string; coverImageUrl: string}[]};
+    expect(covers.catalogs.find(c => c.slug === catalog.slug)?.coverImageUrl).toBe(storefrontImages.products[0].imageUrl);
+    await database.prepare('UPDATE catalogs SET publish_to_web=0 WHERE id=?').bind(catalog.id).run();
+    await database.prepare('UPDATE catalog_items SET image_key_snapshot=?,image_mime_snapshot=? WHERE id=?')
+      .bind(imageKey, 'image/jpeg', catalogItem!.id).run();
+    // The fallback must not expose a photo after the product becomes private.
+    await database.prepare('UPDATE products SET is_published=0 WHERE id=?').bind(item.id).run();
+    expect((await fetchPublic(`/media/catalogs/${catalog.slug}/item/${catalogItem!.id}`)).status).toBe(404);
+    await database.prepare('UPDATE products SET is_published=1 WHERE id=?').bind(item.id).run();
+
+    const chatProducts = await fetchPublic(`/api/public/chat/products?catalog=${catalog.slug}`);
+    expect(chatProducts.status).toBe(200);
+    expect((await chatProducts.json() as { products: Array<{ slug: string }> }).products).toContainEqual(expect.objectContaining({ slug: catalogItem!.product_slug }));
+    const unboundChat = await fetchPublic('/api/public/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visitorName: 'Catalog customer', body: 'A message without a catalog' }),
+    });
+    expect(unboundChat.status).toBe(400);
+    const missingContact = await fetchPublic('/api/public/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ catalogSlug: catalog.slug, body: 'A message without contact details' }),
+    });
+    expect(missingContact.status).toBe(400);
+    const firstChatMessage = await fetchPublic('/api/public/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ catalogSlug: catalog.slug, visitorName: 'Catalog customer', visitorPhone: '+66812345678', body: 'Is this machine available?', productSlugs: [catalogItem!.product_slug] }),
+    });
+    expect(firstChatMessage.status).toBe(201);
+    const chatSession = await firstChatMessage.json() as { session: { id: string; token: string } };
+    const inbox = await request('/catalog-chats');
+    expect(inbox.status).toBe(200);
+    expect((await json<{ threads: Array<{ id: string; visitorName: string; visitorPhone: string }> }>(inbox)).threads).toContainEqual(expect.objectContaining({ id: chatSession.session.id, visitorName: 'Catalog customer', visitorPhone: '+66812345678' }));
+    const staffReply = await request(`/catalog-chats/${chatSession.session.id}/messages`, 'POST', { body: 'Yes, it is available.' });
+    expect(staffReply.status).toBe(201);
+    const customerChat = await fetchPublic(`/api/public/chat/${chatSession.session.id}`, { headers: { Authorization: `Bearer ${chatSession.session.token}` } });
+    const customerMessages = await customerChat.json() as { messages: Array<{ body: string; senderType: string }> };
+    expect(customerMessages.messages.at(-1)).toMatchObject({ body: 'Yes, it is available.', senderType: 'SALESPERSON' });
+
+    const missingWebsiteEmail = await fetchPublic('/api/public/chat/website', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visitorName: 'Website visitor', visitorPhone: '+66812345678', body: 'Hello from the website' }),
+    });
+    expect(missingWebsiteEmail.status).toBe(400);
+    const websiteChat = await fetchPublic('/api/public/chat/website', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visitorName: 'Website visitor', visitorPhone: '+66812345678', visitorEmail: 'visitor@example.test', body: 'Hello from the website' }),
+    });
+    expect(websiteChat.status).toBe(201);
+    const websiteSession = await websiteChat.json() as { session: { id: string; token: string } };
+    const websiteInbox = await json<{ threads: Array<{ id: string; source: string; visitorEmail: string }> }>(await request('/catalog-chats'));
+    expect(websiteInbox.threads).toContainEqual(expect.objectContaining({ id: websiteSession.session.id, source: 'WEBSITE', visitorEmail: 'visitor@example.test' }));
+    const websiteReply = await request(`/catalog-chats/${websiteSession.session.id}/messages`, 'POST', { body: 'Thanks for contacting us.' });
+    expect(websiteReply.status).toBe(201);
+    const websiteConversation = await fetchPublic(`/api/public/chat/${websiteSession.session.id}`, { headers: { Authorization: `Bearer ${websiteSession.session.token}` } });
+    expect((await websiteConversation.json() as { messages: Array<{ body: string }> }).messages.at(-1)?.body).toBe('Thanks for contacting us.');
 
     const duplicated = await request(
       `/catalogs/${catalog.id}/duplicate`,
@@ -337,7 +945,7 @@ describe('D1-backed inventory and sales', () => {
     const duplicatedData = (await duplicatedApi.json()) as {
       products: Array<Record<string, unknown>>;
     };
-    expect(duplicatedData.products[0]).toMatchObject({ price: 12345 });
+    expect(duplicatedData.products[0]).not.toHaveProperty('price');
 
     await database
       .prepare("UPDATE products SET status='NOT_AVAILABLE' WHERE id=?")
@@ -358,7 +966,11 @@ describe('D1-backed inventory and sales', () => {
     const soldProduct = await fetchPublic(
       `/api/public/products/${published.publicSlug}`,
     );
-    expect(soldProduct.status).toBe(404);
+    expect(soldProduct.status).toBe(200);
+    const soldPayload = (await soldProduct.json()) as {
+      product: { availability: string };
+    };
+    expect(soldPayload.product.availability).toBe('SOLD');
     const hiddenSold = await fetchPublic(
       `/api/public/catalogs/${catalog.slug}`,
     );
@@ -540,6 +1152,8 @@ describe('D1-backed inventory and sales', () => {
     const response = await request('/products', 'POST', {
       brand: 'Duplicate Brand',
       model: 'Duplicate Model',
+      targetBodyPart: 'Bicep',
+      category: 'Other',
       purchaseCost: 100,
       sellingPrice: 200,
       serialNumber: '',
@@ -1110,6 +1724,8 @@ describe('D1-backed inventory and sales', () => {
     const created = await request('/products', 'POST', {
       brand: 'Test',
       model: 'Unavailable',
+      targetBodyPart: 'Legs',
+      category: 'Other',
       status: 'NOT_AVAILABLE',
       purchaseCost: 500,
       sellingPrice: 700,
@@ -1205,7 +1821,7 @@ describe('D1-backed inventory and sales', () => {
         },
       },
     );
-    expect(denied.status).toBe(503);
+    expect(denied.status).toBe(401);
   });
   it('returns a safe AI configuration error without changing descriptions', async () => {
     const p = await product();
@@ -1273,14 +1889,14 @@ describe('D1-backed inventory and sales', () => {
 });
 
 describe('quotation workflow', () => {
-  it('protects quotation endpoints with Cloudflare Access authentication', async () => {
+  it('protects quotation endpoints until a password session is present', async () => {
     expect(
       (await mf.dispatchFetch('https://example.test/api/quotations')).status,
-    ).toBe(503);
+    ).toBe(401);
     expect(
       (await mf.dispatchFetch('https://example.test/api/quotation-settings'))
         .status,
-    ).toBe(503);
+    ).toBe(401);
   });
 
   async function makeQuotation(customerId: string, productId: string) {
@@ -1643,6 +2259,40 @@ describe('Private shared team chat', () => {
         });
       },
     );
+    const receivedRead = new Promise<{
+      type: string;
+      readerEmail: string;
+      lastReadMessageId: number;
+    }>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('Timed out waiting for chat read receipt')),
+        2_000,
+      );
+      socket!.addEventListener('message', (event) => {
+        const data = JSON.parse(String(event.data));
+        if (data.type === 'chat.read') {
+          clearTimeout(timeout);
+          resolve(data);
+        }
+      });
+    });
+    const receivedReaction = new Promise<{
+      type: string;
+      messageId: number;
+      reactions: { emoji: string; count: number; reactedByMe: boolean }[];
+    }>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('Timed out waiting for chat reaction update')),
+        2_000,
+      );
+      socket!.addEventListener('message', (event) => {
+        const data = JSON.parse(String(event.data));
+        if (data.type === 'chat.reaction') {
+          clearTimeout(timeout);
+          resolve(data);
+        }
+      });
+    });
     await expect(receivedPresence).resolves.toMatchObject({
       type: 'chat.presence',
       users: [{ email: 'tester@example.test', name: 'tester@example.test' }],
@@ -1658,7 +2308,90 @@ describe('Private shared team chat', () => {
       type: 'chat.message',
       message: { id: sent.id, body: 'Real-time message' },
     });
+    await request('/chat/read', 'POST', { messageId: sent.id });
+    await expect(receivedRead).resolves.toMatchObject({
+      type: 'chat.read',
+      readerEmail: 'tester@example.test',
+      lastReadMessageId: sent.id,
+    });
+    const reaction = await json<{ reactions: { emoji: string; count: number; reactedByMe: boolean }[] }>(
+      await request(`/chat/${sent.id}/reactions`, 'POST', { emoji: '🎉' }),
+    );
+    expect(reaction.reactions).toEqual([{ emoji: '🎉', count: 1, reactedByMe: true }]);
+    await expect(receivedReaction).resolves.toMatchObject({
+      type: 'chat.reaction',
+      messageId: sent.id,
+      reactions: [{ emoji: '🎉', count: 1, reactedByMe: true }],
+    });
     socket!.close(1000, 'Test complete');
+  });
+  it('tracks chat read receipts monotonically and returns per-message reader counts', async () => {
+    const older = await json<{ id: number }>(
+      await request('/chat', 'POST', {
+        requestId: crypto.randomUUID(),
+        body: 'Older read receipt test message',
+      }),
+    );
+    const sent = await json<{ id: number; senderEmail: string }>(
+      await request('/chat', 'POST', {
+        requestId: crypto.randomUUID(),
+        body: 'Read receipt test message',
+      }),
+    );
+    const db = await mf.getD1Database('DB');
+    await db.prepare(
+      'INSERT INTO chat_read_cursors(email,last_read_message_id,updated_at) VALUES(?,?,?)',
+    ).bind('second@example.test', sent.id, new Date().toISOString()).run();
+
+    const page = await json<{
+      messages: { id: number; readCount: number }[];
+      readCursors: { email: string; lastReadMessageId: number }[];
+    }>(await request('/chat'));
+    expect(page.messages.find((message) => message.id === sent.id)?.readCount).toBe(1);
+
+    const marked = await request('/chat/read', 'POST', { messageId: sent.id });
+    expect(marked.status).toBe(200);
+    const cursor = await db.prepare(
+      'SELECT last_read_message_id AS lastReadMessageId FROM chat_read_cursors WHERE email=?',
+    ).bind('tester@example.test').first<{ lastReadMessageId: number }>();
+    expect(cursor?.lastReadMessageId).toBe(sent.id);
+
+    await request('/chat/read', 'POST', { messageId: older.id });
+    const unchanged = await db.prepare(
+      'SELECT last_read_message_id AS lastReadMessageId FROM chat_read_cursors WHERE email=?',
+    ).bind('tester@example.test').first<{ lastReadMessageId: number }>();
+    expect(unchanged?.lastReadMessageId).toBe(sent.id);
+    expect((await request('/chat/read', 'POST', { messageId: 999999 })).status).toBe(404);
+  });
+  it('toggles persistent reactions and returns counts for the current user', async () => {
+    const message = await json<{ id: number }>(
+      await request('/chat', 'POST', {
+        requestId: crypto.randomUUID(),
+        body: 'Reaction test message',
+      }),
+    );
+    const added = await json<{ reactions: { emoji: string; count: number; reactedByMe: boolean }[] }>(
+      await request(`/chat/${message.id}/reactions`, 'POST', { emoji: '👍' }),
+    );
+    expect(added.reactions).toEqual([{ emoji: '👍', count: 1, reactedByMe: true }]);
+
+    const db = await mf.getD1Database('DB');
+    await db.prepare(
+      'INSERT INTO chat_reactions(message_id,email,emoji,created_at) VALUES(?,?,?,?)',
+    ).bind(message.id, 'second@example.test', '👍', new Date().toISOString()).run();
+    const feed = await json<{ messages: { id: number; reactions: { emoji: string; count: number; reactedByMe: boolean }[] }[] }>(
+      await request('/chat'),
+    );
+    expect(feed.messages.find((item) => item.id === message.id)?.reactions).toEqual([
+      { emoji: '👍', count: 2, reactedByMe: true },
+    ]);
+
+    const removed = await json<{ reactions: { emoji: string; count: number; reactedByMe: boolean }[] }>(
+      await request(`/chat/${message.id}/reactions`, 'POST', { emoji: '👍' }),
+    );
+    expect(removed.reactions).toEqual([{ emoji: '👍', count: 1, reactedByMe: false }]);
+    expect((await request(`/chat/${message.id}/reactions`, 'POST', { emoji: '🚀' })).status).toBe(422);
+    expect((await request('/chat/999999/reactions', 'POST', { emoji: '❤️' })).status).toBe(404);
   });
   it('stores authenticated messages and attached products, including attachment-only messages', async () => {
     const p = await product('Chat equipment');
@@ -1759,7 +2492,7 @@ describe('Private shared team chat', () => {
       ).status,
     ).toBe(403);
     const unauth = await mf.dispatchFetch('https://example.test/api/chat');
-    expect(unauth.status).toBe(503);
+    expect(unauth.status).toBe(401);
   });
   it('paginates a shared conversation without missing or duplicating teammate messages', async () => {
     const db = await mf.getD1Database('DB');
@@ -1800,5 +2533,44 @@ describe('Private shared team chat', () => {
     );
     expect((await request('/chat?after=-1')).status).toBe(422);
     expect((await request('/chat?after=0&before=1')).status).toBe(422);
+  });
+  it('stores validated mentions and loads a focused message window for notification links', async () => {
+    const db = await mf.getD1Database('DB');
+    await db.batch([
+      db.prepare("INSERT INTO salespeople(email,first_name,last_name,updated_at) VALUES('second@example.test','Second','Teammate',?) ON CONFLICT(email) DO UPDATE SET first_name=excluded.first_name,last_name=excluded.last_name,updated_at=excluded.updated_at")
+        .bind(new Date().toISOString()),
+      db.prepare("INSERT INTO line_accounts(email,line_user_id,enabled,linked_at) VALUES('second@example.test','U' || ?,1,?) ON CONFLICT(email) DO UPDATE SET line_user_id=excluded.line_user_id,enabled=1,linked_at=excluded.linked_at")
+        .bind('2'.repeat(32), new Date().toISOString()),
+    ]);
+    const body = 'Can you review this? @Second Teammate';
+    const sent = await request('/chat', 'POST', {
+      requestId: crypto.randomUUID(),
+      body,
+      mentions: [{ email: 'second@example.test', token: '@Second Teammate' }],
+    });
+    expect(sent.status).toBe(201);
+    const message = await json<ChatMessage>(sent);
+    expect(message.mentions).toEqual([
+      { email: 'second@example.test', token: '@Second Teammate' },
+    ]);
+    const queue = await db.prepare(
+      'SELECT email,status FROM chat_mention_notifications WHERE message_id=?',
+    ).bind(message.id).first<{ email: string; status: string }>();
+    expect(queue).toBeNull();
+    const focused = await json<{ messages: ChatMessage[]; hasMore: boolean }>(
+      await request(`/chat?around=${message.id}`),
+    );
+    expect(focused.messages.some((item) => item.id === message.id)).toBe(true);
+    expect(focused.messages.find((item) => item.id === message.id)?.mentions).toEqual(message.mentions);
+    expect(focused.hasMore).toBe(true);
+    expect((await request(`/chat?around=${message.id}&before=${message.id}`)).status).toBe(422);
+  });
+  it('does not allow mentioning an email outside the workspace', async () => {
+    const response = await request('/chat', 'POST', {
+      requestId: crypto.randomUUID(),
+      body: 'Hello @outsider',
+      mentions: [{ email: 'outsider@example.test', token: '@outsider' }],
+    });
+    expect(response.status).toBe(422);
   });
 });

@@ -3,20 +3,22 @@ import { BrandSettings } from '../components/BrandSettings';
 import { CategorySettings } from '../components/CategorySettings';
 import { QuotationSettingsPanel } from '../components/QuotationSettingsPanel';
 import { LineSettings } from '../components/LineSettings';
+import { AccountAccessSettings } from '../components/AccountAccessSettings';
 import { t } from '../i18n';
 import { useEffect, useState } from 'react';
 import {
   BellRing,
   Box,
   MoreHorizontal,
+  PlugZap,
   UsersRound,
-  ShieldCheck,
   Sparkles,
   FileText,
 } from 'lucide-react';
 import type { Settings } from '../../shared/schemas';
 import { api, useData } from '../lib';
 import { ErrorBox, Field, Header, Loading } from '../components/ui';
+import { MetaIntegrationSettings } from '../components/MetaIntegrationSettings';
 export function SettingsPage() {
   const { data, error: loadError, reload } = useData<Settings>('/settings');
   const [conditions, setConditions] = useState('');
@@ -24,10 +26,8 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<
-    'sales' | 'products' | 'line' | 'quotation' | 'other'
-  >(
-    'sales',
-  );
+    'sales' | 'products' | 'line' | 'quotation' | 'integrations' | 'other'
+  >(() => new URLSearchParams(window.location.search).get('tab') === 'integrations' ? 'integrations' : 'sales');
   useEffect(() => {
     if (data) setConditions(data.conditions.join('\n'));
   }, [data]);
@@ -56,6 +56,7 @@ export function SettingsPage() {
             ['products', 'Products', Box],
             ['line', 'LINE alerts', BellRing],
             ['quotation', 'Quotations', FileText],
+            ['integrations', 'Integrations', PlugZap],
             ['other', 'Other', MoreHorizontal],
           ] as const
         ).map(([key, title, Icon]) => (
@@ -82,7 +83,7 @@ export function SettingsPage() {
           aria-labelledby="settings-tab-sales"
           className="settings-panel"
         >
-          <SalespeopleSettings />
+          <SalespeopleSettings canManageUsers={data.canManageUsers} />
         </section>
       )}
       {tab === 'products' && (
@@ -162,6 +163,16 @@ export function SettingsPage() {
           <QuotationSettingsPanel />
         </section>
       )}
+      {tab === 'integrations' && (
+        <section
+          id="settings-panel-integrations"
+          role="tabpanel"
+          aria-labelledby="settings-tab-integrations"
+          className="settings-panel"
+        >
+          <MetaIntegrationSettings />
+        </section>
+      )}
       {tab === 'other' && (
         <section
           id="settings-panel-other"
@@ -170,25 +181,7 @@ export function SettingsPage() {
           className="settings-panel detail-grid"
         >
           <div>
-            <section className="panel">
-              <h2>
-                <ShieldCheck size={20} /> {t('Access & identity')}
-              </h2>
-              <p>
-                {t('Signed in as')}
-                <strong>{data.userEmail}</strong>
-              </p>
-              <p>
-                {data.environment === 'development'
-                  ? t('Local development workspace')
-                  : t('Protected company workspace')}
-              </p>
-              <small>
-                {t(
-                  'Authorized accounts are managed in Cloudflare Access. No passwords are stored here.',
-                )}
-              </small>
-            </section>
+            <AccountAccessSettings email={data.userEmail} />
             <section className="panel">
               <h2>
                 <Sparkles size={20} /> {t('AI descriptions')}

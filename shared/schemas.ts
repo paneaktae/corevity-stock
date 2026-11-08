@@ -27,14 +27,17 @@ export const money = z
 export const productInput = z.object({
   brand: z.string().trim().min(1).max(100),
   model: z.string().trim().min(1).max(200),
+  targetBodyPart: text,
   sku: z.string().trim().max(100).optional(),
-  category: text,
+  // Settings allow category names up to 120 characters; keep product writes aligned.
+  category: z.string().trim().min(1, 'Category is required').max(120),
   serialNumber: text,
   condition: text,
   purchaseCost: money,
   sellingPrice: money,
   status: z.enum(productStatuses).default('AVAILABLE'),
   location: text,
+  catalogDetail: text,
   descriptionTh: text,
   descriptionEn: text,
   shortDescription: text,
@@ -89,6 +92,7 @@ export const leadInput = z.object({
   assignedTo: z.union([z.literal(''), z.string().email()]).default(''),
   estimatedValue: money,
   lastContactAt: z.string().datetime().nullable().default(null),
+  viewingAt: z.string().datetime().nullable().default(null),
   nextFollowUpAt: z.string().datetime().nullable().default(null),
   notes: text,
   productIds: z.array(z.string()).max(100).default([]),
@@ -207,6 +211,7 @@ export type Settings = {
   aiConfigured: boolean;
   maxUploadMB: number;
   timezone: string;
+  canManageUsers: boolean;
 };
 export type ProductDetail = {
   product: Product;
@@ -229,6 +234,7 @@ export type CustomerDetail = {
   }[];
 };
 export type LeadDetail = {
+  messenger?: { conversationId: string; source: string; displayName: string } | null;
   lead: Lead;
   customer: Customer;
   products: Product[];
@@ -270,6 +276,17 @@ export const chatInput = z
     requestId: z.string().uuid(),
     body: z.string().trim().max(2000).default(''),
     productIds: z.array(z.string().min(1).max(100)).max(3).default([]),
+    mentions: z
+      .array(
+        z
+          .object({
+            email: z.string().email().max(254),
+            token: z.string().trim().min(2).max(120),
+          })
+          .strict(),
+      )
+      .max(10)
+      .default([]),
   })
   .strict()
   .refine((v) => !!v.body || v.productIds.length > 0, {
@@ -312,11 +329,17 @@ export type ChatMessage = {
   senderEmail: string;
   senderName: string;
   body: string;
+  mentions: { email: string; token: string }[];
   createdAt: string;
   products: ChatProduct[];
+  reactions: ChatReaction[];
+  readCount?: number;
 };
+export type ChatReaction = { emoji: string; count: number; reactedByMe: boolean };
+export type ChatReadCursor = { email: string; lastReadMessageId: number };
 export type ChatPage = {
   messages: ChatMessage[];
   hasMore: boolean;
   userEmail: string;
+  readCursors?: ChatReadCursor[];
 };

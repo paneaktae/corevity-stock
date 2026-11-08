@@ -1,23 +1,23 @@
 # Fitness Equipment Manager
 
-A small internal backoffice for Corevity: receive equipment, upload photos, prepare Thai/English sales copy, track customers and leads, reserve equipment, follow up, and record selected items sold. Built for two people, desktop and phone. No ERP, accounting, password database, or public shop.
+Meta / Facebook Phases 1–13 are implemented, including OAuth, Messenger, CRM lead mapping, AI drafts, Lead Ads, Ads reporting/campaign approvals and Page content/insights. Live activation remains **READY FOR META CONFIGURATION** until actual app credentials, permissions/API support and live checks are completed. Apply migrations `0030_meta_foundation.sql` and `0031_meta_workflows.sql` before deploying this version. See the [Phases 4–13 delivery and activation runbook](docs/meta-phases-4-13.md). Run an isolated zero-egress Demo with `node scripts/meta-demo-preview.mjs`; it uses a disposable database and no Meta/AI credentials. Production Demo was deployed on 2026-10-18; see the [deployment record](docs/meta-production-deployment-2026-10-18.md). Earlier [Phase 2](docs/meta-phase-2.md), [Phase 3](docs/meta-phase-3.md) and [plan](docs/meta-integration-plan.md) documents are historical.
+
+A small internal backoffice for Corevity: receive equipment, upload photos, prepare Thai/English sales copy, track customers and leads, reserve equipment, follow up, and record selected items sold. Built for a small team, desktop and phone. No ERP, accounting, or public shop.
 
 ## Current deployment
 
-Live app: https://fitness-equipment-manager.analyziie.workers.dev
+Live app: https://management.corevityusedgym.com
 
 Cloudflare resources and all four migrations have already been provisioned for this workspace. Do **not** run the resource-creation commands again for this account. Production starts empty; fake seed data is local only.
 
 - D1: `fitness-equipment-manager` (`de34955b-5a97-47a9-9169-3dbed136cb75`).
 - Private R2: `fitness-equipment-manager-images`.
-- Access team: `noisy-night-ad63.cloudflareaccess.com`.
-- Access application: `Fitness Equipment Manager`, covering the complete workers.dev hostname.
-- Email-code sign-in: only `analyziie@gmail.com` is allowed initially. No second user has been supplied. Add the second address to both the Access policy and `ALLOWED_EMAILS`, then redeploy.
-- Preview URLs are disabled. The production workers.dev URL is intentionally enabled **after** the Access application was created.
+- Password sign-in is enabled for the accounts in `ALLOWED_EMAILS`; Cloudflare Access is removed from the app hostnames.
+- Preview URLs are disabled. The production workers.dev URL remains enabled as an alternate app hostname.
 - AI uses OpenAI `gpt-4.1-mini` at `https://api.openai.com/v1`. The owner supplies `AI_API_KEY` as a Cloudflare Worker secret; never commit it. Each generation returns detailed Thai/English copy, factual Thai strengths and weaknesses, and 0–10 ratings for price, design, and quality/performance. Unsupported points are omitted and a neutral 5 is required when the supplied product data is insufficient for a score.
 - Source is published on the `main` branch of [paneaktae/corevity-stock](https://github.com/paneaktae/corevity-stock). The initial GitHub Actions checks passed. Deployment remains manual.
 
-Verified: strict TypeScript, ESLint, 26 isolated backend/static-asset/language/LINE tests, production build, all remote schema migrations, and the live browser redirect to the Access sign-in screen. A signed-in production session and live AI generation have not yet been tested. Local visual/mobile browser testing was blocked by client permissions.
+Verified: strict TypeScript, ESLint, 63 tests, production build, and live unauthenticated password-session endpoints on both app hostnames. Cloudflare Access application list contains only the LINE webhook policy.
 
 ## Architecture
 
@@ -25,10 +25,10 @@ Verified: strict TypeScript, ESLint, 26 isolated backend/static-asset/language/L
 - Cloudflare Vite Plugin builds one Workers deployment with static SPA assets and a Hono API under `/api/*`.
 - D1 via its `DB` binding and Drizzle ORM; versioned SQL migrations include constraints, indexes and transactional triggers.
 - Private R2 via `PRODUCT_IMAGES`; authenticated Worker endpoints handle uploads and image reads. No public bucket or browser write credentials.
-- Cloudflare Access in front of the entire hostname. The Worker independently verifies the Access JWT signature, issuer, audience, expiry and explicit email allowlist for every request, including images and SPA routes.
+- Username/password sessions stored as hashed tokens in D1. The Worker checks every protected request against the session table and the `ALLOWED_EMAILS` account list.
 - AI is an interchangeable `DescriptionProvider` service. The supplied adapter uses an HTTPS OpenAI-compatible chat-completions API, configured entirely on the Worker. There is no chosen provider, bundled key, or simulated AI response.
 
-The single deployment follows Cloudflare's [React SPA + API guide](https://developers.cloudflare.com/workers/vite-plugin/tutorial/) and [JWT validation guidance](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/).
+The single deployment follows Cloudflare's [React SPA + API guide](https://developers.cloudflare.com/workers/vite-plugin/tutorial/).
 
 ## Language
 
@@ -102,7 +102,7 @@ Reservations remain active until explicitly released or sold, even after their e
 
 ## Cloudflare resources and setup
 
-Required: one Worker, one D1 database, one private R2 bucket, and one Access self-hosted application covering the complete app hostname. Enable R2 in the Cloudflare dashboard first if the account has not activated it.
+Required: one Worker, one D1 database, and one private R2 bucket. Enable R2 in the Cloudflare dashboard first if the account has not activated it.
 
 ```sh
 npx wrangler login
@@ -115,29 +115,9 @@ Copy the returned database ID into `wrangler.jsonc` under `env.production.d1_dat
 
 Do not enable the R2 public development URL or a public bucket domain. The Worker authenticates all photo access.
 
-### Cloudflare Access — required before going live
+### Account access
 
-1. In Cloudflare Zero Trust, complete the organization/team setup and note the team domain, for example `your-team.cloudflareaccess.com`.
-2. Configure an identity provider, or enable One-time PIN email login. Do not build an app password flow.
-3. Under Access → Applications, add a **Self-hosted** application named `Fitness Equipment Manager`.
-4. Add your chosen hostname, e.g. `equipment.your-company.example`, covering **all paths**. Do not protect only `/api`; the SPA and photo endpoints need the same protection.
-5. Add one **Allow** policy with Include → **Emails** containing the two exact authorized email addresses. Avoid Everyone, broad email domains, Bypass policies and service-token identities for this human-only app. Access denies identities that do not match an Allow policy.
-6. Choose a suitable session duration, such as 8 hours. Copy the application's AUD tag from its settings.
-7. Configure `env.production.vars` in `wrangler.jsonc`:
-   - `ACCESS_TEAM_DOMAIN`: team hostname only, no scheme or trailing slash.
-   - `ACCESS_AUD`: this application's AUD tag.
-   - `ALLOWED_EMAILS`: the same two emails, comma-separated.
-   - `ENVIRONMENT`: keep `production`.
-8. Add a Worker custom domain under `env.production.routes`:
-   ```json
-   "routes": [{"pattern":"equipment.your-company.example","custom_domain":true}]
-   ```
-   Replace the example with a real domain in your Cloudflare account. For a custom-domain deployment, change `workers_dev` to `false` and keep `preview_urls:false`, so an alternate hostname cannot bypass the intended Access entry point.
-9. Deploy only after the Access application and policy exist. Verify an incognito browser is sent to Access, both allowed users can sign in, and an unlisted account is denied. Verify deep links and images as well as the dashboard.
-
-The Worker refuses requests with missing Access configuration (503), missing/invalid JWTs (401), or an email outside its own allowlist (403). It never trusts frontend identity or the unverified email header. The app's Settings page shows the verified identity.
-
-For a workers.dev hostname instead of a custom domain, first enable Cloudflare's managed Access protection for that Worker hostname in Workers → Settings → Domains & Routes, obtain that Access application's AUD, and set the same strict email policy and Worker allowlist. Only then deliberately enable `workers_dev`. The current account is configured for the Access-protected workers.dev hostname above. If moving to a custom domain, update Access first, add the route and disable workers.dev.
+The app uses its own username/password login. Only addresses listed in `ALLOWED_EMAILS` can sign in; each account must have a password record in the production D1 database. Do not put passwords in Wrangler variables. Set or reset passwords through the account management flow, and keep `preview_urls:false` for production.
 
 ### Variables and secrets
 
@@ -146,9 +126,7 @@ For a workers.dev hostname instead of a custom domain, first enable Cloudflare's
 | `AI_API_KEY`         | Wrangler secret           | Provider API key; never frontend-visible                                                          |
 | `AI_MODEL`           | Production vars or secret | Exact model ID supported by chosen provider                                                       |
 | `AI_BASE_URL`        | Production vars or secret | HTTPS API base URL ending in `/v1` for a compatible provider; adapter appends `/chat/completions` |
-| `ACCESS_TEAM_DOMAIN` | Production vars           | Access team hostname                                                                              |
-| `ACCESS_AUD`         | Production vars           | Access application audience                                                                       |
-| `ALLOWED_EMAILS`     | Production vars           | Two comma-separated allowlisted emails                                                            |
+| `ALLOWED_EMAILS`     | Production vars           | Comma-separated allowed account emails                                                           |
 | `MAX_UPLOAD_MB`      | Vars                      | Default `10`; keep <=10 with current batch size/request ceiling                                   |
 | `BUSINESS_TIMEZONE`  | Vars                      | Default `Asia/Bangkok`                                                                            |
 | `LOCAL_MOCK_EMAIL`   | `.dev.vars` only          | Local development identity                                                                        |
@@ -195,7 +173,7 @@ Migrations are reviewed SQL in `drizzle/migrations`; Drizzle's TypeScript schema
 
 Target repository: [paneaktae/corevity-stock](https://github.com/paneaktae/corevity-stock).
 
-The included GitHub Actions workflow installs the lockfile, checks types/lint/tests, and builds the production bundle. It does not automatically deploy or apply remote migrations. Configure Workers Builds or a separate explicitly enabled deployment workflow after Access and Cloudflare resources are ready.
+The included GitHub Actions workflow installs the lockfile, checks types/lint/tests, and builds the production bundle. It does not automatically deploy or apply remote migrations. Configure Workers Builds or a separate explicitly enabled deployment workflow after Cloudflare resources are ready.
 
 For a local checkout already containing these files:
 
@@ -224,9 +202,8 @@ Use normal GitHub authentication. `.gitignore` excludes local secrets, generated
 ## Troubleshooting
 
 - **R2 error 10042**: activate R2 in the Cloudflare dashboard, then create the bucket.
-- **503 Access configuration**: fill team domain, AUD and email allowlist. Do not disable authentication as a workaround.
-- **401**: use the protected hostname; confirm team domain and application AUD agree with the Access app. Verify the Access session has not expired.
-- **403**: check the signed-in email against both allowlists. Cross-site mutating requests are rejected.
+- **401**: sign in with an allowed account and confirm its password session has not expired.
+- **403**: check the signed-in email against `ALLOWED_EMAILS`. Cross-site mutating requests are rejected.
 - **No such table**: apply migrations to the correct local or production environment. Do not accidentally point local dev at remote storage.
 - **AI not configured / failed**: check the three AI variables, provider billing/model permissions, JSON-mode support and HTTPS base URL. Existing text remains unchanged on failures.
 - **Photo rejected**: select an actual JPEG/PNG/WEBP within the size limit. HEIC must be exported/converted before upload.
@@ -242,11 +219,11 @@ Logical later improvements: pagination, thumbnail generation, CSV export, reserv
 
 ## Personal LINE follow-up reminders
 
-Apply `0004_line_reminders.sql` before deploying this feature. Leads have `assignedTo` (an allowed Access email); existing leads remain unassigned until edited. Each salesperson must be in both Cloudflare Access and `ALLOWED_EMAILS`.
+Apply `0004_line_reminders.sql` before deploying this feature. Leads have `assignedTo` (an allowed account email); existing leads remain unassigned until edited. Each salesperson must be in `ALLOWED_EMAILS`.
 
 1. Store `LINE_CHANNEL_ACCESS_TOKEN` and `LINE_CHANNEL_SECRET` as Worker secrets. The token is a Messaging API channel access token, not the numeric channel ID. Keep secrets out of Git and chat.
-2. Set the Messaging API webhook to `https://fitness-equipment-manager.analyziie.workers.dev/api/line/webhook`, press Verify, and enable **Use webhook** in LINE Developers. If the OA already has another webhook integration, coordinate a shared receiver first; do not silently replace it.
-3. Cloudflare Access has a dedicated path application for `fitness-equipment-manager.analyziie.workers.dev/api/line/webhook` with a bypass policy. This path has no app data APIs and accepts only POST requests authenticated by LINE HMAC-SHA256. All other routes still require Access JWT validation; descendants of the webhook path are not handled as webhooks.
+2. Set the Messaging API webhook to `https://management.corevityusedgym.com/api/line/webhook`, press Verify, and enable **Use webhook** in LINE Developers. If the OA already has another webhook integration, coordinate a shared receiver first; do not silently replace it.
+3. A dedicated Cloudflare Access path application bypasses the LINE webhook on both app hostnames; the Worker authenticates it with LINE HMAC-SHA256. This path accepts only signed POST requests. Other app routes use username/password sessions.
 4. Set `APP_URL` to the production HTTPS origin. Configure the Worker cron `*/5 * * * *` (UTC). The handler checks every five minutes; reminders become eligible 24 hours before a future appointment. An appointment created with less than 24 hours left is eligible on the next run. Past and WON/LOST appointments are skipped.
 5. In Settings, each salesperson adds the OA as a friend, creates a connection code, and sends it privately to the OA. The code expires after 10 minutes, is stored hashed, and is single-use. Group chat codes are ignored. One LINE user can belong to only one app email. Connecting opts in; pause/disconnect controls are available. Unfollow events disable delivery.
 6. Choose **Responsible salesperson** in the lead form and set the next follow-up. Only that salesperson is notified. Messages include appointment time and a protected app link, without customer names, notes, lead titles, or prices.
@@ -257,7 +234,7 @@ Local tests use signed synthetic webhooks and an injected sender: no real LINE m
 
 ### Sales team profiles
 
-Settings → Sales team lists authorized accounts and stores first name, last name, and optional phone in D1. Any authorized workspace member can edit these shared profiles, consistent with this app's shared workspace settings; edits record the actor in the activity log. This screen does not grant login access or change email identities. New accounts must be added to both Cloudflare Access and `ALLOWED_EMAILS`; they appear automatically with blank names. No names are inferred from emails.
+Settings → Sales team lists authorized accounts and stores first name, last name, and optional phone in D1. Any authorized workspace member can edit these shared profiles, consistent with this app's shared workspace settings; edits record the actor in the activity log. This screen does not grant login access or change email identities. New accounts must be added to `ALLOWED_EMAILS` and given a password; they appear automatically with blank names. No names are inferred from emails.
 
 Apply `0005_salespeople.sql` before deploying this version. The lead form and follow-up detail form use the same database-backed salesperson selector. Pipeline and follow-up cards display saved names; email remains the stable identity used by existing lead assignments and LINE links. Accounts removed from `ALLOWED_EMAILS` are excluded from selectors while their profile records and historical assignments remain intact. Customer names and contact names remain free-text customer information.
 
@@ -265,6 +242,6 @@ Apply `0005_salespeople.sql` before deploying this version. The lead form and fo
 
 Apply `0006_team_chat.sql` before deploying. `/chat` is a single shared internal room for authorized workspace users. Messages are stored in D1 with server-assigned sender identity and time; first/last names come from salesperson profiles. A message contains up to 2,000 characters and up to three distinct existing inventory items, or attachments alone. Product cards show current name, SKU, price, status and a protected image/detail link. Archived items remain visible in history but cannot be newly attached or opened. Text is rendered as plain React text, never HTML.
 
-The visible chat receives new messages immediately over an authenticated WebSocket coordinated by the `ChatRoom` Durable Object. D1 remains the source of truth. The client reconnects with exponential backoff, catches up from an ordered numeric cursor after reconnecting, and polls only as a fallback while the socket is unavailable. The Hibernation API allows idle connections to sleep. History loads 50 messages at a time; reading older messages does not force a jump to the bottom. A unique client request ID scoped to the signed-in sender prevents duplicate sends on retries, with changed-content retries rejected. Failed sends preserve the draft. Existing Access/JWT and same-origin protections apply to all chat endpoints. This is an in-app team room; there are no external LINE notifications, private rooms, read receipts, file uploads, editing or deletion in this minimal version.
+The visible chat receives new messages immediately over an authenticated WebSocket coordinated by the `ChatRoom` Durable Object. D1 remains the source of truth. The client reconnects with exponential backoff, catches up from an ordered numeric cursor after reconnecting, and polls only as a fallback while the socket is unavailable. The Hibernation API allows idle connections to sleep. History loads 50 messages at a time; reading older messages does not force a jump to the bottom. A unique client request ID scoped to the signed-in sender prevents duplicate sends on retries, with changed-content retries rejected. Failed sends preserve the draft. Password-session and same-origin protections apply to all chat endpoints. This is an in-app team room; there are no external LINE notifications, private rooms, read receipts, file uploads, editing or deletion in this minimal version.
 
 Wrangler binds `CHAT_ROOM` to the SQLite-backed `ChatRoom` class and applies the `chat-realtime-v1` Durable Object migration. Every WebSocket upgrade is authenticated by the Worker before it reaches the room. Browsers can only receive events; attempted client frames are closed with a policy violation. Messages are persisted to D1 before broadcast, so a broadcast failure or disconnected client recovers from history without losing the message.

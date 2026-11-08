@@ -86,10 +86,35 @@ function ProfileForm({
     </form>
   );
 }
-export function SalespeopleSettings() {
+export function SalespeopleSettings({ canManageUsers }: { canManageUsers: boolean }) {
   const { data, error, reload } = useData<Salesperson[]>('/salespeople');
   const [editing, setEditing] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [newUser, setNewUser] = useState({ email: '', firstName: '', lastName: '', phone: '' });
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [copiedPassword, setCopiedPassword] = useState(false);
+  async function createUser(event: FormEvent) {
+    event.preventDefault();
+    setCreating(true);
+    setCreateError('');
+    setTemporaryPassword('');
+    setCopiedPassword(false);
+    try {
+      const result = await api<{ email: string; temporaryPassword: string }>('/auth/users', {
+        method: 'POST',
+        body: JSON.stringify(newUser),
+      });
+      setTemporaryPassword(result.temporaryPassword);
+      setNewUser({ email: '', firstName: '', lastName: '', phone: '' });
+      reload();
+    } catch (error) {
+      setCreateError((error as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  }
   return (
     <section className="panel">
       <h2>{t('Sales team')}</h2>
@@ -99,6 +124,24 @@ export function SalespeopleSettings() {
         )}
       </p>
       <ErrorBox message={error} />
+      {canManageUsers && <div className="salesperson-create-user">
+        <h3>{t('Add user')}</h3>
+        <p className="muted">{t('Create a login for a teammate. A temporary password will be shown once after creation.')}</p>
+        <ErrorBox message={createError} />
+        <form onSubmit={(event) => void createUser(event)}>
+          <div className="form-grid">
+            <Field label={t('Username (email)')}><input type="email" autoComplete="email" required maxLength={254} value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} /></Field>
+            <Field label={t('First name *')}><input required maxLength={100} value={newUser.firstName} onChange={(event) => setNewUser({ ...newUser, firstName: event.target.value })} /></Field>
+            <Field label={t('Last name *')}><input required maxLength={100} value={newUser.lastName} onChange={(event) => setNewUser({ ...newUser, lastName: event.target.value })} /></Field>
+            <Field label={t('Phone')}><input type="tel" maxLength={50} value={newUser.phone} onChange={(event) => setNewUser({ ...newUser, phone: event.target.value })} /></Field>
+          </div>
+          <button className="primary" disabled={creating}>{creating ? t('Creating user…') : t('Add user')}</button>
+        </form>
+        {temporaryPassword && <div className="salesperson-temp-password" role="status">
+          <div><strong>{t('Temporary password')}</strong><p>{t('Share this temporary password with the teammate. They can change it in Settings.')}</p><code>{temporaryPassword}</code></div>
+          <button type="button" onClick={() => { void navigator.clipboard.writeText(temporaryPassword).then(() => setCopiedPassword(true)).catch(() => setCopiedPassword(false)); }}>{copiedPassword ? t('Password copied') : t('Copy password')}</button>
+        </div>}
+      </div>}
       {saved && (
         <div className="success" role="status">
           {t('Salesperson saved.')}
@@ -138,11 +181,7 @@ export function SalespeopleSettings() {
           </div>
         ),
       )}
-      <small>
-        {t(
-          'New accounts must be granted workspace access before they appear here.',
-        )}
-      </small>
+      {!canManageUsers && <small>{t('Ask the workspace administrator to add new user accounts.')}</small>}
     </section>
   );
 }

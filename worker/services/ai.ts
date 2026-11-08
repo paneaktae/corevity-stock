@@ -105,6 +105,30 @@ function responseSources(data: ResponsesPayload) {
     .slice(0, 10);
 }
 
+export function productResearchContext(product: Product) {
+  const brand = product.brand.trim();
+  const model = product.model.trim();
+  const specification = product.targetBodyPart.trim();
+  const category = product.category.trim();
+  const exactIdentity = [brand, model, specification, category]
+    .filter(Boolean)
+    .map((part) => `"${part.replaceAll('"', '')}"`)
+    .join(' ');
+  return {
+    productIdentity: { brand, model, specification, category },
+    searchQueries: [
+      exactIdentity,
+      [brand, model, 'official manufacturer'].filter(Boolean).join(' '),
+      [brand, model, 'manual specifications'].filter(Boolean).join(' '),
+    ],
+    evaluationContext: {
+      condition: product.condition,
+      sellingPriceThb: product.sellingPrice,
+      notes: product.notes,
+    },
+  };
+}
+
 export function createDescriptionProvider(config: {
   AI_API_KEY?: string;
   AI_MODEL: string;
@@ -143,18 +167,11 @@ export function createDescriptionProvider(config: {
               {
                 role: 'system',
                 content:
-                  'You are a product research analyst for used fitness equipment. You MUST use web search before writing anything. Search the exact brand and model, including official manufacturer pages and manuals first. Use only facts that match the exact model; clearly separate facts from reasonable condition-based considerations. Return detailed Thai and English copy. Put model-specific features and functions in features as concise Thai bullets. Never invent a specification, feature, warranty, certification, market price, or performance claim. For each score use only retrieved evidence and the supplied selling price and condition. Apply a stable rubric: price is value versus documented new/used reference prices, design is documented ergonomics/usability/build choices, qualityPerformance is documented construction, capacity, motor/resistance and exercise functions adjusted for condition. Scores are 0 to 10. If evidence is insufficient for a category, return null for that score and explain that evidence was insufficient in ratingReasons. Do not use a neutral default. Every non-empty feature and every non-null score must be supported by one or more exact-model sources. Copy only the source title and URL actually returned by web search into analysisSources. Use empty arrays when no supported point exists. Return only the JSON schema response.',
+                  'You are a careful product researcher for used fitness equipment. Before drafting, use web search for EVERY searchQueries entry supplied by the user. The productIdentity fields are authoritative: brand and model identify the exact machine; specification and category are mandatory disambiguators and must be checked against each candidate source. Search the exact quoted combination first, then the exact brand+model on the official manufacturer site, then the exact brand+model in official manuals/specification sheets. Do not substitute a similar model, another generation, a product family, or a machine that trains the same body part. A source is usable for model-specific facts only when it explicitly identifies the same model; if that cannot be verified, exclude it. The specification is the target body part, not a free-form cue to guess machine functions. Category identifies equipment type and must also agree. Use condition, price, and notes only as context; they are not evidence for product specifications. If reliable exact-model sources cannot be found, say so in the descriptions and leave unsupported features/rating scores empty or null. Return detailed Thai and English copy. Put verified model-specific features and functions in features as concise Thai bullets. Never invent a specification, feature, warranty, certification, market price, or performance claim. For price ratings, compare only sourced prices for the same model and clearly state when no comparable price evidence exists. For design and qualityPerformance, use only retrieved exact-model evidence; consider condition only when clearly marked as an estimate. Apply a stable 0–10 rubric and use null plus an explanation in ratingReasons whenever evidence is insufficient; do not use a neutral default. Every non-empty feature and every non-null score must be supported by one or more exact-model sources. In analysisSources, cite only relevant search results that you actually used, copying their exact title and URL. Return only the JSON schema response.',
               },
               {
                 role: 'user',
-                content: JSON.stringify({
-                  brand: product.brand,
-                  model: product.model,
-                  category: product.category,
-                  condition: product.condition,
-                  sellingPriceThb: product.sellingPrice,
-                  notes: product.notes,
-                }),
+                content: JSON.stringify(productResearchContext(product)),
               },
             ],
           }),
@@ -185,8 +202,12 @@ export function createDescriptionProvider(config: {
         new TextDecoder().decode(all),
       ) as ResponsesPayload;
       const parsed = parseDescriptions(responseText(data));
-      const sources = responseSources(data);
-      return sources.length ? { ...parsed, analysisSources: sources } : parsed;
+      const searchSources = responseSources(data);
+      const returnedUrls = new Set(searchSources.map((source) => source.url));
+      const citedSources = parsed.analysisSources.filter((source) =>
+        returnedUrls.has(source.url),
+      );
+      return { ...parsed, analysisSources: citedSources };
     },
   };
 }

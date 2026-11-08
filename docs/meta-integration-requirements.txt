@@ -1,0 +1,1386 @@
+PROJECT: COREVITY CRM
+FEATURE: COMPLETE META / FACEBOOK BUSINESS INTEGRATION
+PLATFORM: CLOUDFLARE
+IMPLEMENTATION: EXTEND EXISTING APPLICATION
+PRIORITY: PRODUCTION-READY ARCHITECTURE
+
+==================================================
+1. PROJECT CONTEXT
+==================================================
+
+Corevity CRM is an existing internal business management
+application for a company specializing in buying and
+selling used commercial fitness equipment internationally.
+
+The business currently operates with approximately
+2 internal users.
+
+Existing infrastructure:
+
+- Public Website: Vercel
+- CRM Application: Cloudflare
+- Database: Inspect existing implementation
+- Authentication: Inspect existing implementation
+- Inventory Management: Existing feature
+- Customer Management: Existing feature
+- Quotation Management: Existing feature
+- Expense and Profit Tracking: Existing feature
+- Follow-up Management: Existing feature
+
+IMPORTANT:
+
+This project must EXTEND the existing Corevity CRM.
+
+DO NOT create a separate CRM application.
+
+DO NOT replace existing architecture unnecessarily.
+
+DO NOT rebuild existing features.
+
+DO NOT modify unrelated business logic.
+
+Inspect the existing repository before implementing anything.
+
+Reuse existing:
+- UI components
+- Design system
+- Authentication
+- Database architecture
+- API conventions
+- Routing
+- State management
+- Permission system
+- Inventory models
+- Customer models
+- Quotation models
+- Existing AI infrastructure, if available
+
+The new integration must feel like a native part
+of the existing Corevity CRM.
+
+==================================================
+2. CRITICAL REQUIREMENT: NO META CREDENTIALS YET
+==================================================
+
+The company currently DOES NOT have the following
+configuration values available:
+
+- Meta App ID
+- Meta App Secret
+- Facebook Page ID
+- Facebook Page Access Token
+- Meta Business Portfolio ID
+- Meta Ad Account ID
+- Meta Webhook Verify Token
+- Meta System User Token
+
+All of these will be configured later.
+
+The entire application must be developed without
+requiring these credentials during development.
+
+Implement a configuration-driven integration.
+
+Required integration states:
+
+NOT_CONFIGURED
+CONFIGURATION_INCOMPLETE
+READY_TO_CONNECT
+CONNECTING
+CONNECTED
+TOKEN_EXPIRED
+PERMISSION_REQUIRED
+RECONNECT_REQUIRED
+ERROR
+DISCONNECTED
+
+When Meta credentials are missing:
+
+- CRM must continue working normally.
+- Meta Integration pages must remain accessible.
+- Show a clear setup wizard.
+- Disable real Meta API operations.
+- Allow testing with mock data.
+- Never crash due to missing environment variables.
+- Never generate fake production credentials.
+- Never pretend mock data came from Meta.
+
+Implement a clearly labeled DEMO MODE.
+
+Demo Mode must simulate:
+
+- Facebook Page connection
+- Messenger conversations
+- Incoming messages
+- Customer inquiries
+- Lead generation
+- Advertising campaigns
+- Advertising analytics
+- Page insights
+- Webhook events
+
+Demo Mode must NEVER send real API requests
+to Meta.
+
+Use separate mock adapters and production adapters.
+
+The production adapter must only activate after
+valid credentials and permissions are configured.
+
+==================================================
+3. SYSTEM ARCHITECTURE
+==================================================
+
+Design a modular Meta Integration architecture.
+
+Suggested modules:
+
+MetaIntegrationService
+MetaOAuthService
+MetaTokenService
+MetaPageService
+MetaMessengerService
+MetaWebhookService
+MetaLeadService
+MetaAdsService
+MetaInsightsService
+MetaCampaignService
+MetaAIService
+MetaSyncService
+MetaAuditService
+
+Use existing architectural patterns.
+
+If the project uses Cloudflare Workers:
+
+- Implement API endpoints using Workers.
+- Use existing D1 database bindings if available.
+- Use Cloudflare Queues for asynchronous processing
+  where appropriate and available.
+- Use Cloudflare Cron Triggers for scheduled syncing.
+- Use Cloudflare Secrets for sensitive configuration.
+- Use existing storage solutions where possible.
+
+Avoid introducing unnecessary infrastructure.
+
+Use a provider adapter pattern:
+
+MetaProvider
+  |
+  |-- MockMetaProvider
+  |
+  |-- GraphAPIMetaProvider
+
+The UI must not directly communicate with Meta APIs.
+
+All Meta API operations must go through
+authenticated backend services.
+
+==================================================
+4. META INTEGRATION SETTINGS
+==================================================
+
+Create a new CRM navigation section:
+
+Settings
+  -> Integrations
+      -> Meta / Facebook
+
+The page must display:
+
+- Connection status
+- Connected Facebook Page
+- Page name
+- Page profile image
+- Page ID
+- Granted permissions
+- Missing permissions
+- Connected Ad Account
+- Token health
+- Last successful synchronization
+- Last webhook received
+- Integration errors
+
+Actions:
+
+Connect Facebook
+Reconnect Facebook
+Disconnect Facebook
+Refresh Connection Status
+Test Connection
+View Permissions
+View Integration Logs
+
+Create a setup wizard.
+
+STEP 1:
+Meta Developer App Preparation
+
+STEP 2:
+Configure App ID and App Secret
+
+STEP 3:
+Configure OAuth Redirect URL
+
+STEP 4:
+Configure Webhook Callback URL
+
+STEP 5:
+Connect Facebook Account
+
+STEP 6:
+Select Facebook Page
+
+STEP 7:
+Configure Messenger Permissions
+
+STEP 8:
+Select Ad Account
+
+STEP 9:
+Test Integration
+
+STEP 10:
+Activate Features
+
+Never expose App Secret or access tokens
+to frontend clients.
+
+Prefer Cloudflare environment secrets.
+
+If configuration is entered through an admin UI,
+store secrets only using an appropriately secured
+server-side mechanism.
+
+Do not store secrets as plaintext in D1.
+
+==================================================
+5. FACEBOOK OAUTH CONNECTION
+==================================================
+
+Implement secure Facebook Login integration.
+
+Required capabilities:
+
+- OAuth authorization flow
+- CSRF protection using state
+- Secure callback handling
+- Authorization code exchange
+- Token validation
+- Permission verification
+- Page selection
+- Page token retrieval
+- Connection persistence
+- Reauthorization
+- Revocation handling
+
+Use the officially supported Meta authentication
+flow appropriate to the selected Meta App use case.
+
+Do not assume every token type supports refresh.
+
+Implement token lifecycle handling according
+to the actual token type and Meta documentation.
+
+Store token metadata separately from secrets.
+
+Track:
+
+- Token type
+- Issued timestamp, when available
+- Expiration timestamp, when available
+- Last validation
+- Permission status
+- Revocation status
+
+Implement safe reconnect flows.
+
+Never log access tokens.
+
+==================================================
+6. FACEBOOK MESSENGER UNIFIED INBOX
+==================================================
+
+Create a new navigation section:
+
+Meta
+  -> Inbox
+
+Build a responsive Messenger management interface.
+
+Desktop layout:
+
+LEFT:
+Conversation list
+
+CENTER:
+Message conversation
+
+RIGHT:
+Customer information
+
+Mobile layout:
+
+Conversation list -> Conversation detail
+with collapsible customer information.
+
+Conversation features:
+
+- Incoming messages
+- Outgoing messages
+- Conversation history
+- Unread indicators
+- Search conversations
+- Filter conversations
+- Conversation assignment
+- Conversation status
+- Internal notes
+- Customer identification
+- Product interest
+- Lead conversion
+- Follow-up creation
+
+Conversation statuses:
+
+NEW
+OPEN
+WAITING_CUSTOMER
+FOLLOW_UP
+CLOSED
+
+Implement message sending through
+official Meta Messenger APIs.
+
+Support text messages initially.
+
+Design extensible support for:
+
+- Images
+- Attachments
+- Product links
+- Supported message templates
+
+Do not assume every attachment or template
+type is supported.
+
+Respect Meta messaging policies,
+recipient eligibility, and messaging windows.
+
+Never bypass messaging restrictions.
+
+==================================================
+7. MESSENGER WEBHOOK SYSTEM
+==================================================
+
+Implement Meta Webhooks.
+
+Suggested endpoints:
+
+GET /api/webhooks/meta
+POST /api/webhooks/meta
+
+GET:
+Webhook verification challenge.
+
+POST:
+Receive webhook events.
+
+Required protections:
+
+- Verify webhook signatures.
+- Validate payload structure.
+- Prevent duplicate processing.
+- Use idempotent event handling.
+- Implement safe retries.
+- Record processing failures.
+- Reject invalid signatures.
+- Avoid logging sensitive message contents.
+
+Process supported events such as:
+
+- Incoming messages
+- Message delivery events
+- Message read events
+- Message postbacks
+- Lead events
+- Supported Page events
+
+Do not assume all event types are available
+without the required subscriptions and permissions.
+
+For asynchronous processing:
+
+1. Receive webhook.
+2. Verify authenticity.
+3. Persist or enqueue event.
+4. Return success promptly.
+5. Process event asynchronously.
+6. Update CRM records.
+7. Notify connected CRM clients.
+
+Use existing real-time infrastructure if available.
+
+Otherwise implement a practical refresh or polling
+strategy suitable for a two-person company.
+
+==================================================
+8. CUSTOMER AND LEAD INTEGRATION
+==================================================
+
+Integrate Messenger with existing CRM Customers.
+
+Do not create duplicate customer management systems.
+
+When a customer sends a message:
+
+- Identify the Page-scoped sender ID.
+- Search existing Meta identity mappings.
+- Link to an existing customer when appropriate.
+- Otherwise create an unlinked conversation/contact.
+- Allow staff to create or associate a CRM customer.
+
+Do not assume a Facebook sender ID uniquely
+identifies a person across different Pages.
+
+Do not automatically merge customers using
+unverified names.
+
+Create a customer identity mapping model.
+
+Suggested fields:
+
+provider
+page_id
+provider_user_id
+customer_id
+created_at
+updated_at
+
+Allow staff to convert conversations into Leads.
+
+Lead fields:
+
+- Customer
+- Source
+- Interested products
+- Budget
+- Country
+- Contact information
+- Assigned staff
+- Lead status
+- Conversation reference
+- Notes
+- Created timestamp
+
+Lead source:
+
+FACEBOOK_MESSENGER
+FACEBOOK_LEAD_AD
+MANUAL
+
+Use existing CRM lead/customer models where possible.
+
+==================================================
+9. INVENTORY AND PRODUCT SHARING
+==================================================
+
+Integrate Messenger with existing Inventory.
+
+Inside a conversation, provide:
+
+[Attach Product]
+
+Open an inventory selector.
+
+Features:
+
+- Search products
+- Filter by brand
+- Filter by category
+- Filter by availability
+- Select product
+- Preview product details
+- Generate shareable product link
+- Insert product information into message draft
+
+Product preview:
+
+- Product image
+- Brand
+- Model
+- Condition
+- Availability
+- Price, if configured
+- Product URL
+
+Reuse the existing Shareable Product Catalog.
+
+Do not create duplicate product records.
+
+Never expose internal costs, supplier details,
+profit margins, or private inventory metadata
+in customer-facing messages.
+
+==================================================
+10. AI MESSENGER ASSISTANT
+==================================================
+
+Implement an AI-assisted response system.
+
+The AI must help staff respond to customers.
+
+Primary capabilities:
+
+- Suggested replies
+- Customer intent detection
+- Product recommendation
+- Conversation summarization
+- Language detection
+- Thai/English translation
+- Lead qualification suggestions
+- Follow-up suggestions
+
+Supported languages:
+
+Thai
+English
+
+Additional languages may be supported
+by the configured AI provider.
+
+Example:
+
+Customer:
+"Do you have used Technogym treadmills?"
+
+AI should:
+
+1. Understand product intent.
+2. Search existing inventory through authorized tools.
+3. Identify relevant available products.
+4. Generate a suggested response.
+5. Display the draft to staff.
+
+The AI must NEVER invent:
+
+- Product availability
+- Product prices
+- Shipping costs
+- Warranty terms
+- Delivery dates
+- Product specifications
+
+Use actual CRM data.
+
+If data is missing, ask the customer
+for clarification or flag the missing information.
+
+AI replies must require human approval by default.
+
+Provide buttons:
+
+Generate Reply
+Regenerate
+Edit
+Insert Product
+Send
+
+Do not enable autonomous message sending
+without a separate explicit configuration
+and policy compliance review.
+
+AI features must remain disabled gracefully
+when no AI provider is configured.
+
+==================================================
+11. FACEBOOK LEAD ADS INTEGRATION
+==================================================
+
+Create:
+
+Meta
+  -> Leads
+
+Implement Lead Ads integration.
+
+Capabilities:
+
+- List available lead forms
+- Configure form-to-CRM mappings
+- Receive lead webhook notifications
+- Retrieve authorized lead details
+- Create CRM leads
+- Detect duplicate leads
+- Assign lead owners
+- Trigger internal notifications
+- Create follow-up tasks
+
+Lead fields may include:
+
+Name
+Email
+Phone
+Country
+Interested equipment
+Budget
+Message
+
+Only map fields actually provided by the form
+and authorized for retrieval.
+
+Support multiple lead forms.
+
+Implement lead synchronization history.
+
+Statuses:
+
+SYNCED
+DUPLICATE
+FAILED
+PENDING
+
+Provide manual retry for failed records.
+
+Respect Meta lead data access requirements,
+privacy obligations, and retention policies.
+
+==================================================
+12. META ADS DASHBOARD
+==================================================
+
+Create:
+
+Meta
+  -> Ads Dashboard
+
+Integrate with the existing CRM dashboard
+without replacing it.
+
+Support authorized Meta Ad Accounts.
+
+Display:
+
+- Total advertising spend
+- Impressions
+- Reach
+- Clicks
+- CTR
+- CPC
+- CPM
+- Leads
+- Cost per lead
+- Campaign performance
+
+Where data is available and applicable.
+
+Support date filters:
+
+Today
+Yesterday
+Last 7 Days
+Last 30 Days
+This Month
+Custom Range
+
+Campaign table:
+
+Campaign Name
+Status
+Objective
+Budget
+Spend
+Impressions
+Clicks
+Leads
+Cost Per Lead
+
+Support campaign detail views.
+
+Use Meta Marketing API Insights.
+
+Handle:
+
+- API pagination
+- Rate limits
+- Attribution differences
+- Metric availability
+- Currency
+- Timezone
+- Reporting delays
+
+Do not calculate misleading metrics
+when required data is unavailable.
+
+Clearly label unavailable metrics.
+
+==================================================
+13. META CAMPAIGN MANAGEMENT
+==================================================
+
+Create:
+
+Meta
+  -> Campaigns
+
+Implement a permission-gated campaign
+management module.
+
+Features:
+
+- View campaigns
+- View ad sets
+- View ads
+- Inspect campaign settings
+- Inspect budgets
+- Inspect targeting
+- Inspect campaign status
+- Create campaign drafts
+- Edit supported settings
+- Pause/resume campaigns
+
+Use officially supported Marketing API operations.
+
+Campaign creation must use a safe workflow:
+
+DRAFT
+VALIDATION
+REVIEW
+CONFIRMATION
+PUBLISH
+
+Never publish a campaign automatically.
+
+Require explicit staff confirmation.
+
+Require appropriate permissions.
+
+If ads_management is unavailable:
+
+Show read-only campaign management.
+
+Do not attempt unauthorized writes.
+
+Do not automatically increase advertising budgets.
+
+Do not silently modify active campaigns.
+
+Every campaign mutation must be recorded
+in an audit log.
+
+==================================================
+14. AI ADS ASSISTANT
+==================================================
+
+Implement AI-assisted advertising analysis.
+
+Capabilities:
+
+- Analyze campaign performance
+- Identify high-cost campaigns
+- Compare cost per lead
+- Suggest campaign improvements
+- Suggest advertising copy
+- Suggest creative concepts
+- Suggest audience strategies
+- Suggest budget allocation
+
+Use actual available Ads Insights data.
+
+Clearly distinguish:
+
+Observed Data
+Calculated Metrics
+AI Recommendations
+
+AI must not claim causal conclusions
+without sufficient evidence.
+
+Recommendations must not automatically
+change active campaigns.
+
+Provide:
+
+[Generate Recommendations]
+
+[Create Campaign Draft]
+
+[Review Changes]
+
+[Apply Approved Changes]
+
+All publishing actions require explicit approval.
+
+If the AI provider is unavailable,
+the Ads Dashboard must remain functional.
+
+==================================================
+15. FACEBOOK PAGE INSIGHTS
+==================================================
+
+Create:
+
+Meta
+  -> Page Insights
+
+Display supported Page metrics.
+
+Potential metrics:
+
+- Followers
+- Reach
+- Engagement
+- Post performance
+- Audience activity
+- Available demographic insights
+
+Only display metrics supported by the
+current Meta API version and granted permissions.
+
+Do not assume all historical or demographic
+metrics remain available.
+
+Provide:
+
+- Date filtering
+- Trend charts
+- Post performance table
+- Last synchronization timestamp
+
+Use appropriate caching.
+
+==================================================
+16. PAGE CONTENT MANAGEMENT
+==================================================
+
+Create:
+
+Meta
+  -> Content
+
+Implement a permission-gated Page content module.
+
+Features:
+
+- View supported Page posts
+- View post performance
+- Create post drafts
+- Attach product images
+- Generate captions
+- Thai/English copy suggestions
+- Publish approved posts
+- Schedule posts where officially supported
+
+Integrate with existing product inventory.
+
+Example:
+
+Select Product
+-> Generate Caption
+-> Review
+-> Publish
+
+Never publish without explicit approval.
+
+Handle media upload requirements
+according to current Meta APIs.
+
+==================================================
+17. DATABASE DESIGN
+==================================================
+
+Inspect the existing database before creating tables.
+
+Use migrations.
+
+Suggested logical entities:
+
+meta_connections
+meta_pages
+meta_ad_accounts
+meta_permissions
+meta_token_metadata
+meta_conversations
+meta_messages
+meta_customer_identities
+meta_lead_form_mappings
+meta_lead_sync_events
+meta_campaign_cache
+meta_insights_cache
+meta_webhook_events
+meta_sync_jobs
+meta_audit_logs
+meta_integration_settings
+
+Adapt names to existing conventions.
+
+Do not duplicate existing:
+
+customers
+leads
+products
+quotations
+users
+tasks
+
+Use proper foreign keys and indexes.
+
+Ensure idempotency for:
+
+Webhook events
+Messages
+Lead imports
+Campaign synchronization
+
+Use safe database migrations.
+
+Do not delete or overwrite existing data.
+
+==================================================
+18. SECURITY REQUIREMENTS
+==================================================
+
+Security is mandatory.
+
+Implement:
+
+- Authentication on CRM endpoints
+- Role-based authorization
+- Secure OAuth state validation
+- Webhook signature verification
+- Encrypted token storage
+- Secure secret management
+- Input validation
+- Output sanitization
+- Rate limiting where appropriate
+- Audit logging
+- Safe error handling
+- Protection against duplicate webhook processing
+
+Never expose:
+
+Meta App Secret
+Page Access Token
+User Access Token
+System User Token
+AI API Keys
+
+Do not store credentials in browser localStorage.
+
+Do not expose credentials in API responses.
+
+Avoid logging sensitive customer messages.
+
+Implement least-privilege permissions.
+
+Support secure disconnection and
+revocation workflows.
+
+==================================================
+19. USER EXPERIENCE
+==================================================
+
+The UI must match the existing Corevity CRM.
+
+Requirements:
+
+- Responsive design
+- Mobile-friendly
+- Tablet-friendly
+- Desktop-friendly
+- Thai and English support
+- Clear loading states
+- Empty states
+- Error states
+- Permission warning states
+- Connection status indicators
+
+Prioritize efficient workflows
+for a two-person business.
+
+Avoid unnecessary enterprise complexity.
+
+The Messenger Inbox must work comfortably
+on mobile devices.
+
+==================================================
+20. FEATURE FLAGS
+==================================================
+
+Implement feature flags:
+
+META_INTEGRATION_ENABLED
+META_DEMO_MODE
+META_MESSENGER_ENABLED
+META_LEADS_ENABLED
+META_ADS_READ_ENABLED
+META_ADS_WRITE_ENABLED
+META_AI_ENABLED
+META_PAGE_CONTENT_ENABLED
+
+Use existing feature flag infrastructure
+if available.
+
+Do not introduce a new service unnecessarily.
+
+Default all external write operations to disabled.
+
+==================================================
+21. API DESIGN
+==================================================
+
+Use existing API conventions.
+
+Suggested routes:
+
+GET    /api/integrations/meta/status
+GET    /api/integrations/meta/connect
+GET    /api/integrations/meta/callback
+POST   /api/integrations/meta/disconnect
+
+GET    /api/meta/pages
+GET    /api/meta/permissions
+
+GET    /api/meta/conversations
+GET    /api/meta/conversations/:id
+POST   /api/meta/conversations/:id/messages
+POST   /api/meta/conversations/:id/lead
+
+GET    /api/meta/leads
+POST   /api/meta/leads/sync
+
+GET    /api/meta/ads/accounts
+GET    /api/meta/ads/campaigns
+GET    /api/meta/ads/insights
+
+POST   /api/meta/ads/campaigns/drafts
+POST   /api/meta/ads/campaigns/:id/publish
+
+GET    /api/meta/page/insights
+
+POST   /api/meta/ai/suggest-reply
+POST   /api/meta/ai/analyze-campaign
+
+GET    /api/webhooks/meta
+POST   /api/webhooks/meta
+
+Adjust routes to match existing application
+architecture.
+
+All protected endpoints must validate
+the authenticated CRM user.
+
+==================================================
+22. ERROR HANDLING
+==================================================
+
+Handle:
+
+Missing credentials
+Invalid credentials
+Expired tokens
+Revoked permissions
+Disconnected Page
+Meta API errors
+Rate limits
+Webhook failures
+Database errors
+Network timeouts
+Unsupported API operations
+AI provider unavailable
+
+Show actionable error messages.
+
+Examples:
+
+"Meta integration is not configured."
+
+"Facebook permissions need to be updated."
+
+"Please reconnect your Facebook Page."
+
+"Advertising management requires additional permissions."
+
+Do not expose internal stack traces
+or credentials to users.
+
+==================================================
+23. TESTING REQUIREMENTS
+==================================================
+
+Implement automated tests.
+
+Required test areas:
+
+OAuth state validation
+OAuth callback handling
+Missing configuration
+Token expiration
+Permission validation
+Webhook signature validation
+Webhook deduplication
+Message persistence
+Customer identity mapping
+Lead conversion
+Lead import deduplication
+Ads metrics calculations
+Campaign authorization
+AI draft approval
+Feature flags
+Mock provider behavior
+
+Test the application without Meta credentials.
+
+Test disconnected states.
+
+Test partial permission states.
+
+Test invalid webhook payloads.
+
+Test repeated webhook delivery.
+
+Test mobile layouts.
+
+Existing tests must continue passing.
+
+==================================================
+24. DEPLOYMENT REQUIREMENTS
+==================================================
+
+Support existing Cloudflare deployment workflows.
+
+Do not modify production secrets automatically.
+
+Do not require Meta credentials during build.
+
+Provide an environment variable template.
+
+Example:
+
+META_APP_ID=
+META_APP_SECRET=
+META_WEBHOOK_VERIFY_TOKEN=
+META_GRAPH_API_VERSION=
+META_INTEGRATION_ENABLED=false
+META_DEMO_MODE=true
+META_ADS_WRITE_ENABLED=false
+
+Use secure secret configuration for sensitive values.
+
+Document:
+
+- Cloudflare environment setup
+- Meta Developer App setup
+- OAuth redirect configuration
+- Webhook callback configuration
+- Required Meta permissions
+- Business verification considerations
+- App Review considerations
+- Production activation
+- Troubleshooting
+
+==================================================
+25. IMPLEMENTATION PHASES
+==================================================
+
+Implement incrementally.
+
+PHASE 1:
+Repository inspection and architecture review.
+
+PHASE 2:
+Database migrations and Meta integration foundation.
+
+PHASE 3:
+Settings page, setup wizard, feature flags,
+and Demo Mode.
+
+PHASE 4:
+OAuth, Page connection, permissions,
+and token lifecycle.
+
+PHASE 5:
+Webhook infrastructure and Messenger Inbox.
+
+PHASE 6:
+Customer mapping, lead conversion,
+and inventory integration.
+
+PHASE 7:
+AI-assisted Messenger responses.
+
+PHASE 8:
+Lead Ads synchronization.
+
+PHASE 9:
+Meta Ads Dashboard and reporting.
+
+PHASE 10:
+Campaign management with approval workflow.
+
+PHASE 11:
+AI Ads recommendations.
+
+PHASE 12:
+Page Insights and content management.
+
+PHASE 13:
+Security hardening, automated tests,
+documentation, and final integration review.
+
+Each phase must preserve existing CRM functionality.
+
+Do not proceed with destructive database operations.
+
+==================================================
+26. IMPORTANT IMPLEMENTATION RULES
+==================================================
+
+1. Inspect the actual repository first.
+
+2. Never assume a feature exists without verifying it.
+
+3. Reuse existing CRM components.
+
+4. Avoid unnecessary dependencies.
+
+5. Do not hardcode Meta IDs.
+
+6. Do not fabricate production credentials.
+
+7. Do not require Meta connectivity during development.
+
+8. Clearly distinguish Demo Mode from Live Mode.
+
+9. Keep external write operations disabled by default.
+
+10. Never automatically send customer messages.
+
+11. Never automatically publish advertising campaigns.
+
+12. Never automatically increase advertising budgets.
+
+13. Never expose secrets to the frontend.
+
+14. Use the current supported Meta API version.
+
+15. Verify API capabilities against official documentation.
+
+16. Implement graceful handling of missing permissions.
+
+17. Preserve existing database records.
+
+18. Do not break existing authentication.
+
+19. Ensure the integration works for a two-person company.
+
+20. Prioritize reliability, security, and maintainability.
+
+==================================================
+27. FINAL DELIVERABLES
+==================================================
+
+Provide:
+
+1. Complete Meta Integration module.
+
+2. Responsive CRM integration UI.
+
+3. Functional Demo Mode.
+
+4. Secure OAuth implementation.
+
+5. Webhook infrastructure.
+
+6. Messenger Inbox.
+
+7. CRM customer and lead integration.
+
+8. Inventory product sharing.
+
+9. AI response assistance.
+
+10. Lead Ads integration.
+
+11. Meta Ads Dashboard.
+
+12. Campaign management module.
+
+13. AI Ads recommendations.
+
+14. Page Insights.
+
+15. Content management.
+
+16. Database migrations.
+
+17. Automated tests.
+
+18. Environment configuration template.
+
+19. Meta Developer setup documentation.
+
+20. Production activation checklist.
+
+==================================================
+28. EXECUTION INSTRUCTIONS
+==================================================
+
+Start by inspecting the existing Corevity CRM repository.
+
+Identify:
+
+- Framework
+- Cloudflare architecture
+- Database
+- Authentication
+- Existing modules
+- Existing API patterns
+- UI design system
+- Deployment configuration
+
+Then create a detailed implementation plan.
+
+Implement the solution in manageable phases.
+
+Do not stop after producing only an architecture proposal.
+
+Proceed with implementation where the repository
+and development environment allow it.
+
+Do not request Meta App ID, App Secret,
+Page ID, or Ad Account ID at this stage.
+
+Use Demo Mode and configuration placeholders.
+
+If a task requires actual Meta credentials,
+implement the code path and mark it as:
+
+"READY FOR META CONFIGURATION"
+
+Continue implementing independent features.
+
+Run available tests after each major phase.
+
+At completion, provide:
+
+- Summary of implemented features
+- Files changed
+- Database migrations
+- Tests executed and results
+- Features verified in Demo Mode
+- Features requiring real Meta credentials
+- Features requiring Meta App Review
+- Known limitations
+- Exact steps for production activation
+
+IMPORTANT:
+
+Do not claim a feature is production-verified
+unless it has actually been tested against Meta.
+
+The goal is to deliver a complete,
+well-structured Meta integration foundation
+that can be activated later by configuring
+real Meta credentials.
+
+BEGIN IMPLEMENTATION.

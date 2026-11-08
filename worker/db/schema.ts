@@ -1,4 +1,6 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
+export * from './meta-schema';
+export * from './meta-workflow-schema';
 const timestamps = {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
@@ -8,6 +10,7 @@ export const products = sqliteTable('products', {
   sku: text('sku').notNull().unique(),
   brand: text('brand').notNull(),
   model: text('model').notNull(),
+  targetBodyPart: text('target_body_part').notNull().default(''),
   category: text('category').notNull(),
   serialNumber: text('serial_number').notNull(),
   condition: text('condition').notNull(),
@@ -17,6 +20,7 @@ export const products = sqliteTable('products', {
     enum: ['AVAILABLE', 'NOT_AVAILABLE', 'RESERVED', 'SOLD'],
   }).notNull(),
   location: text('location').notNull(),
+  catalogDetail: text('catalog_detail').notNull().default(''),
   descriptionTh: text('description_th').notNull(),
   descriptionEn: text('description_en').notNull(),
   shortDescription: text('short_description').notNull(),
@@ -70,6 +74,7 @@ export const leads = sqliteTable('leads', {
   assignedTo: text('assigned_to').notNull().default(''),
   estimatedValue: real('estimated_value').notNull(),
   lastContactAt: text('last_contact_at'),
+  viewingAt: text('viewing_at'),
   nextFollowUpAt: text('next_follow_up_at'),
   notes: text('notes').notNull(),
   ...timestamps,
@@ -230,9 +235,40 @@ export const chatMessages = sqliteTable('chat_messages', {
   requestId: text('request_id').notNull(),
   senderEmail: text('sender_email').notNull(),
   body: text('body').notNull(),
+  mentions: text('mentions').notNull().default('[]'),
   productIds: text('product_ids').notNull().default('[]'),
   createdAt: text('created_at').notNull(),
 });
+export const chatReadCursors = sqliteTable('chat_read_cursors', {
+  email: text('email').primaryKey(),
+  lastReadMessageId: integer('last_read_message_id').notNull().default(0),
+  updatedAt: text('updated_at').notNull(),
+});
+export const chatReactions = sqliteTable('chat_reactions', {
+  messageId: integer('message_id').notNull().references(() => chatMessages.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  emoji: text('emoji').notNull(),
+  createdAt: text('created_at').notNull(),
+}, (table) => [
+  uniqueIndex('chat_reactions_message_email_emoji_unique').on(table.messageId, table.email, table.emoji),
+  index('chat_reactions_message_idx').on(table.messageId),
+]);
+export const chatMentionNotifications = sqliteTable('chat_mention_notifications', {
+  id: text('id').primaryKey(),
+  messageId: integer('message_id').notNull().references(() => chatMessages.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  lineUserId: text('line_user_id').notNull(),
+  status: text('status', { enum: ['pending', 'sent', 'failed', 'cancelled'] }).notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+  nextAttemptAt: text('next_attempt_at').notNull(),
+  leaseUntil: text('lease_until'),
+  sentAt: text('sent_at'),
+  lastError: text('last_error'),
+}, (table) => [
+  uniqueIndex('chat_mention_notifications_message_email_unique').on(table.messageId, table.email),
+  index('chat_mention_notifications_due_idx').on(table.status, table.nextAttemptAt, table.leaseUntil),
+]);
 export const assistantMessages = sqliteTable('assistant_messages', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   userEmail: text('user_email').notNull(),
@@ -253,10 +289,13 @@ export const catalogs = sqliteTable('catalogs', {
   customerId: text('customer_id').references(() => customers.id, {
     onDelete: 'set null',
   }),
+  assignedSalespersonEmail: text('assigned_salesperson_email').notNull().default(''),
   showPrices: integer('show_prices', { mode: 'boolean' })
     .notNull()
     .default(true),
   showSold: integer('show_sold', { mode: 'boolean' }).notNull().default(false),
+  publishToWeb: integer('publish_to_web', { mode: 'boolean' }).notNull().default(false),
+  publishedToWebAt: text('published_to_web_at'),
   expiresAt: text('expires_at'),
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
@@ -287,4 +326,126 @@ export const catalogEvents = sqliteTable('catalog_events', {
   eventType: text('event_type').notNull(),
   hour: text('hour').notNull(),
   count: integer('count').notNull().default(0),
+});
+export const catalogChats = sqliteTable('catalog_chats', {
+  id: text('id').primaryKey(),
+  tokenHash: text('token_hash').notNull(),
+  catalogSlug: text('catalog_slug').notNull().default(''),
+  catalogTitle: text('catalog_title').notNull().default(''),
+  assignedEmail: text('assigned_email').notNull().default(''),
+  visitorName: text('visitor_name').notNull().default(''),
+  visitorPhone: text('visitor_phone').notNull().default(''),
+  visitorEmail: text('visitor_email').notNull().default(''),
+  source: text('source', { enum: ['CATALOG', 'WEBSITE'] }).notNull().default('CATALOG'),
+  status: text('status', { enum: ['OPEN', 'CLOSED'] }).notNull().default('OPEN'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  lastMessageAt: text('last_message_at').notNull(),
+});
+export const catalogChatMessages = sqliteTable('catalog_chat_messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  chatId: text('chat_id').notNull().references(() => catalogChats.id, { onDelete: 'cascade' }),
+  senderType: text('sender_type', { enum: ['VISITOR', 'SALESPERSON'] }).notNull(),
+  senderEmail: text('sender_email').notNull().default(''),
+  body: text('body').notNull(),
+  products: text('products').notNull().default('[]'),
+  createdAt: text('created_at').notNull(),
+});
+export const catalogChatRateLimits = sqliteTable('catalog_chat_rate_limits', {
+  visitorHash: text('visitor_hash').notNull(),
+  scope: text('scope', { enum: ['thread', 'message'] }).notNull(),
+  windowStart: text('window_start').notNull(),
+  requestCount: integer('request_count').notNull().default(0),
+}, (table) => [uniqueIndex('catalog_chat_rate_limit_unique').on(table.visitorHash, table.scope, table.windowStart)]);
+export const expenseCategories = sqliteTable('expense_categories', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  defaultExpenseType: text('default_expense_type').notNull(),
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
+export const expenseNumberSequences = sqliteTable('expense_number_sequences', {
+  year: integer('year').primaryKey(),
+  lastNumber: integer('last_number').notNull(),
+});
+export const expenses = sqliteTable('expenses', {
+  id: text('id').primaryKey(),
+  expenseNumber: text('expense_number').notNull().unique(),
+  expenseDate: text('expense_date').notNull(),
+  description: text('description').notNull(),
+  categoryId: text('category_id')
+    .notNull()
+    .references(() => expenseCategories.id),
+  expenseType: text('expense_type').notNull(),
+  amountMinor: integer('amount_minor').notNull(),
+  currency: text('currency').notNull(),
+  exchangeRate: real('exchange_rate').notNull(),
+  convertedThbMinor: integer('converted_thb_minor').notNull(),
+  exchangeRateDate: text('exchange_rate_date').notNull(),
+  vendor: text('vendor').notNull().default(''),
+  paymentMethod: text('payment_method').notNull().default(''),
+  dueDate: text('due_date'),
+  relatedProductId: text('related_product_id').references(() => products.id, {
+    onDelete: 'set null',
+  }),
+  notes: text('notes').notNull().default(''),
+  idempotencyKey: text('idempotency_key').notNull().unique(),
+  createdBy: text('created_by').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  voidedAt: text('voided_at'),
+  voidReason: text('void_reason').notNull().default(''),
+});
+export const expensePayments = sqliteTable('expense_payments', {
+  id: text('id').primaryKey(),
+  expenseId: text('expense_id')
+    .notNull()
+    .references(() => expenses.id),
+  amountMinor: integer('amount_minor').notNull(),
+  paymentDate: text('payment_date').notNull(),
+  paymentMethod: text('payment_method').notNull(),
+  referenceNumber: text('reference_number').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  idempotencyKey: text('idempotency_key').notNull().unique(),
+  createdBy: text('created_by').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+export const expenseAllocations = sqliteTable('expense_allocations', {
+  id: text('id').primaryKey(),
+  expenseId: text('expense_id')
+    .notNull()
+    .references(() => expenses.id),
+  productId: text('product_id')
+    .notNull()
+    .references(() => products.id),
+  allocatedThbMinor: integer('allocated_thb_minor').notNull(),
+  allocationMethod: text('allocation_method').notNull(),
+  createdAt: text('created_at').notNull(),
+});
+export const expenseAttachments = sqliteTable('expense_attachments', {
+  id: text('id').primaryKey(),
+  expenseId: text('expense_id')
+    .notNull()
+    .references(() => expenses.id),
+  paymentId: text('payment_id').references(() => expensePayments.id),
+  r2Key: text('r2_key').notNull().unique(),
+  fileName: text('file_name').notNull(),
+  mimeType: text('mime_type').notNull(),
+  fileSize: integer('file_size').notNull(),
+  attachmentType: text('attachment_type').notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: text('created_at').notNull(),
+  removedAt: text('removed_at'),
+  removedBy: text('removed_by'),
+});
+export const expenseAuditLogs = sqliteTable('expense_audit_logs', {
+  id: text('id').primaryKey(),
+  expenseId: text('expense_id')
+    .notNull()
+    .references(() => expenses.id),
+  action: text('action').notNull(),
+  details: text('details').notNull().default('{}'),
+  actorEmail: text('actor_email').notNull(),
+  createdAt: text('created_at').notNull(),
 });

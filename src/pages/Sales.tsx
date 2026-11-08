@@ -91,6 +91,12 @@ export function SalesPage() {
                       {l.products?.map((p) => p.model).join(', ') ||
                         t('No equipment linked')}
                     </p>
+                    {l.viewingAt && (
+                      <small>
+                        {localized('Equipment viewing', 'นัดดูสินค้า')}:{' '}
+                        {date(l.viewingAt)}
+                      </small>
+                    )}
                     {l.nextFollowUpAt && (
                       <small className="due-date">
                         <Clock size={13} />
@@ -131,6 +137,7 @@ const blank: LeadFormValues = {
   estimatedValue: '',
   lastContactAt: null,
   nextFollowUpAt: null,
+  viewingAt: null,
   notes: '',
   productIds: [],
 };
@@ -361,10 +368,12 @@ export function LeadPage() {
   const [winning, setWinning] = useState(false);
   const [sold, setSold] = useState<string[]>([]);
   const [followup, setFollowup] = useState('');
+  const [viewingAt, setViewingAt] = useState('');
   const nav = useNavigate();
   useEffect(() => {
     if (d) {
       setFollowup(localDate(d.lead.nextFollowUpAt));
+      setViewingAt(localDate(d.lead.viewingAt));
       setAssignedTo(d.lead.assignedTo);
     }
   }, [d]);
@@ -424,6 +433,22 @@ export function LeadPage() {
         }
       />
       <ErrorBox message={error || loadError} />
+      {d.messenger && (
+        <section className="panel">
+          <strong>Facebook Messenger · {d.messenger.displayName}</strong>
+          <p>
+            <Link
+              className="button"
+              to={
+                '/meta/inbox?conversation=' +
+                encodeURIComponent(d.messenger.conversationId)
+              }
+            >
+              {localized('Open original conversation', 'เปิดแชทต้นทาง')}
+            </Link>
+          </p>
+        </section>
+      )}
       <section className="panel">
         <div className="section-heading">
           <Badge value={l.status} />
@@ -551,7 +576,8 @@ export function LeadPage() {
             onSubmit={(e) => {
               e.preventDefault();
               void action(`/leads/${id}`, {
-                nextFollowUpAt: toISO(followup),
+                nextFollowUpAt: toISO(followup) ?? toISO(viewingAt),
+                viewingAt: toISO(viewingAt),
                 assignedTo,
               });
             }}
@@ -564,6 +590,13 @@ export function LeadPage() {
                 disabled={busy || ['WON', 'LOST'].includes(l.status)}
               />
               <ErrorBox message={salesError} />
+            </Field>
+            <Field label={localized('Equipment viewing', 'นัดดูสินค้า')}>
+              <input
+                type="datetime-local"
+                value={viewingAt}
+                onChange={(e) => setViewingAt(e.target.value)}
+              />
             </Field>
             <Field label={t('Next follow-up')}>
               <input

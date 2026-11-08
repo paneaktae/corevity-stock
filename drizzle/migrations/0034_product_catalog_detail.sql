@@ -1,0 +1,1 @@
+ALTER TABLE products ADD COLUMN catalog_detail TEXT NOT NULL DEFAULT '';

@@ -1,10 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
-import type { ChatMessage } from '../shared/schemas';
+import type { ChatMessage, ChatReaction } from '../shared/schemas';
 import type { Bindings } from './auth';
 
 type ChatPresenceUser = { email: string; name: string };
 type ChatEvent =
   | { type: 'chat.message'; message: ChatMessage }
+  | { type: 'chat.read'; readerEmail: string; lastReadMessageId: number }
+  | { type: 'chat.reaction'; messageId: number; reactions: ChatReaction[] }
   | { type: 'chat.presence'; users: ChatPresenceUser[] };
 
 export class ChatRoom extends DurableObject<Bindings> {
@@ -34,6 +36,36 @@ export class ChatRoom extends DurableObject<Bindings> {
         socket.send(payload);
       } catch {
         socket.close(1011, 'Delivery failed');
+      }
+    }
+  }
+
+  broadcastRead(readerEmail: string, lastReadMessageId: number): void {
+    const payload = JSON.stringify({
+      type: 'chat.read',
+      readerEmail,
+      lastReadMessageId,
+    } satisfies ChatEvent);
+    for (const socket of this.ctx.getWebSockets()) {
+      try {
+        socket.send(payload);
+      } catch {
+        socket.close(1011, 'Read receipt delivery failed');
+      }
+    }
+  }
+
+  broadcastReaction(messageId: number, reactions: ChatReaction[]): void {
+    const payload = JSON.stringify({
+      type: 'chat.reaction',
+      messageId,
+      reactions,
+    } satisfies ChatEvent);
+    for (const socket of this.ctx.getWebSockets()) {
+      try {
+        socket.send(payload);
+      } catch {
+        socket.close(1011, 'Reaction update failed');
       }
     }
   }

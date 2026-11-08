@@ -1,9 +1,15 @@
 import type { Bindings } from '../auth';
 const encoder = new TextEncoder();
 export const allowedSales = (env: Bindings) =>
-  env.ALLOWED_EMAILS.split(',')
+  (env.ALLOWED_EMAILS ?? '').split(',')
     .map((v) => v.trim().toLowerCase())
     .filter(Boolean);
+export async function workspaceSalesEmails(env: Bindings) {
+  const result = await env.DB.prepare(
+    'SELECT email FROM workspace_users WHERE is_active=1',
+  ).all<{ email: string }>();
+  return [...new Set([...allowedSales(env), ...(result.results ?? []).map((row) => row.email.toLowerCase())])];
+}
 export const lineConfigured = (env: Bindings) =>
   !!(env.LINE_CHANNEL_ACCESS_TOKEN && env.LINE_CHANNEL_SECRET);
 export async function hashCode(code: string) {
@@ -90,6 +96,7 @@ export async function handleLineWebhook(
   if (!Array.isArray(data.events) || data.events.length > 100)
     return new Response('Bad request', { status: 400 });
   const now = new Date().toISOString();
+  const authorizedSalespeople = new Set(await workspaceSalesEmails(env));
   for (const event of data.events) {
     const userId = event.source?.userId;
     if (
@@ -124,7 +131,7 @@ export async function handleLineWebhook(
     )
       .bind(digest, now)
       .first<{ email: string }>();
-    if (!link || !allowedSales(env).includes(link.email)) continue;
+    if (!link || !authorizedSalespeople.has(link.email)) continue;
     // Conditional insert + consumption in one transaction prevents concurrent reuse.
     // A LINE identity already linked to another email is never silently reassigned.
     await env.DB.batch([
@@ -190,6 +197,101 @@ export const pushReminder: SendReminder = async (env, reminder, message) => {
     error: accepted ? undefined : `LINE_HTTP_${response.status}`,
   };
 };
+
+type ChatMentionJob = {
+  id: string;
+  message_id: number;
+  email: string;
+  line_user_id: string;
+  attempts: number;
+  body: string;
+  sender_name: string;
+};
+
+export async function processChatMentionNotifications(
+  env: Bindings,
+  time = Date.now(),
+) {
+  if (!lineConfigured(env) || !env.APP_URL) return;
+  let origin: URL;
+  try {
+    origin = new URL(env.APP_URL);
+  } catch {
+    return;
+  }
+  if (origin.protocol !== 'https:') return;
+  const now = new Date(time).toISOString();
+  const allowed = new Set(await workspaceSalesEmails(env));
+  const jobs = await env.DB.prepare(
+    `SELECT n.id,n.message_id,n.email,n.line_user_id,n.attempts,m.body,
+      COALESCE(NULLIF(trim(s.first_name || ' ' || s.last_name),''),m.sender_email) AS sender_name
+     FROM chat_mention_notifications n
+     JOIN chat_messages m ON m.id=n.message_id
+     LEFT JOIN salespeople s ON s.email=m.sender_email
+     WHERE n.status='pending' AND n.next_attempt_at<=?
+       AND (n.lease_until IS NULL OR n.lease_until<=?)
+     ORDER BY n.created_at LIMIT 50`,
+  ).bind(now, now).all<ChatMentionJob>();
+
+  for (const job of jobs.results) {
+    if (!allowed.has(job.email.toLowerCase())) {
+      await env.DB.prepare(
+        "UPDATE chat_mention_notifications SET status='cancelled',lease_until=NULL,last_error='RECIPIENT_REMOVED' WHERE id=? AND status='pending'",
+      ).bind(job.id).run();
+      continue;
+    }
+    const lease = await env.DB.prepare(
+      "UPDATE chat_mention_notifications SET lease_until=?,attempts=attempts+1 WHERE id=? AND status='pending' AND next_attempt_at<=? AND (lease_until IS NULL OR lease_until<=?)",
+    ).bind(new Date(time + 120000).toISOString(), job.id, now, now).run();
+    if (!lease.meta.changes) continue;
+
+    const account = await env.DB.prepare(
+      'SELECT line_user_id FROM line_accounts WHERE email=? AND enabled=1',
+    ).bind(job.email).first<{ line_user_id: string }>();
+    if (!account || account.line_user_id !== job.line_user_id) {
+      await env.DB.prepare(
+        "UPDATE chat_mention_notifications SET status='cancelled',lease_until=NULL,last_error='LINE_ACCOUNT_UNAVAILABLE' WHERE id=?",
+      ).bind(job.id).run();
+      continue;
+    }
+
+    const preview = job.body.replace(/\s+/g, ' ').trim().slice(0, 650);
+    const message = `Corevity · Team chat\n${job.sender_name} mentioned you:\n${preview}${job.body.length > 650 ? '…' : ''}\n\nOpen message: ${origin.origin}/chat?message=${job.message_id}`;
+    try {
+      const response = await lineRequest(env, 'message/push', {
+        method: 'POST',
+        headers: { 'X-Line-Retry-Key': job.id },
+        body: JSON.stringify({
+          to: job.line_user_id,
+          messages: [{ type: 'text', text: message }],
+        }),
+      });
+      const accepted = response.ok || (response.status === 409 && !!response.headers.get('x-line-accepted-request-id'));
+      const retryable = response.status === 429 || response.status >= 500;
+      const attempts = job.attempts + 1;
+      await env.DB.prepare(
+        'UPDATE chat_mention_notifications SET status=?,sent_at=?,lease_until=NULL,next_attempt_at=?,last_error=? WHERE id=?',
+      ).bind(
+        accepted ? 'sent' : retryable && attempts < 10 ? 'pending' : 'failed',
+        accepted ? now : null,
+        new Date(time + (retryable ? Math.min(60, 2 ** attempts) : 0) * 60000).toISOString(),
+        accepted ? null : `LINE_HTTP_${response.status}`,
+        job.id,
+      ).run();
+    } catch (error) {
+      const attempts = job.attempts + 1;
+      await env.DB.prepare(
+        'UPDATE chat_mention_notifications SET status=?,lease_until=NULL,next_attempt_at=?,last_error=? WHERE id=?',
+      ).bind(
+        attempts < 10 ? 'pending' : 'failed',
+        new Date(time + Math.min(60, 2 ** attempts) * 60000).toISOString(),
+        error instanceof Error ? error.name : 'LINE_REQUEST_FAILED',
+        job.id,
+      ).run();
+    }
+  }
+}
+
 export async function processLineReminders(
   env: Bindings,
   time = Date.now(),
@@ -200,7 +302,7 @@ export async function processLineReminders(
   if (origin.protocol !== 'https:') throw new Error('Invalid application URL');
   const now = new Date(time).toISOString(),
     nextDay = new Date(time + 86400000).toISOString();
-  const allowed = allowedSales(env);
+  const allowed = await workspaceSalesEmails(env);
   // Cancel stale jobs before enqueuing current appointments. No customer notes or prices leave the app.
   await env.DB.prepare(
     `UPDATE line_reminders SET status='cancelled', lease_until=NULL WHERE status='pending' AND NOT EXISTS (

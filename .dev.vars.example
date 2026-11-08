@@ -4,3 +4,33 @@ LOCAL_MOCK_EMAIL=demo@example.test
 # BOT_API_KEY=
 # AI_MODEL=
 # AI_BASE_URL=https://your-provider.example/v1
+
+# Meta foundation: optional, no network operations in Phase 2.
+# Set both to true for simulated status; keep external features disabled.
+META_INTEGRATION_ENABLED=false
+META_DEMO_MODE=false
+META_MESSENGER_ENABLED=false
+META_LEADS_ENABLED=false
+META_ADS_READ_ENABLED=false
+META_ADS_WRITE_ENABLED=false
+META_AI_ENABLED=false
+META_PAGE_CONTENT_ENABLED=false
+META_APP_ID=
+# Optional Facebook Login for Business configuration ID; scopes come from Meta configuration.
+META_LOGIN_CONFIG_ID=
+META_APP_SECRET=
+META_WEBHOOK_VERIFY_TOKEN=
+META_GRAPH_API_VERSION=
+META_OAUTH_REDIRECT_URL=
+# Server-only AES-256 key: base64 of 32 cryptographically random bytes.
+# Keep this key backed up outside the repo; changing it requires token re-encryption.
+META_TOKEN_ENCRYPTION_KEY=
+META_TOKEN_ENCRYPTION_KEY_VERSION=
+# Required operator review before any live request. Never enable just to test Demo.
+META_LIVE_ACTIVATION_CONFIRMED=false
+# Comma-separated metric names verified for the configured Graph API version.
+META_POST_INSIGHT_METRICS=
+META_PAGE_INSIGHT_METRICS=
+META_PAGE_SCHEDULING_SUPPORTED=false
+# Meta message/note retention; 30–365 days. Existing CRM records are preserved.
+META_DATA_RETENTION_DAYS=90

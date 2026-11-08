@@ -1,13 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFileSync, readdirSync } from 'node:fs';
 import type { Bindings } from '../worker/auth';
 import {
   handleLineWebhook,
   hashCode,
+  processChatMentionNotifications,
   processLineReminders,
   type Reminder,
 } from '../worker/services/line';
+import { processCalendarReminders, type CalendarReminder } from '../worker/calendar';
+import publicCatalog from '../worker/public-catalog';
+import { notifyCatalogChat } from '../worker/catalogs';
 let mf: Miniflare;
 let env: Bindings;
 const email = 'sale@example.test',
@@ -47,6 +51,7 @@ beforeEach(async () => {
     .run();
 });
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await mf.dispose();
 });
 async function lead(id: string, hours = 24, status = 'NEW', owner = email) {
@@ -92,6 +97,97 @@ async function webhook(events: unknown[], valid = true) {
   );
 }
 describe('LINE linking and reminders', () => {
+  it('notifies linked workspace members for the first and subsequent website messages', async () => {
+    env = { ...env, CATALOG_CHAT_INTERNAL_SECRET: 'internal-test' };
+    const invited = 'invited@example.test';
+    await env.DB.prepare("INSERT INTO workspace_users(email,is_active,created_by,created_at) VALUES(?,1,?,?)")
+      .bind(invited, email, new Date(base).toISOString()).run();
+    for (const [account, enabled, digit] of [[invited, 1, '2'], ['removed@example.test', 1, '3'], ['paused@example.test', 0, '4']] as const) {
+      await env.DB.prepare('INSERT INTO line_accounts(email,line_user_id,enabled,linked_at) VALUES(?,?,?,?)')
+        .bind(account, 'U' + digit.repeat(32), enabled, new Date(base).toISOString()).run();
+    }
+    const pushes: { to: string; messages: { text: string }[] }[] = [];
+    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+      pushes.push(JSON.parse(String(init?.body)));
+      return Response.json({});
+    });
+    const notify = vi.fn((request: Request) => notifyCatalogChat(env, request));
+    const publicEnv = { DB: env.DB, PRODUCT_IMAGES: env.PRODUCT_IMAGES, CATALOG_CHAT_INTERNAL_SECRET: 'internal-test', MANAGEMENT: { fetch: notify } as unknown as Fetcher };
+    const ctx = { waitUntil: vi.fn() } as unknown as ExecutionContext;
+    const first = await publicCatalog.fetch(new Request('https://catalog.test/api/public/chat/website', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visitorName: 'Website visitor', visitorPhone: '+66812345678', visitorEmail: 'visitor@example.test', body: 'Hello from website' }),
+    }), publicEnv, ctx);
+    expect(first.status).toBe(201);
+    const { session } = await first.json() as { session: { id: string; token: string } };
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(pushes.map((push) => push.to).sort()).toEqual([userId, 'U' + '2'.repeat(32)].sort());
+    expect(pushes[0].messages[0].text).toContain('Website inquiry');
+    expect(pushes[0].messages[0].text).toContain('Hello from website');
+    expect(pushes[0].messages[0].text).toContain(`/catalog-chats?thread=${session.id}`);
+    const next = await publicCatalog.fetch(new Request(`https://catalog.test/api/public/chat/${session.id}/messages`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify({ body: 'A follow-up question' }),
+    }), publicEnv, ctx);
+    expect(next.status).toBe(201);
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(pushes).toHaveLength(4);
+    expect(pushes[2].messages[0].text).toContain('A follow-up question');
+
+    // Shared catalog conversations still notify only their assigned salesperson.
+    await env.DB.prepare("UPDATE catalog_chats SET source='CATALOG',assigned_email=?,catalog_title='Private catalog' WHERE id=?")
+      .bind(email, session.id).run();
+    await notifyCatalogChat(env, new Request('https://management.internal/internal/catalog-chat-notify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-catalog-chat-secret': 'internal-test' },
+      body: JSON.stringify({ threadId: session.id, body: 'Catalog question', products: [] }),
+    }));
+    expect(pushes).toHaveLength(5);
+    expect(pushes[4].to).toBe(userId);
+    expect(pushes[4].messages[0].text).toContain('Catalog inquiry · Private catalog');
+  });
+
+  it('retries team chat mention alerts and links directly to the mentioned message', async () => {
+    const recipientEmail = 'mentioned@example.test';
+    env = { ...env, ALLOWED_EMAILS: `${email},${recipientEmail}` };
+    await env.DB.prepare(
+      "INSERT INTO salespeople(email,first_name,last_name,updated_at) VALUES(?,?,?,?)",
+    ).bind(email, 'Sale', 'Sender', new Date(base).toISOString()).run();
+    await env.DB.prepare(
+      'INSERT INTO line_accounts(email,line_user_id,enabled,linked_at) VALUES(?,?,1,?)',
+    ).bind(recipientEmail, 'U' + '3'.repeat(32), new Date(base).toISOString()).run();
+    const inserted = await env.DB.prepare(
+      'INSERT INTO chat_messages(request_id,sender_email,body,mentions,product_ids,created_at) VALUES(?,?,?,?,?,?)',
+    ).bind(
+      crypto.randomUUID(), email, 'Please review this @Teammate',
+      JSON.stringify([{ email: recipientEmail, token: '@Teammate' }]), '[]', new Date(base).toISOString(),
+    ).run();
+    const messageId = Number(inserted.meta.last_row_id);
+    const jobId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO chat_mention_notifications(id,message_id,email,line_user_id,status,attempts,created_at,next_attempt_at) VALUES(?,?,?,?,'pending',0,?,?)",
+    ).bind(jobId, messageId, recipientEmail, 'U' + '3'.repeat(32), new Date(base).toISOString(), new Date(base).toISOString()).run();
+
+    const sends: { retryKey: string | null; text: string }[] = [];
+    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { messages: { text: string }[] };
+      sends.push({ retryKey: new Headers(init?.headers).get('X-Line-Retry-Key'), text: body.messages[0].text });
+      return new Response('{}', { status: sends.length === 1 ? 503 : 200 });
+    });
+    await processChatMentionNotifications(env, base);
+    await processChatMentionNotifications(env, base + 60_000);
+    await processChatMentionNotifications(env, base + 2 * 60_000);
+    expect(sends).toHaveLength(2);
+    expect(sends[0].retryKey).toBe(jobId);
+    expect(sends[1].retryKey).toBe(jobId);
+    expect(sends[1].text).toContain('Sale Sender mentioned you');
+    expect(sends[1].text).toContain(`/chat?message=${messageId}`);
+    const job = await env.DB.prepare(
+      'SELECT status,sent_at FROM chat_mention_notifications WHERE id=?',
+    ).bind(jobId).first<{ status: string; sent_at: string | null }>();
+    expect(job?.status).toBe('sent');
+    expect(job?.sent_at).toBeTruthy();
+  });
+
   it('rejects forged signatures and accepts LINE verification with no events', async () => {
     expect((await webhook([], false)).status).toBe(401);
     expect((await webhook([])).status).toBe(200);
@@ -233,5 +329,28 @@ describe('LINE linking and reminders', () => {
     await processLineReminders(env, base, send);
     await processLineReminders(env, base + 3600000, send);
     expect(sends).toBe(1);
+  });
+  it('sends one private LINE reminder to each invited attendee at the selected lead time', async () => {
+    const startsAt = new Date(base + 2 * 3600000).toISOString();
+    await env.DB.prepare(
+      'INSERT INTO calendar_events(id,title,details,location,starts_at,ends_at,reminder_minutes,created_by,created_at,updated_at) VALUES(?,?,?,?,?,NULL,60,?,?,?)',
+    ).bind('team-event', 'Quarterly team review', 'Do not send these private notes', 'Bangkok office', startsAt, email, new Date(base).toISOString(), new Date(base).toISOString()).run();
+    await env.DB.prepare('INSERT INTO calendar_event_attendees(event_id,email) VALUES(?,?)').bind('team-event', email).run();
+    const sent: { job: CalendarReminder; text: string }[] = [];
+    const send = async (_env: Bindings, job: CalendarReminder, text: string) => {
+      sent.push({ job, text });
+      return { ok: true, retryable: false };
+    };
+    await processCalendarReminders(env, base + 3600000, send);
+    await processCalendarReminders(env, base + 3900000, send);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].job.email).toBe(email);
+    expect(sent[0].text).toContain('Quarterly team review');
+    expect(sent[0].text).toContain('Bangkok office');
+    const eventDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date(startsAt));
+    expect(sent[0].text).toContain(`/calendar?date=${eventDay}&event=team-event`);
+    expect(sent[0].text).not.toContain('Do not send these private notes');
+    const reminder = await env.DB.prepare('SELECT status FROM calendar_reminders WHERE event_id=?').bind('team-event').first<{ status: string }>();
+    expect(reminder?.status).toBe('sent');
   });
 });

@@ -4,10 +4,12 @@ import { api } from '../lib';
 import type { ChatPage } from '../../shared/schemas';
 import { t } from '../i18n';
 
-export function ChatBadge() {
+export function ChatBadge({ active = false }: { active?: boolean }) {
   const { pathname } = useLocation();
   const [count, setCount] = useState(0);
   useEffect(() => {
+    const chatIsVisible = pathname === '/chat' || active;
+    if (chatIsVisible) setCount(0);
     const controller = new AbortController();
     let busy = false;
     let socket: WebSocket | undefined;
@@ -41,7 +43,7 @@ export function ChatBadge() {
           more = page.hasMore;
         }
         if (controller.signal.aborted) return;
-        if (pathname === '/chat' && !document.hidden && document.hasFocus()) {
+        if (chatIsVisible && !document.hidden && document.hasFocus()) {
           try { localStorage.setItem(key(), String(cursor)); } catch { /* Storage may be disabled. */ }
           pending.clear();
         }
@@ -77,6 +79,6 @@ export function ChatBadge() {
       window.removeEventListener('focus', refresh);
       window.removeEventListener('storage', refresh);
     };
-  }, [pathname]);
+  }, [active, pathname]);
   return count ? <span className="chat-unread-badge" role="status" aria-label={`${t('Unread messages')}: ${count}`}>{count > 99 ? '99+' : count}</span> : null;
 }

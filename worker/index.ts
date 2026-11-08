@@ -20,16 +20,26 @@ import { importCategory } from './services/import-category';
 import productCategories from '../shared/product-categories.json';
 import { generateSkus, nextSku } from './services/sku';
 import { auth, type AppEnv, type Bindings } from './auth';
+import { passwordAuthRoutes } from './password-auth';
+import { handleMetaDeauthorization } from './services/meta/deauthorization';
+import { metaRoutes } from './meta';
+import { metaDomainRoutes } from './meta-domain';
+import { handleMetaWebhook } from './services/meta/webhooks';
+import { maintainMeta } from './services/meta/maintenance';
 export { ChatRoom } from './chat-room';
 import { salespeopleRoutes } from './salespeople';
 import { chatRoutes } from './chat';
 import { lineRoutes } from './line-routes';
 import { quotationRoutes, quotationSettingsRoutes } from './quotations';
-import { catalogsRoutes } from './catalogs';
+import { catalogsRoutes, notifyCatalogChat } from './catalogs';
+import { financeRoutes } from './finance';
+import { newsRoutes } from './news';
+import { eventsRoutes, processCalendarReminders } from './calendar';
 import {
-  allowedSales,
+  workspaceSalesEmails,
   handleLineWebhook,
   processLineReminders,
+  processChatMentionNotifications,
 } from './services/line';
 import * as s from './db/schema';
 import {
@@ -59,6 +69,7 @@ const db = (c: Parameters<typeof auth>[0]) => drizzle(c.env.DB);
 const spreadsheetHeaders: Record<string, string[]> = {
   brand: ['brand', 'แบรนด์', 'ยี่ห้อ'],
   model: ['model', 'รุ่น'],
+  targetBodyPart: ['specification', 'spec', 'targetbodypart', 'target body part', 'body part', 'muscle group', 'ส่วนที่เล่น', 'สเปก'],
   sku: ['sku', 'รหัสสินค้า'],
   category: ['category', 'หมวดหมู่'],
   serialNumber: ['serialnumber', 'serial', 'หมายเลขเครื่อง'],
@@ -239,14 +250,14 @@ const activities = async (
 app.use('*', secureHeaders());
 app.use('*', async (c, next) => {
   await next();
-  c.header('Cache-Control', 'private, no-store');
+  if (c.req.path !== '/api/news') c.header('Cache-Control', 'private, no-store');
   if (!import.meta.env.DEV)
     c.header(
       'Content-Security-Policy',
-      "default-src 'self'; img-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src https://www.google.com https://maps.google.com; frame-ancestors 'self'; base-uri 'none'; form-action 'self'",
     );
 });
-app.use('*', auth);
+app.use('/api/*', auth);
 app.use('/api/*', async (c, next) => {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
     const origin = c.req.header('Origin');
@@ -336,11 +347,18 @@ app.onError((error, c) => {
   );
 });
 app.route('/api/line', lineRoutes);
+app.post('/internal/catalog-chat-notify', (c) => notifyCatalogChat(c.env, c.req.raw));
+app.route('/api/auth', passwordAuthRoutes);
+app.route('/api/integrations/meta', metaRoutes);
+app.route('/api/meta', metaDomainRoutes);
 app.route('/api/chat', chatRoutes);
 app.route('/api/salespeople', salespeopleRoutes);
 app.route('/api/quotations', quotationRoutes);
 app.route('/api/quotation-settings', quotationSettingsRoutes);
+app.route('/api/calendar', eventsRoutes);
 app.route('/api', catalogsRoutes);
+app.route('/api', financeRoutes);
+app.route('/api', newsRoutes);
 app.get('/api/exchange-rate', async (c) =>
   c.json(await exchangeRate(c.env.DB, fetch, new Date(), c.env.BOT_API_KEY)),
 );
@@ -393,6 +411,7 @@ app.get('/api/settings', async (c) => {
     aiConfigured: !!(c.env.AI_API_KEY && c.env.AI_MODEL && c.env.AI_BASE_URL),
     maxUploadMB: Number(c.env.MAX_UPLOAD_MB),
     timezone: c.env.BUSINESS_TIMEZONE,
+    canManageUsers: c.get('email').toLowerCase() === (c.env.AUTH_ADMIN_EMAIL ?? c.env.ALLOWED_EMAILS.split(',')[0] ?? '').trim().toLowerCase(),
   });
 });
 app.patch('/api/settings', async (c) => {
@@ -465,12 +484,13 @@ async function productList(c: Parameters<typeof auth>[0]) {
           s.products.sku,
           s.products.brand,
           s.products.model,
+          s.products.targetBodyPart,
           s.products.category,
           s.products.serialNumber,
         ].map((col) => like(col, `%${q}%`)),
       )!,
     );
-  for (const key of ['brand', 'category', 'status', 'condition'] as const) {
+  for (const key of ['brand', 'category', 'status', 'condition', 'targetBodyPart'] as const) {
     const v = c.req.query(key);
     if (v) clauses.push(eq(s.products[key], v));
   }
@@ -518,6 +538,12 @@ app.post('/api/products', async (c) => {
       .insert(s.products)
       .values({
         ...data,
+        isPublished: true,
+        showPrice: false,
+        publicSlug: `product-${sku.toLowerCase().replace(/[^a-z0-9-]+/g, '-')}-${productId.slice(0, 8)}`,
+        publicDescriptionTh: data.descriptionTh,
+        publicDescriptionEn: data.descriptionEn,
+        publishedAt: time,
         priceRating: analysis.priceRating ?? null,
         designRating: analysis.designRating ?? null,
         qualityPerformanceRating: analysis.qualityPerformanceRating ?? null,
@@ -602,6 +628,7 @@ app.post('/api/products/import', async (c) => {
         productInput.parse({
           brand: spreadsheetText(spreadsheetValue(row, 'brand')),
           model: spreadsheetText(spreadsheetValue(row, 'model')),
+          targetBodyPart: spreadsheetText(spreadsheetValue(row, 'targetBodyPart')),
           sku: spreadsheetText(spreadsheetValue(row, 'sku')) || undefined,
           category: importCategory(
             spreadsheetValue(row, 'category'),
@@ -654,14 +681,24 @@ app.post('/api/products/import', async (c) => {
   );
   let generatedIndex = 0;
   const time = now();
-  const products = parsed.map((data) => ({
-    ...data,
-    sku: data.sku || generated[generatedIndex++],
-    id: id(),
-    createdAt: time,
-    updatedAt: time,
-    soldAt: data.status === 'SOLD' ? time : null,
-  }));
+  const products = parsed.map((data) => {
+    const productId = id();
+    const sku = data.sku || generated[generatedIndex++];
+    return {
+      ...data,
+      sku,
+      id: productId,
+      createdAt: time,
+      updatedAt: time,
+      isPublished: true,
+      showPrice: false,
+      publicSlug: `product-${sku.toLowerCase().replace(/[^a-z0-9-]+/g, '-')}-${productId.slice(0, 8)}`,
+      publicDescriptionTh: data.descriptionTh,
+      publicDescriptionEn: data.descriptionEn,
+      publishedAt: time,
+      soldAt: data.status === 'SOLD' ? time : null,
+    };
+  });
   const operations = products.flatMap((product) => [
     db(c).insert(s.products).values(product),
     activity(
@@ -698,6 +735,19 @@ app.get('/api/products/:id', async (c) => {
     reservation: reservation ?? null,
     activities: await activities(c, 'product', product.id),
   });
+});
+// Authenticated users can also update manual catalog copy independently.
+app.patch('/api/products/:id/catalog-detail', async (c) => {
+  const product = await getProduct(c, c.req.param('id'));
+  const { catalogDetail } = z.object({
+    catalogDetail: z.string().trim().max(10000),
+  }).strict().parse(await c.req.json());
+  await db(c).batch([
+    db(c).update(s.products).set({ catalogDetail, updatedAt: now() })
+      .where(eq(s.products.id, product.id)),
+    activity(c, 'product', product.id, 'catalog_detail_updated', 'Catalog Detail updated manually'),
+  ]);
+  return c.json(await getProduct(c, product.id));
 });
 app.patch('/api/products/:id', async (c) => {
   const p = await getProduct(c, c.req.param('id'));
@@ -962,7 +1012,7 @@ app.post('/api/leads', async (c) => {
   const { productIds, ...data } = leadInput.parse(await c.req.json());
   if (data.status === 'WON')
     fail(422, 'Create the lead first, then choose the items sold.');
-  if (data.assignedTo && !allowedSales(c.env).includes(data.assignedTo))
+  if (data.assignedTo && !(await workspaceSalesEmails(c.env)).includes(data.assignedTo))
     fail(422, 'Choose an authorized salesperson.');
   await getCustomer(c, data.customerId);
   await validateProducts(c, productIds);
@@ -991,13 +1041,14 @@ app.get('/api/leads/:id', async (c) => {
     customer: await getCustomer(c, lead.customerId),
     products: linked.map((p) => productResponse(p.product)),
     activities: await activities(c, 'lead', lead.id),
+    messenger: await c.env.DB.prepare("SELECT ml.conversation_id AS conversationId, ml.source, mc.display_name AS displayName FROM meta_lead_links ml JOIN meta_conversations mc ON mc.id=ml.conversation_id WHERE ml.lead_id=? AND mc.mode='LIVE'").bind(lead.id).first(),
   });
 });
 app.patch('/api/leads/:id', async (c) => {
   const lead = await getLead(c, c.req.param('id'));
   const raw = await c.req.json();
   const { productIds, ...data } = provided(leadInput.partial().parse(raw), raw);
-  if (data.assignedTo && !allowedSales(c.env).includes(data.assignedTo))
+  if (data.assignedTo && !(await workspaceSalesEmails(c.env)).includes(data.assignedTo))
     fail(422, 'Choose an authorized salesperson.');
   if (data.status === 'WON' && lead.status !== 'WON')
     fail(422, 'Use the win action to select sold equipment.');
@@ -1400,6 +1451,12 @@ app.get('*', async (c) => {
 });
 export default {
   fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
+    if (new URL(request.url).pathname === '/api/integrations/meta/deauthorize') {
+      return handleMetaDeauthorization(request,env).catch(()=>new Response('Callback processing failed',{status:503}));
+    }
+    if (new URL(request.url).pathname === '/api/webhooks/meta') {
+      return handleMetaWebhook(request,env,ctx).catch(()=>new Response('Webhook processing failed',{status:503}));
+    }
     if (new URL(request.url).pathname === '/api/line/webhook') {
       return handleLineWebhook(request, env).catch(
         () => new Response('Webhook processing failed', { status: 500 }),
@@ -1410,7 +1467,10 @@ export default {
   async scheduled(_event: ScheduledController, env: Bindings) {
     await Promise.all([
       processLineReminders(env),
+      processChatMentionNotifications(env),
+      processCalendarReminders(env),
       exchangeRate(env.DB, fetch, new Date(), env.BOT_API_KEY),
+      maintainMeta(env),
     ]);
   },
 };

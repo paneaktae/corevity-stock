@@ -2,10 +2,10 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { AppEnv, Bindings } from './auth';
 import { salespersonInput, type Salesperson } from '../shared/schemas';
-import { allowedSales } from './services/line';
+import { workspaceSalesEmails } from './services/line';
 
 export async function listSalespeople(env: Bindings): Promise<Salesperson[]> {
-  const emails = [...new Set(allowedSales(env))];
+  const emails = await workspaceSalesEmails(env);
   if (!emails.length) return [];
   const rows = await env.DB.prepare(
     'SELECT email,first_name AS firstName,last_name AS lastName,phone FROM salespeople',
@@ -44,7 +44,7 @@ export const salespeopleRoutes = new Hono<AppEnv>();
 salespeopleRoutes.get('/', async (c) => c.json(await listSalespeople(c.env)));
 salespeopleRoutes.put('/:email', async (c) => {
   const email = c.req.param('email').trim().toLowerCase();
-  if (!allowedSales(c.env).includes(email))
+  if (!(await workspaceSalesEmails(c.env)).includes(email))
     throw new HTTPException(422, {
       message: 'This salesperson does not have workspace access.',
     });

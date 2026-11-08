@@ -6,9 +6,12 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "routes": [
+    { "pattern": "catalog.corevityusedgym.com", "custom_domain": true }
+  ],
   "observability": { "enabled": true },
   "vars": {
-    "PUBLIC_CATALOG_BASE_URL": "https://fitness-equipment-catalog.analyziie.workers.dev"
+    "PUBLIC_CATALOG_BASE_URL": "https://catalog.corevityusedgym.com"
   },
   "d1_databases": [
     {
@@ -23,6 +26,9 @@
       "binding": "PRODUCT_IMAGES",
       "bucket_name": "fitness-equipment-manager-images"
     }
+  ],
+  "services": [
+    { "binding": "MANAGEMENT", "service": "fitness-equipment-manager" }
   ],
   "account_id": "7e8a63993a65056ced687bb043f254ca"
 }

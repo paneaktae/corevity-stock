@@ -9,7 +9,8 @@ import {
   Share2,
   X,
 } from 'lucide-react';
-import type { Customer, Product } from '../../shared/schemas';
+import type { Customer, Product, Salesperson } from '../../shared/schemas';
+import { salespersonName } from '../../shared/schemas';
 import { api, money, useData } from '../lib';
 import { t } from '../i18n';
 import { ErrorBox, Field, Header, Loading } from '../components/ui';
@@ -20,8 +21,13 @@ type CatalogRow = {
   description: string;
   slug: string;
   status: 'ACTIVE' | 'ARCHIVED';
+  publishToWeb: number | boolean;
+  publishedToWebAt: string | null;
   customerId: string | null;
   customerName: string | null;
+  assignedSalespersonEmail: string;
+  assignedSalespersonName: string;
+  assignedSalespersonLineReady: number | boolean;
   showPrices: number | boolean;
   showSold: number | boolean;
   expiresAt: string | null;
@@ -47,18 +53,20 @@ type CatalogList = { catalogs: CatalogRow[]; publicBaseUrl: string };
 
 export function CatalogsPage() {
   const { data, error, reload } = useData<CatalogList>('/catalogs');
-  const { data: products } = useData<Product[]>('/products');
+  const { data: products, reload: reloadProducts } = useData<Product[]>('/products');
   const { data: customers } = useData<Customer[]>('/customers');
+  const { data: salespeople } = useData<Salesperson[]>('/salespeople');
   const [editorId, setEditorId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [customerId, setCustomerId] = useState('');
-  const [showPrices, setShowPrices] = useState(true);
+  const [assignedSalespersonEmail, setAssignedSalespersonEmail] = useState('');
   const [showSold, setShowSold] = useState(false);
   const [expires, setExpires] = useState('');
   const [items, setItems] = useState<CatalogItemDraft[]>([]);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const [publishingAll, setPublishingAll] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -67,7 +75,7 @@ export function CatalogsPage() {
     setTitle('');
     setDescription('');
     setCustomerId('');
-    setShowPrices(true);
+    setAssignedSalespersonEmail(salespeople?.find((person) => person.lineReady)?.email ?? salespeople?.[0]?.email ?? '');
     setShowSold(false);
     setExpires('');
     setItems([]);
@@ -87,7 +95,7 @@ export function CatalogsPage() {
       setTitle(detail.catalog.title);
       setDescription(detail.catalog.description);
       setCustomerId(detail.catalog.customerId ?? '');
-      setShowPrices(Boolean(detail.catalog.showPrices));
+      setAssignedSalespersonEmail(detail.catalog.assignedSalespersonEmail ?? '');
       setShowSold(Boolean(detail.catalog.showSold));
       setExpires(detail.catalog.expiresAt?.slice(0, 10) ?? '');
       setItems(
@@ -114,8 +122,7 @@ export function CatalogsPage() {
               productId: product.id,
               displayPrice: String(product.sellingPrice),
               description:
-                product.publicDescriptionEn ||
-                product.publicDescriptionTh ||
+                product.catalogDetail ||
                 product.descriptionEn ||
                 product.descriptionTh ||
                 product.shortDescription,
@@ -142,7 +149,8 @@ export function CatalogsPage() {
         title,
         description,
         customerId: customerId || null,
-        showPrices,
+        assignedSalespersonEmail,
+        showPrices: false,
         showSold,
         expiresAt: expires ? `${expires}T23:59:59.999Z` : null,
         items: items.map((item) => ({
@@ -211,6 +219,36 @@ export function CatalogsPage() {
       setBusy(false);
     }
   }
+  async function toggleWebPublish(catalog: CatalogRow) {
+    setBusy(true);
+    setErrorMessage('');
+    try {
+      await api(`/catalogs/${catalog.id}/${catalog.publishToWeb ? 'unpublish-from-web' : 'publish-to-web'}`, { method: 'POST' });
+      reload();
+      setNotice(t(catalog.publishToWeb ? 'Catalog removed from website.' : 'Catalog published to website.'));
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function publishAllProducts() {
+    setPublishingAll(true);
+    setErrorMessage('');
+    setNotice('');
+    try {
+      const result = await api<{ published: number }>('/products/publish-all', {
+        method: 'POST',
+      });
+      reload();
+      reloadProducts();
+      setNotice(`${result.published} ${t('products published without prices.')}`);
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setPublishingAll(false);
+    }
+  }
 
   const eligibleProducts = (products ?? []).filter(
     (product) =>
@@ -231,9 +269,24 @@ export function CatalogsPage() {
         title={t('Shareable catalogs')}
         subtitle={t('Build a curated product collection and share one link.')}
         action={
-          <button className="primary" type="button" onClick={newCatalog}>
-            <Plus size={16} /> {t('Create catalog')}
-          </button>
+          <div className="button-row">
+            {data?.publicBaseUrl && (
+              <a
+                className="button"
+                href={`${data.publicBaseUrl.replace(/\/$/, '')}/catalog`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={15} /> {t('Open public catalog')}
+              </a>
+            )}
+            <button type="button" disabled={publishingAll} onClick={() => void publishAllProducts()}>
+              {publishingAll ? t('Publishing…') : t('Publish all products without prices')}
+            </button>
+            <button className="primary" type="button" onClick={newCatalog}>
+              <Plus size={16} /> {t('Create catalog')}
+            </button>
+          </div>
         }
       />
       <ErrorBox message={errorMessage || error} />
@@ -274,6 +327,13 @@ export function CatalogsPage() {
                   ))}
                 </select>
               </Field>
+              <Field label={t('Responsible salesperson *')}>
+                <select required value={assignedSalespersonEmail} onChange={(e) => setAssignedSalespersonEmail(e.target.value)}>
+                  <option value="">{t('Choose a salesperson')}</option>
+                  {salespeople?.map((person) => <option key={person.email} value={person.email}>{salespersonName(person)} · {person.email} · {person.lineReady ? t('LINE connected') : t('LINE not connected')}</option>)}
+                </select>
+                {assignedSalespersonEmail && !salespeople?.find((person) => person.email === assignedSalespersonEmail)?.lineReady && <small className="field-hint">{t('This salesperson must connect LINE to receive catalog chat alerts.')}</small>}
+              </Field>
             </div>
             <Field label={t('Catalog description')}>
               <textarea
@@ -284,14 +344,6 @@ export function CatalogsPage() {
               />
             </Field>
             <div className="form-grid catalog-options">
-              <label className="quotation-check">
-                <input
-                  type="checkbox"
-                  checked={showPrices}
-                  onChange={(e) => setShowPrices(e.target.checked)}
-                />
-                {t('Show prices')}
-              </label>
               <label className="quotation-check">
                 <input
                   type="checkbox"
@@ -341,6 +393,9 @@ export function CatalogsPage() {
                         {product.brand} {product.model}
                       </strong>
                       <small>
+                        {t('Specification')}: {product.targetBodyPart || '—'}
+                      </small>
+                      <small>
                         {product.sku} · {product.category} ·{' '}
                         {money(product.sellingPrice)}
                       </small>
@@ -384,11 +439,18 @@ export function CatalogsPage() {
                         <ArrowDown size={15} />
                       </button>
                     </div>
-                    <strong>
-                      {product
-                        ? `${product.brand} ${product.model}`
-                        : t('Product unavailable')}
-                    </strong>
+                    <span>
+                      <strong>
+                        {product
+                          ? `${product.brand} ${product.model}`
+                          : t('Product unavailable')}
+                      </strong>
+                      {product && (
+                        <small>
+                          {t('Specification')}: {product.targetBodyPart || '—'}
+                        </small>
+                      )}
+                    </span>
                     <input
                       aria-label={t('Catalog display price')}
                       type="number"
@@ -440,6 +502,7 @@ export function CatalogsPage() {
               <div>
                 <h2>{catalog.title}</h2>
                 <small>{catalog.description || t('No description')}</small>
+                {Boolean(catalog.publishToWeb) && <small>{catalog.expiresAt && Date.parse(catalog.expiresAt) <= Date.now() ? t('Website publication expired') : t('Published on website')}</small>}
               </div>
             </div>
             <div className="catalog-row-stats">
@@ -460,6 +523,7 @@ export function CatalogsPage() {
                   {t('Customer')}: {catalog.customerName}
                 </span>
               )}
+              <span>{t('Salesperson')}: {catalog.assignedSalespersonName || catalog.assignedSalespersonEmail}{!catalog.assignedSalespersonLineReady && ` · ${t('LINE not connected')}`}</span>
               {catalog.expiresAt && (
                 <span>
                   {t('Expires:')}{' '}
@@ -470,6 +534,14 @@ export function CatalogsPage() {
           </div>
           {catalog.status === 'ACTIVE' ? (
             <div className="catalog-row-actions">
+              <button type="button" disabled={busy} onClick={() => void toggleWebPublish(catalog)}>
+                {t(catalog.publishToWeb ? 'Unpublish from Website' : 'Publish to Website')}
+              </button>
+              {Boolean(catalog.publishToWeb) && (!catalog.expiresAt || Date.parse(catalog.expiresAt) > Date.now()) && (
+                <a className="button" href={`https://corevityusedgym.com/th/catalog/${encodeURIComponent(catalog.slug)}`} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} /> {t('Open on Website')}
+                </a>
+              )}
               <button
                 type="button"
                 onClick={() => void copyCatalogLink(catalog.slug)}

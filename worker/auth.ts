@@ -1,6 +1,6 @@
-import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { MiddlewareHandler } from 'hono';
-export type Bindings = Env & {
+import type { MetaEnvironment } from './services/meta/config';
+export type Bindings = Env & MetaEnvironment & {
   LOCAL_MOCK_EMAIL?: string;
   AI_API_KEY?: string;
   BOT_API_KEY?: string;
@@ -8,10 +8,42 @@ export type Bindings = Env & {
   LINE_CHANNEL_SECRET?: string;
   APP_URL?: string;
   PUBLIC_CATALOG_BASE_URL?: string;
+  AUTH_ADMIN_EMAIL?: string;
+  CATALOG_CHAT_INTERNAL_SECRET?: string;
 };
-export type AppEnv = { Bindings: Bindings; Variables: { email: string } };
+export type AppEnv = {
+  Bindings: Bindings;
+  Variables: { email: string; authMethod: 'password' | 'access' | 'none' };
+};
+
+export async function digest(value: string) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function cookieValue(header: string | undefined, name: string) {
+  for (const item of (header ?? '').split(';')) {
+    const [key, ...value] = item.trim().split('=');
+    if (key === name) return value.join('=');
+  }
+  return '';
+}
+
 export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const url = new URL(c.req.url);
+  const optional = ['/api/auth/login', '/api/auth/session', '/api/auth/logout'].includes(url.pathname);
+  const sessionCookie = cookieValue(c.req.header('Cookie'), 'corevity_session');
+  if (sessionCookie) {
+    const tokenHash = await digest(sessionCookie);
+    const session = await c.env.DB.prepare(
+      'SELECT email FROM auth_sessions WHERE token_hash=? AND expires_at>? LIMIT 1',
+    ).bind(tokenHash, new Date().toISOString()).first<{ email: string }>();
+    if (session) {
+      c.set('email', session.email);
+      c.set('authMethod', 'password');
+      return next();
+    }
+  }
   if (
     import.meta.env.DEV &&
     c.env.ENVIRONMENT === 'development' &&
@@ -19,52 +51,19 @@ export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {
     c.env.LOCAL_MOCK_EMAIL
   ) {
     c.set('email', c.env.LOCAL_MOCK_EMAIL);
+    c.set('authMethod', 'access');
     return next();
   }
-  if (!c.env.ACCESS_TEAM_DOMAIN || !c.env.ACCESS_AUD || !c.env.ALLOWED_EMAILS)
-    return c.json(
-      {
-        error: {
-          message: 'Cloudflare Access is not configured.',
-          code: 'AUTH_CONFIGURATION',
-        },
+  c.set('email', '');
+  c.set('authMethod', 'none');
+  if (optional) return next();
+  return c.json(
+    {
+      error: {
+        message: 'Please sign in to continue.',
+        code: 'UNAUTHORIZED',
       },
-      503,
-    );
-  try {
-    const issuer = `https://${c.env.ACCESS_TEAM_DOMAIN}`;
-    const token = c.req.header('Cf-Access-Jwt-Assertion');
-    if (!token) throw new Error('Missing token');
-    const { payload } = await jwtVerify(
-      token,
-      createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`)),
-      { issuer, audience: c.env.ACCESS_AUD, algorithms: ['RS256'] },
-    );
-    const email =
-      typeof payload.email === 'string' ? payload.email.toLowerCase() : '';
-    if (
-      !c.env.ALLOWED_EMAILS.split(',')
-        .map((v) => v.trim().toLowerCase())
-        .includes(email) ||
-      !email
-    )
-      return c.json(
-        {
-          error: { message: 'This account is not allowed.', code: 'FORBIDDEN' },
-        },
-        403,
-      );
-    c.set('email', email);
-  } catch {
-    return c.json(
-      {
-        error: {
-          message: 'Sign in through Cloudflare Access.',
-          code: 'UNAUTHORIZED',
-        },
-      },
-      401,
-    );
-  }
-  return next();
+    },
+    401,
+  );
 };
