@@ -5,6 +5,8 @@ import {
   ArrowUp,
   Copy,
   ExternalLink,
+  GripVertical,
+  ListOrdered,
   ImagePlus,
   Plus,
   Share2,
@@ -77,6 +79,7 @@ export function CatalogsPage() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState('');
   const [removeCover, setRemoveCover] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -283,27 +286,15 @@ export function CatalogsPage() {
       setBusy(false);
     }
   }
-  async function moveWebCatalog(index: number, offset: number) {
-    const target = index + offset;
-    if (target < 0 || target >= webCatalogs.length) return;
-    const ids = webCatalogs.map((catalog) => catalog.id);
-    [ids[index], ids[target]] = [ids[target], ids[index]];
-    setBusy(true);
+  async function saveWebOrder(ids: string[]) {
+    await api('/catalogs/web-order', {
+      method: 'PUT',
+      body: JSON.stringify({ ids }),
+    });
+    setOrderOpen(false);
+    reload();
     setErrorMessage('');
-    setNotice('');
-    try {
-      await api('/catalogs/web-order', {
-        method: 'PUT',
-        body: JSON.stringify({ ids }),
-      });
-      reload();
-      setNotice(t('Website catalog order saved.'));
-    } catch (e) {
-      setErrorMessage((e as Error).message);
-      reload();
-    } finally {
-      setBusy(false);
-    }
+    setNotice(t('Website catalog order saved.'));
   }
   async function toggleWebPublish(catalog: CatalogRow) {
     setBusy(true);
@@ -353,6 +344,7 @@ export function CatalogsPage() {
         (b.publishedToWebAt ?? '').localeCompare(a.publishedToWebAt ?? '') ||
         a.slug.localeCompare(b.slug),
     );
+  const webPosition = new Map(webCatalogs.map((catalog, index) => [catalog.id, index + 1]));
   const catalogProducts = new Map(
     (products ?? []).map((product) => [product.id, product]),
   );
@@ -373,6 +365,11 @@ export function CatalogsPage() {
               >
                 <ExternalLink size={15} /> {t('Open public catalog')}
               </a>
+            )}
+            {webCatalogs.length > 1 && (
+              <button type="button" onClick={() => setOrderOpen(true)}>
+                <ListOrdered size={15} /> {t('Website order')}
+              </button>
             )}
             <button type="button" disabled={publishingAll} onClick={() => void publishAllProducts()}>
               {publishingAll ? t('Publishing…') : t('Publish all products without prices')}
@@ -645,50 +642,12 @@ export function CatalogsPage() {
         </section>
       )}
       </dialog>
-      {webCatalogs.length > 0 && (
-        <section className="panel catalog-web-order">
-          <div className="section-heading">
-            <h2>{t('Website catalog order')}</h2>
-          </div>
-          <p className="muted">
-            {t('Catalogs appear on the website in this order. The first one is featured on the homepage.')}
-          </p>
-          <div className="catalog-order-list">
-            {webCatalogs.map((catalog, index) => (
-              <div className="catalog-order-item catalog-web-order-item" key={catalog.id}>
-                <div className="catalog-order-actions">
-                  <button
-                    type="button"
-                    aria-label={t('Move catalog up')}
-                    disabled={busy || index === 0}
-                    onClick={() => void moveWebCatalog(index, -1)}
-                  >
-                    <ArrowUp size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t('Move catalog down')}
-                    disabled={busy || index === webCatalogs.length - 1}
-                    onClick={() => void moveWebCatalog(index, 1)}
-                  >
-                    <ArrowDown size={15} />
-                  </button>
-                </div>
-                <span>
-                  <strong>
-                    {index + 1}. {catalog.title}
-                  </strong>
-                  <small>
-                    {catalog.productCount} {t('Products')}
-                    {catalog.expiresAt && Date.parse(catalog.expiresAt) <= Date.now()
-                      ? ` · ${t('Website publication expired')}`
-                      : ''}
-                  </small>
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+      {orderOpen && (
+        <WebOrderDialog
+          catalogs={webCatalogs}
+          onClose={() => setOrderOpen(false)}
+          onSave={saveWebOrder}
+        />
       )}
       {data?.catalogs.map((catalog) => (
         <article className="panel catalog-row" key={catalog.id}>
@@ -698,7 +657,7 @@ export function CatalogsPage() {
               <div>
                 <h2>{catalog.title}</h2>
                 <small>{catalog.description || t('No description')}</small>
-                {Boolean(catalog.publishToWeb) && <small>{catalog.expiresAt && Date.parse(catalog.expiresAt) <= Date.now() ? t('Website publication expired') : t('Published on website')}</small>}
+                {Boolean(catalog.publishToWeb) && <small>{catalog.expiresAt && Date.parse(catalog.expiresAt) <= Date.now() ? t('Website publication expired') : t('Published on website')}{webPosition.has(catalog.id) && ` · ${t('Position')} ${webPosition.get(catalog.id)}`}</small>}
               </div>
             </div>
             <div className="catalog-row-stats">
@@ -820,5 +779,126 @@ export function CatalogsPage() {
         </p>
       )}
     </>
+  );
+}
+
+function WebOrderDialog({
+  catalogs,
+  onClose,
+  onSave,
+}: {
+  catalogs: CatalogRow[];
+  onClose: () => void;
+  onSave: (ids: string[]) => Promise<void>;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [order, setOrder] = useState(catalogs);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    dialogRef.current?.showModal();
+  }, []);
+  const changed = order.some((catalog, index) => catalog.id !== catalogs[index]?.id);
+  function move(from: number, to: number) {
+    if (to < 0 || to >= order.length || from === to) return;
+    setOrder((current) => {
+      const next = [...current];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  }
+  async function save() {
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(order.map((catalog) => catalog.id));
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
+    }
+  }
+  return (
+    <dialog
+      ref={dialogRef}
+      className="catalog-editor-dialog catalog-order-dialog"
+      aria-labelledby="catalog-order-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!saving) onClose();
+      }}
+    >
+      <section className="panel catalog-editor">
+        <div className="section-heading">
+          <h2 id="catalog-order-title">{t('Website catalog order')}</h2>
+          <button type="button" aria-label={t('Close')} disabled={saving} onClick={onClose}>
+            <X size={17} />
+          </button>
+        </div>
+        <p className="muted">
+          {t('Drag catalogs or use the arrows. The first one is featured on the website homepage.')}
+        </p>
+        <ErrorBox message={error} />
+        <ol className="catalog-order-list catalog-web-order-list">
+          {order.map((catalog, index) => (
+            <li
+              key={catalog.id}
+              className={`catalog-order-item catalog-web-order-item${dragIndex === index ? ' dragging' : ''}`}
+              draggable={!saving}
+              onDragStart={(event) => {
+                setDragIndex(index);
+                event.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (dragIndex === null || dragIndex === index) return;
+                move(dragIndex, index);
+                setDragIndex(index);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+            >
+              <GripVertical size={16} className="catalog-drag-handle" aria-hidden="true" />
+              <span className="catalog-web-order-position">{index + 1}</span>
+              <span>
+                <strong>{catalog.title}</strong>
+                <small>
+                  {catalog.productCount} {t('Products')}
+                  {catalog.expiresAt && Date.parse(catalog.expiresAt) <= Date.now()
+                    ? ` · ${t('Website publication expired')}`
+                    : ''}
+                </small>
+              </span>
+              <div className="catalog-order-actions">
+                <button
+                  type="button"
+                  aria-label={`${t('Move catalog up')}: ${catalog.title}`}
+                  disabled={saving || index === 0}
+                  onClick={() => move(index, index - 1)}
+                >
+                  <ArrowUp size={15} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`${t('Move catalog down')}: ${catalog.title}`}
+                  disabled={saving || index === order.length - 1}
+                  onClick={() => move(index, index + 1)}
+                >
+                  <ArrowDown size={15} />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <div className="form-actions">
+          <button type="button" disabled={saving} onClick={onClose}>
+            {t('Cancel')}
+          </button>
+          <button className="primary" type="button" disabled={saving || !changed} onClick={() => void save()}>
+            {saving ? t('Saving…') : t('Save order')}
+          </button>
+        </div>
+      </section>
+    </dialog>
   );
 }

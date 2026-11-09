@@ -4087,7 +4087,13 @@ html[data-theme='dark'] .ads-table tr.selected td { background: #1a3455; }
 .ads-breakdown-insight p { margin: 3px 0; }
 .ads-table td:first-child { min-width: 190px; }
 .ads-table td > small { display: block; color: var(--muted-text); font-size: 10px; overflow-wrap: anywhere; }
-.catalog-web-order .catalog-order-item { grid-template-columns: auto minmax(0, 1fr); }
+.catalog-editor-dialog.catalog-order-dialog { width: min(620px, calc(100vw - 32px)); }
+.catalog-web-order-list { margin: 0; padding: 0; list-style: none; }
+.catalog-web-order-list .catalog-web-order-item { grid-template-columns: auto auto minmax(0, 1fr) auto; cursor: grab; background: var(--surface); }
+.catalog-web-order-list .catalog-web-order-item.dragging { opacity: .55; border-style: dashed; border-color: var(--brand-blue); }
+.catalog-drag-handle { color: var(--muted-text); }
+.catalog-order-item > span.catalog-web-order-position { display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-blue); font-size: 13px; font-weight: 700; }
+@media (max-width: 640px) { .catalog-web-order-list .catalog-web-order-item { grid-template-columns: auto auto minmax(0, 1fr) auto; } .catalog-web-order-list .catalog-order-actions { grid-column: auto; grid-row: auto; } }
 /* Catalog editor popup */
 .catalog-editor-dialog { width: min(980px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 0; border-radius: 16px; background: transparent; color: var(--text); overflow: auto; overscroll-behavior: contain; }
 .catalog-editor-dialog::backdrop { background: rgb(9 20 35 / 58%); }
