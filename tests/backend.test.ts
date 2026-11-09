@@ -745,9 +745,11 @@ describe('D1-backed inventory and sales', () => {
     await database.prepare(
       "INSERT INTO email_messages(id,thread_id,from_email,subject,received_at,classification,in_spam,body_html,created_at) VALUES('e3','t3','x@y.example','Spammy','2026-11-09T01:00:00Z','NOT_CUSTOMER',1,'','2026-11-09T01:00:00Z')",
     ).run();
-    const inbox = await json<{ messages: { id: string }[]; total: number; customers: number; inbox: number; junk: number }>(await request('/email/messages'));
-    expect(inbox.messages.map((m) => m.id)).toEqual(['e1', 'e2']);
-    expect(inbox).toMatchObject({ total: 3, customers: 1, inbox: 2, junk: 1 });
+    const inbox = await json<{ messages: { id: string }[]; total: number; customers: number; inbox: number; other: number; junk: number }>(await request('/email/messages'));
+    expect(inbox.messages.map((m) => m.id)).toEqual(['e1']);
+    expect(inbox).toMatchObject({ total: 3, customers: 1, inbox: 1, other: 1, junk: 1 });
+    const other = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=other'));
+    expect(other.messages.map((m) => m.id)).toEqual(['e2']);
     const customers = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=customer'));
     expect(customers.messages.map((m) => m.id)).toEqual(['e1']);
     const junk = await json<{ messages: { id: string; inSpam: number }[] }>(await request('/email/messages?view=junk'));

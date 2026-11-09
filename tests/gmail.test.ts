@@ -11,6 +11,7 @@ import {
   parseMessage,
   processEmailNotifications,
   ruleClassification,
+  reclassifyStoredEmails,
   sanitizeEmailHtml,
   loadMessageHtml,
   syncGmail,
@@ -158,6 +159,23 @@ describe('Gmail message parsing and customer rules', () => {
     expect(classify(gmailMessage('d', 'team@corevity.test', 'Internal', 'x')).customer).toBe(false);
     expect(classify(gmailMessage('e', 'deals@store.example', 'Promo', 'x', { labels: ['INBOX', 'CATEGORY_PROMOTIONS'] })).customer).toBe(false);
     expect(classify(gmailMessage('f', 'security@accounts.google.com', 'Alert', 'x')).customer).toBe(false);
+  });
+
+  it('moves ads, newsletters and sign-in/OTP notifications out of the inbox by content and headers', () => {
+    const classify = (message: GmailMessage) => ruleClassification(parseMessage(message), mailbox);
+    const verdict = (subject: string, body: string, headers: Record<string, string> = {}) =>
+      classify(gmailMessage('x', 'Shop <hello@shop.example>', subject, body, { headers }));
+    expect(verdict('Your weekly picks', 'Great deals. Click here to unsubscribe.')).toMatchObject({ customer: false, reason: 'Advertising or newsletter' });
+    expect(verdict('ข่าวสาร', 'หากไม่ต้องการรับ กด ยกเลิกการรับข่าวสาร')).toMatchObject({ customer: false });
+    expect(verdict('Flash sale: 30% off today', 'Shop now')).toMatchObject({ customer: false, reason: 'Advertising or newsletter' });
+    expect(verdict('Your verification code is 123456', 'Use it within 10 minutes')).toMatchObject({ customer: false, reason: 'Sign-in or security notification' });
+    expect(verdict('มีการเข้าสู่ระบบจากอุปกรณ์ใหม่', 'x')).toMatchObject({ customer: false });
+    expect(verdict('Order shipped', 'This is an automated message, please do not reply to this email.')).toMatchObject({ customer: false, reason: 'Automated notification' });
+    expect(verdict('Hello', 'x', { 'Feedback-ID': '123:campaign:mailchimp' })).toMatchObject({ customer: false });
+    expect(verdict('Hello', 'x', { 'X-Mailer': 'Klaviyo' })).toMatchObject({ customer: false });
+    // Real customers mentioning login or discounts stay in the inbox.
+    expect(verdict('ขอส่วนลดลู่วิ่ง 2 เครื่อง', 'ลูกค้าเข้าสู่ระบบเว็บไม่ได้ เลยส่งอีเมลมาแทน')).toMatchObject({ customer: true });
+    expect(verdict('Quote please', 'We need 4 bikes, can you login to share the price list?')).toMatchObject({ customer: true });
   });
 
   it('strips scripts, handlers and dangerous links from HTML while keeping layout styles', () => {
@@ -398,6 +416,57 @@ describe('Gmail sync and LINE alerts', () => {
     };
     expect(await loadMessageHtml(env, 'legacy', fakeGoogle(state).http)).toContain('<b>content</b>');
     expect(await env.DB.prepare("SELECT body_html FROM email_messages WHERE id='legacy'").first('body_html')).toContain('<b>content</b>');
+  });
+
+  it('caps Gmail calls per run and resumes the backfill page on the next run', async () => {
+    await connect('100', false);
+    await env.DB.prepare("UPDATE gmail_connection SET last_sweep_at=?").bind(new Date().toISOString()).run();
+    const ids = Array.from({ length: 40 }, (_, i) => `m${i}`);
+    let calls = 0;
+    const http = (async (input: RequestInfo | URL) => {
+      calls++;
+      const url = new URL(String(input));
+      if (url.hostname === 'oauth2.googleapis.com') return Response.json({ access_token: 'a' });
+      const path = url.pathname.replace('/gmail/v1/users/me/', '');
+      if (path === 'history') return Response.json({ historyId: '100', history: [] });
+      if (path === 'messages') return Response.json({ messages: ids.map((id) => ({ id })) });
+      const id = decodeURIComponent(path.replace('messages/', ''));
+      return Response.json(gmailMessage(id, `${id}@buyer.example`, id, 'x'));
+    }) as typeof fetch;
+    const first = await syncGmail(env, { http, classifier: null });
+    expect(calls).toBeLessThanOrEqual(35);
+    expect(first).toMatchObject({ status: 'ok', backfillDone: false });
+    calls = 0;
+    const second = await syncGmail(env, { http, classifier: null });
+    expect(first.imported).toBeLessThan(40);
+    expect(first.imported + second.imported).toBe(40);
+    expect(second.backfillDone).toBe(true);
+  });
+
+  it('records the underlying error for unexpected failures', async () => {
+    await connect('100');
+    const http = (async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).hostname === 'oauth2.googleapis.com') return Response.json({ access_token: 'a' });
+      throw new TypeError('Too many subrequests.');
+    }) as typeof fetch;
+    expect((await syncGmail(env, { http, classifier: null })).error).toBe('GMAIL_SYNC_FAILED: TypeError Too many subrequests.');
+  });
+
+  it('re-checks emails stored under the old rule once', async () => {
+    await env.DB.prepare(
+      `INSERT INTO email_messages(id,thread_id,from_email,subject,body_text,received_at,classification,reason,created_at) VALUES
+       ('n1','t','a@shop.example','Deals','Click to unsubscribe','2026-11-10T00:00:00Z','CUSTOMER','Personal email from an external sender','2026-11-10T00:00:00Z'),
+       ('p1','t','b@buyer.example','Price?','Need a treadmill','2026-11-10T00:00:00Z','CUSTOMER','Personal email from an external sender','2026-11-10T00:00:00Z'),
+       ('m1','t','c@x.example','Hi','unsubscribe','2026-11-10T00:00:00Z','CUSTOMER','Marked by sale@example.test','2026-11-10T00:00:00Z')`,
+    ).run();
+    expect(await reclassifyStoredEmails(env)).toBe(2);
+    const rows = (await env.DB.prepare('SELECT id,classification,reason FROM email_messages ORDER BY id').all()).results;
+    expect(rows).toEqual([
+      { id: 'm1', classification: 'CUSTOMER', reason: 'Marked by sale@example.test' },
+      { id: 'n1', classification: 'NOT_CUSTOMER', reason: 'Advertising or newsletter' },
+      { id: 'p1', classification: 'CUSTOMER', reason: 'Email from a person outside the company' },
+    ]);
+    expect(await reclassifyStoredEmails(env)).toBe(0);
   });
 
   it('skips when Gmail is not configured and removes mail older than 90 days', async () => {

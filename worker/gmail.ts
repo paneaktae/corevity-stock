@@ -15,6 +15,7 @@ import {
   gmailGet,
   loadMessageHtml,
   openAiClassifier,
+  reclassifyStoredEmails,
   revokeToken,
   syncGmail,
 } from './services/gmail';
@@ -70,27 +71,28 @@ gmailRoutes.get('/status', async (c) => {
 gmailRoutes.get('/messages', async (c) => {
   await memberAccess(c);
   const requested = c.req.query('view') ?? 'inbox';
-  const view = ['inbox', 'customer', 'junk', 'all'].includes(requested) ? requested : 'inbox';
+  const view = ['inbox', 'other', 'customer', 'junk', 'all'].includes(requested) ? requested : 'inbox';
   const q = (c.req.query('q') ?? '').trim().slice(0, 100);
   const like = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
   const { results } = await c.env.DB.prepare(
     `SELECT m.id,m.thread_id AS threadId,m.from_name AS fromName,m.from_email AS fromEmail,m.subject,m.snippet,
       m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,c.name AS customerName,m.in_spam AS inSpam
      FROM email_messages m LEFT JOIN customers c ON c.id=m.customer_id
-     WHERE CASE ? WHEN 'inbox' THEN m.in_spam=0 WHEN 'junk' THEN m.in_spam=1 WHEN 'customer' THEN m.classification='CUSTOMER' ELSE 1 END
+     WHERE CASE ? WHEN 'inbox' THEN m.in_spam=0 AND m.classification='CUSTOMER' WHEN 'other' THEN m.in_spam=0 AND m.classification='NOT_CUSTOMER' WHEN 'junk' THEN m.in_spam=1 WHEN 'customer' THEN m.classification='CUSTOMER' ELSE 1 END
        AND (?='' OR m.subject LIKE ? ESCAPE '\\' OR m.from_email LIKE ? ESCAPE '\\' OR m.from_name LIKE ? ESCAPE '\\' OR m.snippet LIKE ? ESCAPE '\\')
      ORDER BY m.received_at DESC LIMIT 200`,
   )
     .bind(view, q, like, like, like, like)
     .all();
   const counts = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS total,SUM(classification='CUSTOMER') AS customers,SUM(in_spam=0) AS inbox,SUM(in_spam=1) AS junk FROM email_messages",
-  ).first<{ total: number; customers: number | null; inbox: number | null; junk: number | null }>();
+    "SELECT COUNT(*) AS total,SUM(classification='CUSTOMER') AS customers,SUM(in_spam=0 AND classification='CUSTOMER') AS inbox,SUM(in_spam=0 AND classification='NOT_CUSTOMER') AS other,SUM(in_spam=1) AS junk FROM email_messages",
+  ).first<{ total: number; customers: number | null; inbox: number | null; other: number | null; junk: number | null }>();
   return c.json({
     messages: results,
     total: counts?.total ?? 0,
     customers: counts?.customers ?? 0,
     inbox: counts?.inbox ?? 0,
+    other: counts?.other ?? 0,
     junk: counts?.junk ?? 0,
   });
 });
@@ -125,6 +127,7 @@ gmailRoutes.patch('/messages/:id', async (c) => {
 gmailRoutes.post('/sync', async (c) => {
   await memberAccess(c);
   const result = await syncGmail(c.env);
+  await reclassifyStoredEmails(c.env);
   if (result.status === 'reconnect')
     return c.json({ error: { message: 'Gmail needs to be reconnected by the administrator.' } }, 409);
   if (result.status === 'error') return c.json({ error: { message: 'Gmail could not be checked. Please retry shortly.' } }, 502);

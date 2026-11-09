@@ -31,11 +31,12 @@ type EmailRow = {
   inSpam: number;
 };
 type EmailDetail = EmailRow & { toText: string; bodyText: string; bodyHtml: string | null };
-type EmailList = { messages: EmailRow[]; total: number; customers: number; inbox: number; junk: number };
-type View = 'inbox' | 'customer' | 'junk';
-const views: [View, string, keyof Pick<EmailList, 'inbox' | 'customers' | 'junk'>][] = [
+type EmailList = { messages: EmailRow[]; total: number; customers: number; inbox: number; other: number; junk: number };
+// Inbox = real emails from people; ads, newsletters and system notifications are kept, but apart.
+type View = 'inbox' | 'other' | 'junk';
+const views: [View, string, keyof Pick<EmailList, 'inbox' | 'other' | 'junk'>][] = [
   ['inbox', 'Inbox', 'inbox'],
-  ['customer', 'Possible customers', 'customers'],
+  ['other', 'Ads & alerts', 'other'],
   ['junk', 'Junk', 'junk'],
 ];
 // Email HTML is shown in a sandboxed frame: no scripts, no same-origin access, links open in a new
@@ -201,7 +202,7 @@ export function InboxPage() {
             {!data ? (
               <Loading />
             ) : data.messages.length === 0 ? (
-              <p className="muted email-empty">{t(view === 'customer' ? 'No customer emails yet.' : view === 'junk' ? 'No junk emails.' : 'No emails yet.')}</p>
+              <p className="muted email-empty">{t(view === 'inbox' ? 'No emails from people yet.' : view === 'junk' ? 'No junk emails.' : 'No ads or alerts.')}</p>
             ) : (
               <ul className="email-list">
                 {data.messages.map((row) => (
@@ -221,10 +222,10 @@ export function InboxPage() {
                         <span className="email-tag known">
                           <UserCheck size={12} /> {row.customerName}
                         </span>
-                      ) : row.classification === 'CUSTOMER' ? (
+                      ) : row.classification === 'CUSTOMER' && row.inSpam ? (
                         <span className="email-tag">{t('Possible customer')}</span>
                       ) : null}
-                      {Boolean(row.inSpam) && <span className="email-tag junk">{t('Junk')}</span>}
+                      {Boolean(row.inSpam) && view !== 'junk' && <span className="email-tag junk">{t('Junk')}</span>}
                     </button>
                   </li>
                 ))}
@@ -263,11 +264,11 @@ export function InboxPage() {
                   )}
                   {detail.classification === 'CUSTOMER' ? (
                     <button type="button" onClick={() => void reclassify(detail.id, 'NOT_CUSTOMER')}>
-                      {t('Not a customer')}
+                      {t(detail.inSpam ? 'Not a customer' : 'Move to Ads & alerts')}
                     </button>
                   ) : (
                     <button type="button" onClick={() => void reclassify(detail.id, 'CUSTOMER')}>
-                      {t('Mark as customer')}
+                      {t(detail.inSpam ? 'Mark as customer' : 'Move to Inbox')}
                     </button>
                   )}
                 </div>

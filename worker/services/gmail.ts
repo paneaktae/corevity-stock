@@ -20,7 +20,10 @@ const BODY_LIMIT = 20_000;
 const HTML_LIMIT = 400_000;
 // Backfill: the last 90 days (matches retention), one page per sync run, without LINE alerts.
 const BACKFILL_QUERY = `newer_than:${90}d -in:sent -in:drafts -in:trash -in:chats`;
-const BACKFILL_PAGE = 50;
+const BACKFILL_PAGE = 25;
+// Outbound calls per sync run (token, Gmail API, AI). Workers cap subrequests per invocation and
+// the cron shares that budget with LINE and other jobs, so stay well below it and resume next run.
+const MAX_CALLS_PER_SYNC = 35;
 
 export type Http = typeof fetch;
 
@@ -260,6 +263,24 @@ const AUTOMATED_DOMAINS = [
   'openai.com', 'apple.com', 'microsoft.com', 'amazonses.com',
 ];
 const SKIP_CATEGORIES = ['CATEGORY_PROMOTIONS', 'CATEGORY_SOCIAL', 'CATEGORY_FORUMS', 'CATEGORY_UPDATES'];
+export const PERSONAL_REASON = 'Email from a person outside the company';
+const LEGACY_PERSONAL_REASON = 'Personal email from an external sender';
+const MARKETING_HEADERS = ['feedback-id', 'x-mailgun-sid', 'x-sg-eid', 'x-mc-user', 'x-campaign', 'x-campaign-id', 'x-mailchimp-campaign'];
+const MARKETING_MAILERS = /mailchimp|sendgrid|hubspot|klaviyo|sendinblue|brevo|mailerlite|constant ?contact|campaign ?monitor|marketo|salesforce marketing|mailjet|getresponse|activecampaign/i;
+// Content signals for ads/newsletters and system notifications that slip past header checks.
+// Sign-in/OTP words are checked in the subject only, so a customer mentioning "login" is kept.
+export function contentClassification(subject: string, body: string) {
+  const text = `${subject}\n${body.slice(0, 6000)}`;
+  if (/unsubscribe|opt[- ]?out|manage (your )?(email )?(preferences|subscription)|email preferences|ยกเลิกการ(รับ|สมัคร|ติดตาม)|เลิกรับ(ข่าวสาร|อีเมล)|view (this email )?in (your |a )?browser|ดูอีเมลนี้(ใน|บน)เบราว์เซอร์/i.test(text))
+    return 'Advertising or newsletter';
+  if (/\b\d{1,2}% off\b|flash sale|limited[- ]time offer|promo(tion)? code|coupon code|ลดสูงสุด\s*\d|โค้ดส่วนลด/i.test(subject))
+    return 'Advertising or newsletter';
+  if (/verification code|security code|\bOTP\b|one[- ]time (password|code|passcode)|sign[- ]?in|log[- ]?in|new (device|login|sign-in)|password reset|reset your password|verify your (email|account)|confirm your (email|account|registration)|security alert|รหัสยืนยัน|รหัส OTP|เข้าสู่ระบบ|ยืนยันตัวตน|ยืนยันอีเมล|รีเซ็ตรหัสผ่าน|แจ้งเตือนความปลอดภัย/i.test(subject))
+    return 'Sign-in or security notification';
+  if (/this is an automated (message|email|notification)|(please )?do not reply to this (email|message)|automatically generated|อีเมลนี้(ถูก)?ส่ง(มา)?(โดย)?อัตโนมัติ|กรุณาอย่าตอบกลับ|ไม่ต้องตอบกลับอีเมลนี้/i.test(text))
+    return 'Automated notification';
+  return null;
+}
 export function ruleClassification(message: ParsedMessage, mailbox: string) {
   const [local = '', domain = ''] = message.fromEmail.split('@');
   const ownDomain = mailbox.split('@')[1] ?? '';
@@ -276,7 +297,11 @@ export function ruleClassification(message: ParsedMessage, mailbox: string) {
   if (autoSubmitted && autoSubmitted.toLowerCase() !== 'no') return { customer: false, reason: 'Auto-generated' };
   if (message.labels.some((label) => SKIP_CATEGORIES.includes(label)))
     return { customer: false, reason: 'Gmail promotions/social/updates category' };
-  return { customer: true, reason: 'Personal email from an external sender' };
+  if (MARKETING_HEADERS.some((name) => message.headers.has(name)) || MARKETING_MAILERS.test(message.headers.get('x-mailer') ?? ''))
+    return { customer: false, reason: 'Advertising or newsletter' };
+  const content = contentClassification(message.subject, message.body);
+  if (content) return { customer: false, reason: content };
+  return { customer: true, reason: PERSONAL_REASON };
 }
 
 export type AiClassifier = (message: ParsedMessage) => Promise<{ customer: boolean; reason: string } | null>;
@@ -437,7 +462,13 @@ export async function syncGmail(
   env: Bindings,
   options: { http?: Http; classifier?: AiClassifier | null; time?: number } = {},
 ): Promise<SyncResult> {
-  const http = options.http ?? fetch;
+  const baseHttp = options.http ?? fetch;
+  let calls = 0;
+  const http: Http = (input, init) => {
+    calls++;
+    return baseHttp(input, init);
+  };
+  const budgetLeft = () => MAX_CALLS_PER_SYNC - calls;
   const config = gmailConfig(env);
   if (!config.ready) return { status: 'skipped', imported: 0, customers: 0 };
   const time = options.time ?? Date.now();
@@ -510,6 +541,7 @@ export async function syncGmail(
       swept = true;
     }
     for (const id of ids.slice(-MAX_MESSAGES_PER_SYNC * 2)) {
+      if (budgetLeft() < 3) break; // the hourly sweep / next run picks up the rest
       const result = await importMessage(env, token, id, { notify, mailbox: connection.email, classifier, http });
       if (!result) continue;
       imported++;
@@ -518,20 +550,27 @@ export async function syncGmail(
     // Backfill older mail a page at a time (no alerts) until the 90-day window is complete.
     let backfillToken = connection.backfill_page_token;
     let backfillDone = connection.backfill_done;
-    if (!backfillDone) {
+    if (!backfillDone && budgetLeft() > 6) {
       const page = await gmailGet<{ messages?: { id: string }[]; nextPageToken?: string }>(
         token,
         `messages?includeSpamTrash=true&maxResults=${BACKFILL_PAGE}&q=${encodeURIComponent(BACKFILL_QUERY)}${backfillToken ? `&pageToken=${encodeURIComponent(backfillToken)}` : ''}`,
         http,
       );
+      let complete = true;
       for (const message of page.messages ?? []) {
+        if (budgetLeft() < 3) {
+          complete = false; // finish this page next run; already-imported ids are skipped without a fetch
+          break;
+        }
         const result = await importMessage(env, token, message.id, { notify: false, mailbox: connection.email, classifier, http });
         if (!result) continue;
         imported++;
         if (result.customer) customers++;
       }
-      backfillToken = page.nextPageToken ?? null;
-      backfillDone = backfillToken ? 0 : 1;
+      if (complete) {
+        backfillToken = page.nextPageToken ?? null;
+        backfillDone = backfillToken ? 0 : 1;
+      }
     }
     await env.DB.prepare(
       "UPDATE gmail_connection SET history_id=?,last_sync_at=?,last_sweep_at=CASE WHEN ?=1 THEN ? ELSE last_sweep_at END,backfill_page_token=?,backfill_done=?,last_error=NULL,health_alerted_at=NULL,sync_lease_until=NULL,updated_at=? WHERE id='workspace'",
@@ -540,7 +579,10 @@ export async function syncGmail(
       .run();
     return { status: 'ok', imported, customers, backfillDone: Boolean(backfillDone) };
   } catch (error) {
-    const code = error instanceof Error && /^GMAIL_[A-Z0-9_]+$/.test(error.message) ? error.message : 'GMAIL_SYNC_FAILED';
+    const code =
+      error instanceof Error && /^GMAIL_[A-Z0-9_]+$/.test(error.message)
+        ? error.message
+        : `GMAIL_SYNC_FAILED: ${(error instanceof Error ? `${error.name} ${error.message}` : String(error)).replace(/[^\x20-\x7E]/g, '').slice(0, 160)}`;
     const reconnect = code === 'GMAIL_RECONNECT_REQUIRED' || code === 'GMAIL_TOKEN_DECRYPTION_FAILED' || code === 'GMAIL_KEY_VERSION_MISMATCH';
     await env.DB.prepare(
       `UPDATE gmail_connection SET status=?,last_error=?,sync_lease_until=NULL,updated_at=? WHERE id='workspace'`,
@@ -549,6 +591,28 @@ export async function syncGmail(
       .run();
     return { status: reconnect ? 'reconnect' : 'error', imported, customers, error: code };
   }
+}
+
+// Emails classified before the content rules existed: re-check them once with the new rules.
+export async function reclassifyStoredEmails(env: Bindings) {
+  const { results } = await env.DB.prepare(
+    'SELECT id,subject,body_text FROM email_messages WHERE reason=? LIMIT 500',
+  )
+    .bind(LEGACY_PERSONAL_REASON)
+    .all<{ id: string; subject: string; body_text: string }>();
+  if (!results.length) return 0;
+  await env.DB.batch(
+    results.map((row) => {
+      const automated = contentClassification(row.subject, row.body_text);
+      return env.DB.prepare('UPDATE email_messages SET classification=?,reason=? WHERE id=? AND reason=?').bind(
+        automated ? 'NOT_CUSTOMER' : 'CUSTOMER',
+        automated ?? PERSONAL_REASON,
+        row.id,
+        LEGACY_PERSONAL_REASON,
+      );
+    }),
+  );
+  return results.length;
 }
 
 // Older rows were stored as text only: fetch the HTML part once, when the email is opened.
@@ -677,6 +741,7 @@ export async function maintainGmail(env: Bindings) {
     /* recorded on the connection row */
   }
   try {
+    await reclassifyStoredEmails(env);
     await processEmailNotifications(env);
     await checkGmailHealth(env);
     await cleanupGmail(env);
