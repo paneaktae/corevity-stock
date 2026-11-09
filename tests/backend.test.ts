@@ -742,9 +742,16 @@ describe('D1-backed inventory and sales', () => {
        ('e1','t1','Buyer','buyer@example.org','Need treadmills','Price for 4 units','Price for 4 units please','2026-11-10T02:00:00Z','CUSTOMER','Personal','2026-11-10T02:00:00Z'),
        ('e2','t2','','news@shop.example','Weekly deals','Sale','Sale','2026-11-10T01:00:00Z','NOT_CUSTOMER','Mailing list','2026-11-10T01:00:00Z')`,
     ).run();
-    const customers = await json<{ messages: { id: string }[]; total: number; customers: number }>(await request('/email/messages'));
+    await database.prepare(
+      "INSERT INTO email_messages(id,thread_id,from_email,subject,received_at,classification,in_spam,body_html,created_at) VALUES('e3','t3','x@y.example','Spammy','2026-11-09T01:00:00Z','NOT_CUSTOMER',1,'','2026-11-09T01:00:00Z')",
+    ).run();
+    const inbox = await json<{ messages: { id: string }[]; total: number; customers: number; inbox: number; junk: number }>(await request('/email/messages'));
+    expect(inbox.messages.map((m) => m.id)).toEqual(['e1', 'e2']);
+    expect(inbox).toMatchObject({ total: 3, customers: 1, inbox: 2, junk: 1 });
+    const customers = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=customer'));
     expect(customers.messages.map((m) => m.id)).toEqual(['e1']);
-    expect(customers).toMatchObject({ total: 2, customers: 1 });
+    const junk = await json<{ messages: { id: string; inSpam: number }[] }>(await request('/email/messages?view=junk'));
+    expect(junk.messages).toEqual([expect.objectContaining({ id: 'e3', inSpam: 1 })]);
     const all = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=all&q=weekly'));
     expect(all.messages.map((m) => m.id)).toEqual(['e2']);
     const wildcard = await json<{ messages: unknown[] }>(await request('/email/messages?view=all&q=%25'));
@@ -752,6 +759,7 @@ describe('D1-backed inventory and sales', () => {
     expect((await json<{ bodyText: string }>(await request('/email/messages/e1'))).bodyText).toBe('Price for 4 units please');
     expect((await request('/email/messages/e2', 'PATCH', { classification: 'CUSTOMER' })).status).toBe(200);
     expect((await json<{ customers: number }>(await request('/email/messages'))).customers).toBe(2);
+    expect((await json<{ bodyHtml: string | null }>(await request('/email/messages/e3'))).bodyHtml).toBe('');
     expect((await request('/email/messages/missing')).status).toBe(404);
     expect((await request('/email/settings', 'PATCH', { aiClassify: true })).status).toBe(409);
     await database.prepare('DELETE FROM email_messages').run();

@@ -15,6 +15,12 @@ email looks like a customer. It cannot send, delete or change mail.
   revoked, the admin (`AUTH_ADMIN_EMAIL`, or every LINE-linked salesperson if the admin has no LINE)
   gets one LINE alert per incident. A successful check clears it.
 
+- Backfill: after connecting, older mail from the last 90 days (Inbox + Junk) is imported 50 emails
+  per check (every 5 minutes) until complete, without LINE alerts.
+- Inbox page tabs: **Inbox** (everything not in Junk), **Possible customers** (both folders), **Junk**.
+- HTML emails are shown in a sandboxed frame (no scripts, no access to the CRM, remote images blocked
+  by the page CSP). Emails stored before HTML support fetch their HTML once when opened.
+
 ## How customer emails are picked
 
 1. Skipped as not-customer: our own domain, `noreply`/notification senders, newsletters

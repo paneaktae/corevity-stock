@@ -14,6 +14,7 @@ type GmailStatus = {
   lastSyncAt: string | null;
   lastError: string | null;
   isAdmin: boolean;
+  backfillDone: boolean;
 };
 type EmailRow = {
   id: string;
@@ -29,8 +30,22 @@ type EmailRow = {
   customerName: string | null;
   inSpam: number;
 };
-type EmailDetail = EmailRow & { toText: string; bodyText: string };
-type EmailList = { messages: EmailRow[]; total: number; customers: number };
+type EmailDetail = EmailRow & { toText: string; bodyText: string; bodyHtml: string | null };
+type EmailList = { messages: EmailRow[]; total: number; customers: number; inbox: number; junk: number };
+type View = 'inbox' | 'customer' | 'junk';
+const views: [View, string, keyof Pick<EmailList, 'inbox' | 'customers' | 'junk'>][] = [
+  ['inbox', 'Inbox', 'inbox'],
+  ['customer', 'Possible customers', 'customers'],
+  ['junk', 'Junk', 'junk'],
+];
+// Email HTML is shown in a sandboxed frame: no scripts, no same-origin access, links open in a new
+// tab. The page CSP (img-src 'self' data: blob:) also applies, so remote images/trackers don't load.
+function emailDocument(html: string) {
+  return `<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>
+html,body{margin:0;background:#fff;color:#202a39}body{padding:16px;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Thai",sans-serif;overflow-wrap:anywhere}
+img{max-width:100%;height:auto}table{max-width:100%!important}pre{white-space:pre-wrap}
+</style></head><body>${html}</body></html>`;
+}
 
 const when = (value: string | null) =>
   value
@@ -46,7 +61,7 @@ const when = (value: string | null) =>
 export function InboxPage() {
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('message');
-  const [view, setView] = useState<'customer' | 'all'>('customer');
+  const [view, setView] = useState<View>('inbox');
   const [query, setQuery] = useState('');
   const debounced = useDebounce(query);
   const { data: status, reload: reloadStatus } = useData<GmailStatus>('/email/status');
@@ -116,7 +131,11 @@ export function InboxPage() {
     <>
       <Header
         title={t('Email inbox')}
-        subtitle={status?.mailbox ? `${status.mailbox} · ${t('Checked every 5 minutes')}` : t('Company Gmail inbox')}
+        subtitle={
+          status?.mailbox
+            ? `${status.email || status.mailbox} · ${t('Checked every 5 minutes')}${status.connected && !status.backfillDone ? ` · ${t('Loading the last 90 days…')}` : ''}`
+            : t('Company Gmail inbox')
+        }
         action={
           status?.connected ? (
             <button type="button" disabled={syncing} onClick={() => void syncNow()}>
@@ -153,12 +172,18 @@ export function InboxPage() {
           <div className="email-list-pane">
             <div className="email-filters">
               <div className="email-view-toggle" role="tablist" aria-label={t('Email filter')}>
-                <button type="button" role="tab" aria-selected={view === 'customer'} className={view === 'customer' ? 'active' : ''} onClick={() => setView('customer')}>
-                  {t('Possible customers')} {data ? `(${data.customers})` : ''}
-                </button>
-                <button type="button" role="tab" aria-selected={view === 'all'} className={view === 'all' ? 'active' : ''} onClick={() => setView('all')}>
-                  {t('All mail')} {data ? `(${data.total})` : ''}
-                </button>
+                {views.map(([key, label, count]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === key}
+                    className={`${view === key ? 'active' : ''}${key === 'junk' ? ' junk' : ''}`}
+                    onClick={() => setView(key)}
+                  >
+                    {t(label)} {data ? `(${data[count]})` : ''}
+                  </button>
+                ))}
               </div>
               <input
                 type="search"
@@ -176,7 +201,7 @@ export function InboxPage() {
             {!data ? (
               <Loading />
             ) : data.messages.length === 0 ? (
-              <p className="muted email-empty">{t(view === 'customer' ? 'No customer emails yet.' : 'No emails yet.')}</p>
+              <p className="muted email-empty">{t(view === 'customer' ? 'No customer emails yet.' : view === 'junk' ? 'No junk emails.' : 'No emails yet.')}</p>
             ) : (
               <ul className="email-list">
                 {data.messages.map((row) => (
@@ -199,7 +224,7 @@ export function InboxPage() {
                       ) : row.classification === 'CUSTOMER' ? (
                         <span className="email-tag">{t('Possible customer')}</span>
                       ) : null}
-                      {Boolean(row.inSpam) && <span className="email-tag junk">Junk</span>}
+                      {Boolean(row.inSpam) && <span className="email-tag junk">{t('Junk')}</span>}
                     </button>
                   </li>
                 ))}
@@ -254,7 +279,20 @@ export function InboxPage() {
                 <small className="field-hint">
                   {t('Why')}: {t(detail.reason)}
                 </small>
-                <pre className="email-body">{detail.bodyText || detail.snippet}</pre>
+                {detail.bodyHtml ? (
+                  <>
+                    <iframe
+                      className="email-html"
+                      title={detail.subject || t('Email content')}
+                      sandbox="allow-popups allow-popups-to-escape-sandbox"
+                      referrerPolicy="no-referrer"
+                      srcDoc={emailDocument(detail.bodyHtml)}
+                    />
+                    <small className="field-hint">{t('Images from outside are hidden for safety. Open in Gmail to see them.')}</small>
+                  </>
+                ) : (
+                  <pre className="email-body">{detail.bodyText || detail.snippet}</pre>
+                )}
               </article>
             ) : (
               <p className="muted email-placeholder">{t('Select an email to read it.')}</p>

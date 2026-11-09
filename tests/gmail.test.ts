@@ -11,6 +11,8 @@ import {
   parseMessage,
   processEmailNotifications,
   ruleClassification,
+  sanitizeEmailHtml,
+  loadMessageHtml,
   syncGmail,
   type GmailMessage,
 } from '../worker/services/gmail';
@@ -88,13 +90,13 @@ function fakeGoogle(state: Mailbox) {
   return { http, calls };
 }
 
-async function connect(historyId: string | null = null) {
+async function connect(historyId: string | null = null, backfillDone = true) {
   const token = await encryptRefreshToken(env, mailbox, 'refresh-token-1');
   await env.DB.prepare(
-    `INSERT INTO gmail_connection(id,email,status,token_ciphertext,token_nonce,token_key_version,history_id,connected_by,connected_at,updated_at)
-     VALUES('workspace',?,'CONNECTED',?,?,?,?,?,?,?)`,
+    `INSERT INTO gmail_connection(id,email,status,token_ciphertext,token_nonce,token_key_version,history_id,connected_by,connected_at,updated_at,backfill_done)
+     VALUES('workspace',?,'CONNECTED',?,?,?,?,?,?,?,?)`,
   )
-    .bind(mailbox, token.ciphertext, token.nonce, token.keyVersion, historyId, sales, '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z')
+    .bind(mailbox, token.ciphertext, token.nonce, token.keyVersion, historyId, sales, '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z', Number(backfillDone))
     .run();
 }
 
@@ -158,6 +160,18 @@ describe('Gmail message parsing and customer rules', () => {
     expect(classify(gmailMessage('f', 'security@accounts.google.com', 'Alert', 'x')).customer).toBe(false);
   });
 
+  it('strips scripts, handlers and dangerous links from HTML while keeping layout styles', () => {
+    const out = sanitizeEmailHtml(
+      `<p onclick="evil()" style="color:red">Hi <a href="javascript:alert(1)">x</a> <a href='https://ok.example'>ok</a></p><script>alert(1)</script><iframe src="x"></iframe><img src=x onerror=alert(1)><form action="y"><input name=a></form><!-- c --><meta http-equiv=refresh content=0><svg><script>1</script></svg><a href=" JavaScript:x">y</a>`,
+    );
+    expect(out).not.toMatch(/script|onclick|onerror|javascript:|<iframe|<form|<input|<meta|<svg/i);
+    expect(out).toContain('style="color:red"');
+    expect(out).toContain("href='https://ok.example'");
+    expect(sanitizeEmailHtml('   ')).toBe('');
+    const parsed = parseMessage(gmailMessage('h', 'a@b.example', 'Hi', 'Hello there', { html: true }));
+    expect(parsed.html).toContain('<p>Hello there</p>');
+  });
+
   it('encrypts the refresh token bound to the mailbox', async () => {
     const stored = await encryptRefreshToken(env, mailbox, 'secret-refresh');
     expect(stored.ciphertext).not.toContain('secret-refresh');
@@ -176,7 +190,7 @@ describe('Gmail sync and LINE alerts', () => {
       messages: { old1: gmailMessage('old1', 'old@buyer.example', 'Earlier inquiry', 'Old question') },
     };
     const google = fakeGoogle(state);
-    expect(await syncGmail(env, { http: google.http, classifier: null })).toEqual({ status: 'ok', imported: 1, customers: 1 });
+    expect(await syncGmail(env, { http: google.http, classifier: null })).toMatchObject({ status: 'ok', imported: 1, customers: 1 });
     expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(0);
     expect(await env.DB.prepare("SELECT history_id FROM gmail_connection WHERE id='workspace'").first('history_id')).toBe('100');
 
@@ -190,7 +204,7 @@ describe('Gmail sync and LINE alerts', () => {
     state.messages.known1 = gmailMessage('known1', 'owner@gymco.example', 'Re: delivery', 'When can you ship?', {
       headers: { 'List-Unsubscribe': '<mailto:x@y>' },
     });
-    expect(await syncGmail(env, { http: google.http, classifier: null })).toEqual({ status: 'ok', imported: 3, customers: 2 });
+    expect(await syncGmail(env, { http: google.http, classifier: null })).toMatchObject({ status: 'ok', imported: 3, customers: 2 });
     expect(google.calls.some((call) => call.startsWith('/gmail/v1/users/me/history?startHistoryId=100'))).toBe(true);
     const rows = await env.DB.prepare('SELECT id,classification,reason,customer_id,notified FROM email_messages ORDER BY id').all();
     expect(rows.results).toEqual(
@@ -233,7 +247,7 @@ describe('Gmail sync and LINE alerts', () => {
     };
     const classifier = vi.fn(async () => ({ customer: false, reason: 'AI: supplier offer' }));
     const result = await syncGmail(env, { http: fakeGoogle(state).http, classifier });
-    expect(result).toEqual({ status: 'ok', imported: 1, customers: 0 });
+    expect(result).toMatchObject({ status: 'ok', imported: 1, customers: 0 });
     expect(classifier).toHaveBeenCalledOnce();
     expect(await env.DB.prepare("SELECT reason FROM email_messages WHERE id='sup1'").first('reason')).toBe('AI: supplier offer');
     expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(0);
@@ -275,7 +289,7 @@ describe('Gmail sync and LINE alerts', () => {
       },
     };
     const google = fakeGoogle(state);
-    expect(await syncGmail(env, { http: google.http, classifier: null })).toEqual({ status: 'ok', imported: 1, customers: 1 });
+    expect(await syncGmail(env, { http: google.http, classifier: null })).toMatchObject({ status: 'ok', imported: 1, customers: 1 });
     expect(google.calls.some((call) => call.includes('/messages/sent1'))).toBe(false);
     expect(google.calls.find((call) => call.includes('/history?'))).not.toContain('labelId');
     expect(await env.DB.prepare("SELECT in_spam FROM email_messages WHERE id='spam1'").first('in_spam')).toBe(1);
@@ -334,6 +348,56 @@ describe('Gmail sync and LINE alerts', () => {
     expect((await syncGmail(env, { http: fakeGoogle(state).http, classifier: null })).status).toBe('reconnect');
     expect(await checkGmailHealth(env)).toBe(true);
     expect(pushes[1]).toContain('ต้องเชื่อม Gmail ใหม่');
+  });
+
+  it('backfills the last 90 days a page per run without alerts, then stops', async () => {
+    await connect('100', false);
+    await env.DB.prepare("UPDATE gmail_connection SET last_sweep_at=?").bind(new Date().toISOString()).run();
+    const pages: Record<string, { ids: string[]; next?: string }> = {
+      '': { ids: ['b1', 'b2'], next: 'p2' },
+      p2: { ids: ['b3'] },
+    };
+    const messages: Record<string, GmailMessage> = {
+      b1: gmailMessage('b1', 'old1@buyer.example', 'Old 1', 'x'),
+      b2: gmailMessage('b2', 'old2@buyer.example', 'Old 2', 'x', { labels: ['SPAM'] }),
+      b3: gmailMessage('b3', 'old3@buyer.example', 'Old 3', 'x'),
+    };
+    const seen: string[] = [];
+    const http = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === 'oauth2.googleapis.com') return Response.json({ access_token: 'a' });
+      const path = url.pathname.replace('/gmail/v1/users/me/', '');
+      if (path === 'history') return Response.json({ historyId: '100', history: [] });
+      if (path === 'messages') {
+        expect(url.searchParams.get('q')).toContain('newer_than:90d');
+        const page = pages[url.searchParams.get('pageToken') ?? ''];
+        seen.push(url.searchParams.get('pageToken') ?? 'first');
+        return Response.json({ messages: page.ids.map((id) => ({ id })), nextPageToken: page.next });
+      }
+      return Response.json(messages[decodeURIComponent(path.replace('messages/', ''))]);
+    }) as typeof fetch;
+    expect(await syncGmail(env, { http, classifier: null })).toMatchObject({ imported: 2, backfillDone: false });
+    expect(await syncGmail(env, { http, classifier: null })).toMatchObject({ imported: 1, backfillDone: true });
+    expect(await syncGmail(env, { http, classifier: null })).toMatchObject({ imported: 0, backfillDone: true });
+    expect(seen).toEqual(['first', 'p2']);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_messages').first('n')).toBe(3);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(0);
+    expect(await env.DB.prepare("SELECT in_spam FROM email_messages WHERE id='b2'").first('in_spam')).toBe(1);
+  });
+
+  it('fetches and stores HTML once for emails saved before HTML support', async () => {
+    await connect('100');
+    await env.DB.prepare(
+      "INSERT INTO email_messages(id,thread_id,from_email,received_at,classification,created_at) VALUES('legacy','t','a@b.example','2026-11-10T00:00:00Z','CUSTOMER','2026-11-10T00:00:00Z')",
+    ).run();
+    const state: Mailbox = {
+      historyId: '1',
+      history: [],
+      listing: [],
+      messages: { legacy: gmailMessage('legacy', 'a@b.example', 'Hi', 'Rich <b>content</b>', { html: true }) },
+    };
+    expect(await loadMessageHtml(env, 'legacy', fakeGoogle(state).http)).toContain('<b>content</b>');
+    expect(await env.DB.prepare("SELECT body_html FROM email_messages WHERE id='legacy'").first('body_html')).toContain('<b>content</b>');
   });
 
   it('skips when Gmail is not configured and removes mail older than 90 days', async () => {

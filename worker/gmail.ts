@@ -13,6 +13,7 @@ import {
   exchangeCode,
   gmailConfig,
   gmailGet,
+  loadMessageHtml,
   openAiClassifier,
   revokeToken,
   syncGmail,
@@ -38,11 +39,12 @@ gmailRoutes.get('/status', async (c) => {
   const access = await memberAccess(c);
   const config = gmailConfig(c.env);
   const row = await c.env.DB.prepare(
-    "SELECT email,status,ai_classify,connected_by,connected_at,last_sync_at,last_error FROM gmail_connection WHERE id='workspace'",
+    "SELECT email,status,ai_classify,connected_by,connected_at,last_sync_at,last_error,backfill_done FROM gmail_connection WHERE id='workspace'",
   ).first<{
     email: string;
     status: string;
     ai_classify: number;
+    backfill_done: number;
     connected_by: string;
     connected_at: string;
     last_sync_at: string | null;
@@ -59,6 +61,7 @@ gmailRoutes.get('/status', async (c) => {
     lastSyncAt: row?.last_sync_at ?? null,
     lastError: row?.last_error ?? null,
     aiClassify: Boolean(row?.ai_classify),
+    backfillDone: Boolean(row?.backfill_done),
     aiAvailable: Boolean(openAiClassifier(c.env)),
     isAdmin: access.admin,
   });
@@ -66,36 +69,45 @@ gmailRoutes.get('/status', async (c) => {
 
 gmailRoutes.get('/messages', async (c) => {
   await memberAccess(c);
-  const view = c.req.query('view') === 'all' ? 'all' : 'customer';
+  const requested = c.req.query('view') ?? 'inbox';
+  const view = ['inbox', 'customer', 'junk', 'all'].includes(requested) ? requested : 'inbox';
   const q = (c.req.query('q') ?? '').trim().slice(0, 100);
   const like = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
   const { results } = await c.env.DB.prepare(
     `SELECT m.id,m.thread_id AS threadId,m.from_name AS fromName,m.from_email AS fromEmail,m.subject,m.snippet,
       m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,c.name AS customerName,m.in_spam AS inSpam
      FROM email_messages m LEFT JOIN customers c ON c.id=m.customer_id
-     WHERE (?='all' OR m.classification='CUSTOMER')
+     WHERE CASE ? WHEN 'inbox' THEN m.in_spam=0 WHEN 'junk' THEN m.in_spam=1 WHEN 'customer' THEN m.classification='CUSTOMER' ELSE 1 END
        AND (?='' OR m.subject LIKE ? ESCAPE '\\' OR m.from_email LIKE ? ESCAPE '\\' OR m.from_name LIKE ? ESCAPE '\\' OR m.snippet LIKE ? ESCAPE '\\')
      ORDER BY m.received_at DESC LIMIT 200`,
   )
     .bind(view, q, like, like, like, like)
     .all();
   const counts = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS total,SUM(classification='CUSTOMER') AS customers FROM email_messages",
-  ).first<{ total: number; customers: number | null }>();
-  return c.json({ messages: results, total: counts?.total ?? 0, customers: counts?.customers ?? 0 });
+    "SELECT COUNT(*) AS total,SUM(classification='CUSTOMER') AS customers,SUM(in_spam=0) AS inbox,SUM(in_spam=1) AS junk FROM email_messages",
+  ).first<{ total: number; customers: number | null; inbox: number | null; junk: number | null }>();
+  return c.json({
+    messages: results,
+    total: counts?.total ?? 0,
+    customers: counts?.customers ?? 0,
+    inbox: counts?.inbox ?? 0,
+    junk: counts?.junk ?? 0,
+  });
 });
 
 gmailRoutes.get('/messages/:id', async (c) => {
   await memberAccess(c);
   const message = await c.env.DB.prepare(
     `SELECT m.id,m.thread_id AS threadId,m.from_name AS fromName,m.from_email AS fromEmail,m.to_text AS toText,m.subject,
-      m.body_text AS bodyText,m.snippet,m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,
+      m.body_text AS bodyText,m.body_html AS bodyHtml,m.snippet,m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,
       c.name AS customerName,m.in_spam AS inSpam
      FROM email_messages m LEFT JOIN customers c ON c.id=m.customer_id WHERE m.id=?`,
   )
     .bind(c.req.param('id'))
     .first();
   if (!message) return c.json({ error: { message: 'Email not found.' } }, 404);
+  if ((message as { bodyHtml: string | null }).bodyHtml === null)
+    (message as { bodyHtml: string | null }).bodyHtml = await loadMessageHtml(c.env, c.req.param('id'));
   return c.json(message);
 });
 

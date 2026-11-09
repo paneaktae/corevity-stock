@@ -17,6 +17,10 @@ const SWEEP_INTERVAL_MS = 60 * 60_000;
 // Alert when the mailbox has not been read successfully for this long.
 export const HEALTH_ALERT_AFTER_MS = 30 * 60_000;
 const BODY_LIMIT = 20_000;
+const HTML_LIMIT = 400_000;
+// Backfill: the last 90 days (matches retention), one page per sync run, without LINE alerts.
+const BACKFILL_QUERY = `newer_than:${90}d -in:sent -in:drafts -in:trash -in:chats`;
+const BACKFILL_PAGE = 50;
 
 export type Http = typeof fetch;
 
@@ -202,6 +206,19 @@ function findBody(part: GmailPart | undefined, mime: string): string {
   }
   return '';
 }
+// Defence in depth only: the CRM renders this inside a sandboxed iframe (no scripts, opaque
+// origin) under the page CSP, which also blocks remote images and connections.
+const BLOCKED_ELEMENTS = 'script|iframe|object|embed|applet|form|textarea|select|button|noscript|template|svg|math|frameset|frame';
+export function sanitizeEmailHtml(html: string) {
+  if (!html.trim()) return '';
+  return html
+    .slice(0, HTML_LIMIT)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(new RegExp(`<(${BLOCKED_ELEMENTS})\\b[\\s\\S]*?<\\/\\1\\s*>`, 'gi'), '')
+    .replace(new RegExp(`<\\/?(${BLOCKED_ELEMENTS}|input|link|meta|base)\\b[^>]*>`, 'gi'), '')
+    .replace(/\s(on[a-z]+|srcdoc|formaction)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s(href|src|action|background|xlink:href)\s*=\s*("\s*(?:javascript|vbscript|data:text\/html)[^"]*"|'\s*(?:javascript|vbscript|data:text\/html)[^']*'|(?:javascript|vbscript|data:text\/html)[^\s>]*)/gi, '');
+}
 export function parseAddress(value: string) {
   const match = value.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
   const email = (match ? match[2] : value).trim().toLowerCase();
@@ -214,7 +231,8 @@ export function parseMessage(message: GmailMessage) {
   );
   const from = parseAddress(headers.get('from') ?? '');
   const plain = findBody(message.payload, 'text/plain');
-  const body = (plain || htmlToText(findBody(message.payload, 'text/html'))).slice(0, BODY_LIMIT);
+  const html = findBody(message.payload, 'text/html');
+  const body = (plain || htmlToText(html)).slice(0, BODY_LIMIT);
   const internal = Number(message.internalDate);
   return {
     id: message.id,
@@ -226,6 +244,7 @@ export function parseMessage(message: GmailMessage) {
     subject: (headers.get('subject') ?? '').slice(0, 500),
     snippet: htmlToText(message.snippet ?? '').slice(0, 500),
     body,
+    html: sanitizeEmailHtml(html),
     receivedAt: new Date(Number.isFinite(internal) && internal > 0 ? internal : Date.now()).toISOString(),
     headers,
   };
@@ -332,13 +351,21 @@ type Connection = {
   history_id: string | null;
   ai_classify: number;
   last_sweep_at: string | null;
+  backfill_page_token: string | null;
+  backfill_done: number;
 };
 type HistoryPage = {
   history?: { messagesAdded?: { message: { id: string; labelIds?: string[] } }[] }[];
   historyId?: string;
   nextPageToken?: string;
 };
-export type SyncResult = { status: 'skipped' | 'ok' | 'reconnect' | 'error'; imported: number; customers: number; error?: string };
+export type SyncResult = {
+  status: 'skipped' | 'ok' | 'reconnect' | 'error';
+  imported: number;
+  customers: number;
+  backfillDone?: boolean;
+  error?: string;
+};
 
 async function enqueueNotifications(env: Bindings, messageId: string, now: string) {
   const allowed = new Set(await workspaceSalesEmails(env));
@@ -389,12 +416,12 @@ async function importMessage(
   }
   const now = new Date().toISOString();
   const inserted = await env.DB.prepare(
-    `INSERT OR IGNORE INTO email_messages(id,thread_id,from_name,from_email,to_text,subject,snippet,body_text,received_at,classification,reason,customer_id,in_spam,notified,created_at)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)`,
+    `INSERT OR IGNORE INTO email_messages(id,thread_id,from_name,from_email,to_text,subject,snippet,body_text,body_html,received_at,classification,reason,customer_id,in_spam,notified,created_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)`,
   )
     .bind(
       message.id, message.threadId, message.fromName, message.fromEmail, message.to, message.subject,
-      message.snippet, message.body, message.receivedAt, verdict.customer ? 'CUSTOMER' : 'NOT_CUSTOMER',
+      message.snippet, message.body, message.html, message.receivedAt, verdict.customer ? 'CUSTOMER' : 'NOT_CUSTOMER',
       verdict.reason, known?.id ?? null, Number(inSpam), now,
     )
     .run();
@@ -488,12 +515,30 @@ export async function syncGmail(
       imported++;
       if (result.customer) customers++;
     }
+    // Backfill older mail a page at a time (no alerts) until the 90-day window is complete.
+    let backfillToken = connection.backfill_page_token;
+    let backfillDone = connection.backfill_done;
+    if (!backfillDone) {
+      const page = await gmailGet<{ messages?: { id: string }[]; nextPageToken?: string }>(
+        token,
+        `messages?includeSpamTrash=true&maxResults=${BACKFILL_PAGE}&q=${encodeURIComponent(BACKFILL_QUERY)}${backfillToken ? `&pageToken=${encodeURIComponent(backfillToken)}` : ''}`,
+        http,
+      );
+      for (const message of page.messages ?? []) {
+        const result = await importMessage(env, token, message.id, { notify: false, mailbox: connection.email, classifier, http });
+        if (!result) continue;
+        imported++;
+        if (result.customer) customers++;
+      }
+      backfillToken = page.nextPageToken ?? null;
+      backfillDone = backfillToken ? 0 : 1;
+    }
     await env.DB.prepare(
-      "UPDATE gmail_connection SET history_id=?,last_sync_at=?,last_sweep_at=CASE WHEN ?=1 THEN ? ELSE last_sweep_at END,last_error=NULL,health_alerted_at=NULL,sync_lease_until=NULL,updated_at=? WHERE id='workspace'",
+      "UPDATE gmail_connection SET history_id=?,last_sync_at=?,last_sweep_at=CASE WHEN ?=1 THEN ? ELSE last_sweep_at END,backfill_page_token=?,backfill_done=?,last_error=NULL,health_alerted_at=NULL,sync_lease_until=NULL,updated_at=? WHERE id='workspace'",
     )
-      .bind(historyId, now, Number(swept), now, now)
+      .bind(historyId, now, Number(swept), now, backfillToken, backfillDone, now)
       .run();
-    return { status: 'ok', imported, customers };
+    return { status: 'ok', imported, customers, backfillDone: Boolean(backfillDone) };
   } catch (error) {
     const code = error instanceof Error && /^GMAIL_[A-Z0-9_]+$/.test(error.message) ? error.message : 'GMAIL_SYNC_FAILED';
     const reconnect = code === 'GMAIL_RECONNECT_REQUIRED' || code === 'GMAIL_TOKEN_DECRYPTION_FAILED' || code === 'GMAIL_KEY_VERSION_MISMATCH';
@@ -503,6 +548,30 @@ export async function syncGmail(
       .bind(reconnect ? 'RECONNECT_REQUIRED' : 'CONNECTED', code, now)
       .run();
     return { status: reconnect ? 'reconnect' : 'error', imported, customers, error: code };
+  }
+}
+
+// Older rows were stored as text only: fetch the HTML part once, when the email is opened.
+export async function loadMessageHtml(env: Bindings, id: string, http: Http = fetch) {
+  if (!gmailConfig(env).ready) return null;
+  const connection = await env.DB.prepare(
+    "SELECT email,token_ciphertext,token_nonce,token_key_version FROM gmail_connection WHERE id='workspace' AND status='CONNECTED'",
+  ).first<{ email: string; token_ciphertext: string; token_nonce: string; token_key_version: string }>();
+  if (!connection) return null;
+  try {
+    const refresh = await decryptRefreshToken(env, connection.email, {
+      ciphertext: connection.token_ciphertext,
+      nonce: connection.token_nonce,
+      keyVersion: connection.token_key_version,
+    });
+    const token = await accessToken(env, refresh, http);
+    const message = parseMessage(await gmailGet<GmailMessage>(token, `messages/${encodeURIComponent(id)}?format=full`, http));
+    await env.DB.prepare('UPDATE email_messages SET body_html=? WHERE id=?').bind(message.html, id).run();
+    return message.html;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'GMAIL_NOT_FOUND')
+      await env.DB.prepare("UPDATE email_messages SET body_html='' WHERE id=?").bind(id).run();
+    return null;
   }
 }
 
