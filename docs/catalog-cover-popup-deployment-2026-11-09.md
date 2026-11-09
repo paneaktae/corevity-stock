@@ -34,3 +34,12 @@ User explicitly requested "Commit and deploy all".
   CRM Worker unchanged.
 - Verified live: `/s/<slug>` in Thai and English shows the new labels; no "1 เครื่อง"/"1 UNIT" left.
 - `npm run check` had one flaky failure on the first run (not identified); three reruns passed 159/159.
+
+## Follow-up: website order popup
+
+- Commit `4ed1074` (user requested "Commit and deploy"): website Catalog order moved from an
+  always-visible panel to a header button + dialog (drag-and-drop or arrows, single save);
+  each catalog card shows its website position. UI only, no migration.
+- Management Worker: `a0dd58ce` → `8d05dd64-ece3-49ce-b25d-220a6a21a83d`. Catalog Worker unchanged.
+- Verified live immediately: custom domain and workers.dev serve `index-BwtVYGAD.js`, which
+  contains the order dialog; `/` and `/catalogs` 200; anonymous `PUT /api/catalogs/web-order` 401.
