@@ -16,3 +16,9 @@ User explicitly requested "Commit and deploy".
   `docs/gmail-inbox-setup.md`, `wrangler secret put` both values (needs approval), then the admin
   connects `info@corevityusedgym.com` in Settings → Integrations.
 - No other secrets, Meta flags or access controls changed.
+
+## Follow-up 2026-11-10: Google OAuth secrets
+
+- The user set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` as production Worker secrets themselves
+  (values never shared in chat). Verified by name with `wrangler secret list`.
+- Remaining: the admin connects `info@corevityusedgym.com` in Settings → Integrations → Gmail inbox.
