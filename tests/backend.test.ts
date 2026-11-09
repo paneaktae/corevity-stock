@@ -898,7 +898,7 @@ describe('D1-backed inventory and sales', () => {
     expect(htmlText).toContain('data-book-next');
     expect(htmlText).toContain('class="editorial-photo"');
     expect(htmlText).toContain('class="editorial-brand">Catalog snapshot');
-    expect(htmlText).toContain('class="editorial-availability">1 UNIT AVAILABLE');
+    expect(htmlText).toContain('class="editorial-availability">AVAILABLE<');
     expect(htmlText).toContain('Catalog-specific snapshot copy');
     expect(htmlText).toContain('<strong>12,345</strong>');
     expect(htmlText).not.toContain('purchaseCost');
@@ -922,7 +922,7 @@ describe('D1-backed inventory and sales', () => {
     expect(detailText).toContain('class="private-catalog"');
     expect(detailText).toContain('class="editorial-brand">Catalog snapshot');
     expect(detailText).toContain('class="editorial-specification">Bicep');
-    expect(detailText).toContain('class="editorial-availability">1 UNIT AVAILABLE');
+    expect(detailText).toContain('class="editorial-availability">AVAILABLE<');
     expect(detailText).toContain('<strong>12,345</strong>');
     expect(detailText).not.toContain('Contact details are being updated.');
     expect(detailText).toContain('Catalog-specific snapshot copy');

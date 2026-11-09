@@ -47,7 +47,7 @@ export function privateCatalogProduct(item: PrivateCatalogProduct, options: {
   const photo = item.image_key_snapshot
     ? `/media/catalogs/${encodeURIComponent(slug)}/item/${encodeURIComponent(item.id)}` : '';
   const availability: Record<string, string> = {
-    AVAILABLE: local(language, '1 UNIT AVAILABLE', 'พร้อมขาย 1 เครื่อง'),
+    AVAILABLE: local(language, 'AVAILABLE', 'พร้อมขาย'),
     RESERVED: local(language, 'RESERVED', 'จองแล้ว'),
     SOLD: local(language, 'SOLD OUT', 'ขายแล้ว'),
     NOT_AVAILABLE: local(language, 'NOT AVAILABLE', 'ไม่พร้อมขาย'),
