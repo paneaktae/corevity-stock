@@ -7,16 +7,21 @@ User explicitly requested "Commit and deploy all".
 - Remote D1: applied `0036_catalog_cover_image.sql` only (adds `catalogs.cover_image_key`,
   `catalogs.cover_image_mime`; no data written).
 - Management Worker `fitness-equipment-manager`: `cc869c08` → `0adb132b` (6561bcf), then
-  redeployed as `195fb82c` (same commit) to republish static assets.
+  redeployed as `195fb82c` and `a0dd58ce` (same commit) to republish static assets.
 - Public Catalog Worker `fitness-equipment-catalog`: `69b17728` → `df3e2a8a`.
 - Smoke checks: CRM `/` and `/catalogs` 200; anonymous `POST`/`GET /api/catalogs/:id/cover` 401;
   storefront list (8 Catalogs), a Catalog detail, `/s/` share link, `/api/public/storefront`
   and website `/th/catalog` 200. No Catalog has an uploaded cover yet, so covers still fall
   back to the first product photo.
-- **Open issue:** after both CRM deploys, `management.corevityusedgym.com` and the workers.dev
-  URL kept serving the previous front-end bundle (`index-DJ9s2TR_.js`, from f000283) for
-  10+ minutes, and the new `/assets/index-BlihMgkE.js` returned the SPA fallback. Wrangler's
-  log shows the 5 new assets uploaded successfully. The old UI is compatible with the new
-  API, so nothing is broken, but the popup editor and cover field are not visible until
-  Cloudflare serves the new assets.
+- **Stale front-end after deploy (resolved):** after `0adb132b` and the redeploy `195fb82c`,
+  both `management.corevityusedgym.com` and the workers.dev URL kept serving the previous
+  bundle (`index-DJ9s2TR_.js`, from f000283) for about 13 minutes; the new
+  `/assets/index-BlihMgkE.js` returned the SPA fallback even though Wrangler reported the
+  assets as uploaded. A third deploy of the same build with one extra untracked file
+  (`build-info.txt`, forcing a new asset manifest) produced version
+  `a0dd58ce-70a2-4623-9d7b-3a9959d885e2`; right after it the live HTML referenced
+  `index-BlihMgkE.js`, and that bundle contains the popup and cover upload. It is unclear
+  whether the forced manifest or delayed propagation fixed it. After any CRM deploy, check
+  that the live HTML references the new `dist/client/assets/index-*.js`.
+- Not yet verified: a signed-in cover upload on production.
 - No secrets, Meta flags or access controls changed.
