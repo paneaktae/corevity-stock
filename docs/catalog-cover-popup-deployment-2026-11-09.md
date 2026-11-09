@@ -25,3 +25,12 @@ User explicitly requested "Commit and deploy all".
   that the live HTML references the new `dist/client/assets/index-*.js`.
 - Not yet verified: a signed-in cover upload on production.
 - No secrets, Meta flags or access controls changed.
+
+## Follow-up: private catalog availability label
+
+- Commit `22775a8` (user requested "Commit and deploy"): share page shows "AVAILABLE" /
+  "พร้อมขาย" instead of "1 UNIT AVAILABLE" / "พร้อมขาย 1 เครื่อง".
+- Public Catalog Worker only: `df3e2a8a` → `6283b765-12f7-4497-b7dd-dd7d50311e7c`. No migration,
+  CRM Worker unchanged.
+- Verified live: `/s/<slug>` in Thai and English shows the new labels; no "1 เครื่อง"/"1 UNIT" left.
+- `npm run check` had one flaky failure on the first run (not identified); three reruns passed 159/159.
