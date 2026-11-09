@@ -37,3 +37,12 @@ User explicitly requested "Commit and deploy".
   `470bbee2-60d4-47f7-a59c-62edd1408e63`, no migration.
 - Verified: first run on `470bbee2` (17:55 UTC) succeeded with no error; backfill complete (109 emails,
   last 90 days); legacy-reason rows re-checked (0 left); Inbox view = 2 emails from people.
+
+## Follow-up: conversations + Replied badge (8738387)
+
+- User requested "Commit and deploy". Backup `output/d1-backup-2026-11-10-pre-0039.sql` (4.0 MB), then
+  applied `0039_email_replies.sql` (replied_at, thread index, sent backfill state).
+- Worker `470bbee2` → `beadaa9c-306d-4299-9b8d-cbec655b2c5f`; live HTML serves `index-DVdWRt3K.js`;
+  anonymous `/api/email/threads/:id` 401.
+- First run on `beadaa9c` (18:05 UTC): no error; sent backfill complete in one run; 1 of 109 emails
+  marked replied. Not yet verified: a signed-in conversation view against live Gmail.
