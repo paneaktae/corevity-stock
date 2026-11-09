@@ -11,8 +11,9 @@ User explicitly requested "Migrate and deploy".
   previous `03ff8304-cf9b-4f52-ab77-a008f7cf5a88` (c86028f) → new `cc869c08-ba67-4a49-85f6-ed3198c1ecf8`.
 - Smoke checks: `/` and `/catalogs` return 200 (build asset `index-DJ9s2TR_.js`);
   anonymous `DELETE /api/catalogs/:id` and `PUT /api/catalogs/web-order` return 401.
-- Public Catalog Worker `fitness-equipment-catalog`: **not redeployed** (still
-  `2b1c422f-875a-48d6-99dc-6e319764309c`, matching git snapshot f4ea19a). Until it is
-  redeployed, the website keeps ordering Catalogs by publish time; the order set in the
-  CRM is saved but not yet applied. Deleting Catalogs works without it.
+- Public Catalog Worker `fitness-equipment-catalog` (deployed after a separate user approval):
+  previous `2b1c422f-875a-48d6-99dc-6e319764309c` (matched git snapshot f4ea19a) →
+  new `69b17728-fdd4-4441-8561-d88ef04ca71a`. Storefront list now orders by `web_sort_order`.
+  Smoke checks: storefront list (8 Catalogs, unchanged order), `/api/public/storefront`,
+  a Catalog detail and its `/s/` share link return 200; website `/th/catalog` returns 200.
 - No secrets, Meta flags or access controls changed.
