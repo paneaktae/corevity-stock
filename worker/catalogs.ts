@@ -193,6 +193,7 @@ catalogsRoutes.get('/catalogs', async (c) => {
     `SELECT c.id,c.title,c.description,c.slug,c.status,c.customer_id AS customerId,
       0 AS showPrices,c.show_sold AS showSold,c.expires_at AS expiresAt,
       c.publish_to_web AS publishToWeb,c.published_to_web_at AS publishedToWebAt,c.web_sort_order AS webSortOrder,
+      CASE WHEN c.cover_image_key IS NULL THEN NULL ELSE substr(c.cover_image_key,16) END AS coverImageId,
       c.created_by AS createdBy,c.assigned_salesperson_email AS assignedSalespersonEmail,
       COALESCE(NULLIF(trim(s.first_name || ' ' || s.last_name),''),c.assigned_salesperson_email) AS assignedSalespersonName,
       CASE WHEN la.email IS NULL THEN 0 ELSE 1 END AS assignedSalespersonLineReady,c.created_at AS createdAt,c.updated_at AS updatedAt,
@@ -241,6 +242,7 @@ catalogsRoutes.get('/catalogs/:id', async (c) => {
   const catalog = await c.env.DB.prepare(
     `SELECT catalogs.id,title,description,slug,status,customer_id AS customerId,0 AS showPrices,
       publish_to_web AS publishToWeb,published_to_web_at AS publishedToWebAt,
+      CASE WHEN cover_image_key IS NULL THEN NULL ELSE substr(cover_image_key,16) END AS coverImageId,
       show_sold AS showSold,expires_at AS expiresAt,created_by AS createdBy,
       assigned_salesperson_email AS assignedSalespersonEmail,
       COALESCE(NULLIF(trim(s.first_name || ' ' || s.last_name),''),catalogs.assigned_salesperson_email) AS assignedSalespersonName,
@@ -539,9 +541,9 @@ catalogsRoutes.put('/catalogs/web-order', async (c) => {
 
 catalogsRoutes.delete('/catalogs/:id', async (c) => {
   const id = c.req.param('id');
-  const catalog = await c.env.DB.prepare('SELECT title,slug FROM catalogs WHERE id=?')
+  const catalog = await c.env.DB.prepare('SELECT title,slug,cover_image_key FROM catalogs WHERE id=?')
     .bind(id)
-    .first<{ title: string; slug: string }>();
+    .first<{ title: string; slug: string; cover_image_key: string | null }>();
   if (!catalog) return c.json({ error: { message: 'Catalog not found.' } }, 404);
   // Catalog chats keep their own title/slug snapshot, so conversation history is retained.
   await c.env.DB.batch([
@@ -549,8 +551,81 @@ catalogsRoutes.delete('/catalogs/:id', async (c) => {
     c.env.DB.prepare("DELETE FROM catalog_events WHERE entity_type='CATALOG' AND entity_slug=?").bind(catalog.slug),
     c.env.DB.prepare('DELETE FROM catalogs WHERE id=?').bind(id),
   ]);
+  if (catalog.cover_image_key) await c.env.PRODUCT_IMAGES.delete(catalog.cover_image_key);
   await writeActivity(c, 'catalog', id, 'deleted', `Shareable catalog deleted: ${catalog.title}`);
   return c.json({ ok: true });
+});
+
+const COVER_PREFIX = 'catalog-covers/'; // 15 chars; coverImageId = substr(key,16)
+const COVER_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+function validImageBytes(mime: string, bytes: Uint8Array) {
+  return (
+    (mime === 'image/jpeg' && bytes[0] === 0xff && bytes[1] === 0xd8) ||
+    (mime === 'image/png' && bytes.slice(0, 8).join(',') === '137,80,78,71,13,10,26,10') ||
+    (mime === 'image/webp' &&
+      String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
+      String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP')
+  );
+}
+catalogsRoutes.post('/catalogs/:id/cover', async (c) => {
+  const id = c.req.param('id');
+  const catalog = await c.env.DB.prepare('SELECT title,cover_image_key FROM catalogs WHERE id=?')
+    .bind(id)
+    .first<{ title: string; cover_image_key: string | null }>();
+  if (!catalog) return c.json({ error: { message: 'Catalog not found.' } }, 404);
+  const value = (await c.req.formData()).get('file');
+  if (!value || typeof value === 'string')
+    return c.json({ error: { message: 'Choose a cover image.' } }, 422);
+  const file = value as File;
+  const maxMb = Number(c.env.MAX_UPLOAD_MB) || 10;
+  if (file.size > maxMb * 1024 * 1024)
+    return c.json({ error: { message: `Each photo must be under ${maxMb} MB.` } }, 422);
+  const mime = file.type.toLowerCase();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!COVER_TYPES.includes(mime) || !validImageBytes(mime, bytes))
+    return c.json({ error: { message: 'Cover image must be a JPEG, PNG, or WebP photo.' } }, 422);
+  const key = `${COVER_PREFIX}${crypto.randomUUID()}`;
+  await c.env.PRODUCT_IMAGES.put(key, bytes, { httpMetadata: { contentType: mime } });
+  try {
+    await c.env.DB.prepare('UPDATE catalogs SET cover_image_key=?,cover_image_mime=?,updated_at=? WHERE id=?')
+      .bind(key, mime, stamp(), id)
+      .run();
+  } catch (error) {
+    await c.env.PRODUCT_IMAGES.delete(key);
+    throw error;
+  }
+  if (catalog.cover_image_key) await c.env.PRODUCT_IMAGES.delete(catalog.cover_image_key);
+  await writeActivity(c, 'catalog', id, 'cover_updated', `Catalog cover updated: ${catalog.title}`);
+  return c.json({ ok: true, coverImageId: key.slice(COVER_PREFIX.length) });
+});
+catalogsRoutes.delete('/catalogs/:id/cover', async (c) => {
+  const id = c.req.param('id');
+  const catalog = await c.env.DB.prepare('SELECT title,cover_image_key FROM catalogs WHERE id=?')
+    .bind(id)
+    .first<{ title: string; cover_image_key: string | null }>();
+  if (!catalog) return c.json({ error: { message: 'Catalog not found.' } }, 404);
+  if (catalog.cover_image_key) {
+    await c.env.DB.prepare("UPDATE catalogs SET cover_image_key=NULL,cover_image_mime='',updated_at=? WHERE id=?")
+      .bind(stamp(), id)
+      .run();
+    await c.env.PRODUCT_IMAGES.delete(catalog.cover_image_key);
+    await writeActivity(c, 'catalog', id, 'cover_removed', `Catalog cover removed: ${catalog.title}`);
+  }
+  return c.json({ ok: true });
+});
+catalogsRoutes.get('/catalogs/:id/cover', async (c) => {
+  const row = await c.env.DB.prepare('SELECT cover_image_key,cover_image_mime FROM catalogs WHERE id=?')
+    .bind(c.req.param('id'))
+    .first<{ cover_image_key: string | null; cover_image_mime: string }>();
+  const object = row?.cover_image_key ? await c.env.PRODUCT_IMAGES.get(row.cover_image_key) : null;
+  if (!object) return c.json({ error: { message: 'Catalog cover not found.' } }, 404);
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': row?.cover_image_mime || object.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'private, max-age=300',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 });
 
 catalogsRoutes.post('/products/publish-all', async (c) => {

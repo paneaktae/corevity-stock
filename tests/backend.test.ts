@@ -683,6 +683,52 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/catalogs/${b.id}`,'DELETE')).status).toBe(200);
     expect(await order()).toEqual([a.slug]);
   });
+  it('uploads a Catalog cover, serves it publicly as the website cover and removes it', async () => {
+    const item = await product('Cover collection');
+    expect((await request(`/products/${item.id}/publish`, 'POST', {showPrice: false})).status).toBe(200);
+    const catalog = await json<{id: string; slug: string}>(await request('/catalogs','POST',{
+      title: 'Cover catalog', assignedSalespersonEmail: 'tester@example.test', items: [{productId: item.id}],
+    }));
+    expect((await request(`/catalogs/${catalog.id}/publish-to-web`,'POST')).status).toBe(200);
+    const upload = (bytes: Uint8Array<ArrayBuffer>, type: string) => {
+      const form = new FormData();
+      form.append('file', new Blob([bytes], {type}), 'cover');
+      return mf.dispatchFetch(`http://localhost/api/catalogs/${catalog.id}/cover`, {method: 'POST', body: form});
+    };
+    expect((await upload(new Uint8Array([1, 2, 3, 4]), 'image/png')).status).toBe(422);
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]);
+    const first = await upload(png, 'image/png');
+    expect(first.status).toBe(200);
+    const {coverImageId} = (await first.json()) as {coverImageId: string};
+    const detail = await json<{catalog: {coverImageId: string}}>(await request(`/catalogs/${catalog.id}`));
+    expect(detail.catalog.coverImageId).toBe(coverImageId);
+    expect((await request(`/catalogs/${catalog.id}/cover`)).headers.get('Content-Type')).toBe('image/png');
+    const database = await mf.getD1Database('DB');
+    const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
+    const ctx = {waitUntil: (promise: Promise<unknown>) => void promise} as ExecutionContext;
+    const fetchPublic = (path: string) => publicCatalogWorker.fetch(
+      new Request(`http://catalog.test${path}`), {DB: database, PRODUCT_IMAGES: bucket}, ctx,
+    );
+    const listed = (await (await fetchPublic('/api/public/storefront/catalogs')).json()) as {catalogs: Array<{slug: string; coverImageUrl: string}>};
+    expect(listed.catalogs.find((value) => value.slug === catalog.slug)?.coverImageUrl).toBe(`/media/catalogs/${catalog.slug}/cover?v=${coverImageId}`);
+    const served = await fetchPublic(`/media/catalogs/${catalog.slug}/cover`);
+    expect(served.status).toBe(200);
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(png);
+    expect(await (await fetchPublic(`/s/${catalog.slug}`)).text()).toContain(`/media/catalogs/${catalog.slug}/cover?v=${coverImageId}`);
+    const replaced = await upload(png, 'image/png');
+    const replacedId = ((await replaced.json()) as {coverImageId: string}).coverImageId;
+    expect(replacedId).not.toBe(coverImageId);
+    expect(await bucket.get(`catalog-covers/${coverImageId}`)).toBeNull();
+    expect((await request(`/catalogs/${catalog.id}/cover`,'DELETE')).status).toBe(200);
+    expect(await bucket.get(`catalog-covers/${replacedId}`)).toBeNull();
+    expect((await fetchPublic(`/media/catalogs/${catalog.slug}/cover`)).status).toBe(404);
+    const after = (await (await fetchPublic('/api/public/storefront/catalogs')).json()) as {catalogs: Array<{slug: string; coverImageUrl: string | null}>};
+    expect(after.catalogs.find((value) => value.slug === catalog.slug)?.coverImageUrl ?? '').not.toContain('/cover');
+    await upload(png, 'image/png');
+    const lastKey = (await database.prepare('SELECT cover_image_key FROM catalogs WHERE id=?').bind(catalog.id).first<string>('cover_image_key'))!;
+    expect((await request(`/catalogs/${catalog.id}`,'DELETE')).status).toBe(200);
+    expect(await bucket.get(lastKey)).toBeNull();
+  });
   it('allows website chat preflight only from the approved origin', async () => {
     const database = await mf.getD1Database('DB');
     const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');

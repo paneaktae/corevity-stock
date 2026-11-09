@@ -297,6 +297,8 @@ export const catalogs = sqliteTable('catalogs', {
   publishToWeb: integer('publish_to_web', { mode: 'boolean' }).notNull().default(false),
   publishedToWebAt: text('published_to_web_at'),
   webSortOrder: integer('web_sort_order'),
+  coverImageKey: text('cover_image_key'),
+  coverImageMime: text('cover_image_mime').notNull().default(''),
   expiresAt: text('expires_at'),
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),

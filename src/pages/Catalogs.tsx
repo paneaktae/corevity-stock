@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   Archive,
   ArrowDown,
   ArrowUp,
   Copy,
   ExternalLink,
+  ImagePlus,
   Plus,
   Share2,
   Trash2,
@@ -25,6 +26,7 @@ type CatalogRow = {
   publishToWeb: number | boolean;
   publishedToWebAt: string | null;
   webSortOrder: number | null;
+  coverImageId: string | null;
   customerId: string | null;
   customerName: string | null;
   assignedSalespersonEmail: string;
@@ -71,6 +73,26 @@ export function CatalogsPage() {
   const [publishingAll, setPublishingAll] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [notice, setNotice] = useState('');
+  const [coverImageId, setCoverImageId] = useState<string | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState('');
+  const [removeCover, setRemoveCover] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (editorId && !dialog.open) dialog.showModal();
+    if (!editorId && dialog.open) dialog.close();
+  }, [editorId]);
+  useEffect(() => {
+    if (!coverFile) {
+      setCoverPreview('');
+      return;
+    }
+    const url = URL.createObjectURL(coverFile);
+    setCoverPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [coverFile]);
 
   function resetEditor() {
     setEditorId(null);
@@ -81,6 +103,9 @@ export function CatalogsPage() {
     setShowSold(false);
     setExpires('');
     setItems([]);
+    setCoverImageId(null);
+    setCoverFile(null);
+    setRemoveCover(false);
   }
   function newCatalog() {
     resetEditor();
@@ -100,6 +125,9 @@ export function CatalogsPage() {
       setAssignedSalespersonEmail(detail.catalog.assignedSalespersonEmail ?? '');
       setShowSold(Boolean(detail.catalog.showSold));
       setExpires(detail.catalog.expiresAt?.slice(0, 10) ?? '');
+      setCoverImageId(detail.catalog.coverImageId ?? null);
+      setCoverFile(null);
+      setRemoveCover(false);
       setItems(
         detail.items.map((item) => ({
           productId: item.productId,
@@ -172,9 +200,22 @@ export function CatalogsPage() {
               method: 'PATCH',
               body: JSON.stringify(payload),
             });
+      let coverError = '';
+      try {
+        if (coverFile) {
+          const form = new FormData();
+          form.append('file', coverFile);
+          await api(`/catalogs/${result.id}/cover`, { method: 'POST', body: form });
+        } else if (removeCover && coverImageId) {
+          await api(`/catalogs/${result.id}/cover`, { method: 'DELETE' });
+        }
+      } catch (e) {
+        coverError = (e as Error).message;
+      }
       resetEditor();
       reload();
       setNotice(t('Catalog saved.'));
+      if (coverError) setErrorMessage(`${t('The catalog was saved, but the cover image was not updated.')} ${coverError}`);
       if (result.slug && data?.publicBaseUrl)
         await navigator.clipboard
           .writeText(
@@ -342,22 +383,32 @@ export function CatalogsPage() {
           </div>
         }
       />
-      <ErrorBox message={errorMessage || error} />
+      <ErrorBox message={(editorId ? '' : errorMessage) || error} />
       {notice && (
         <div className="success" role="status">
           {notice}
         </div>
       )}
       {!data ? <Loading /> : null}
+      <dialog
+        ref={dialogRef}
+        className="catalog-editor-dialog"
+        aria-labelledby="catalog-editor-title"
+        onCancel={(event) => {
+          event.preventDefault();
+          if (!busy) resetEditor();
+        }}
+      >
       {editorId && (
         <section className="panel catalog-editor">
           <div className="section-heading">
-            <h2>{t(editorId === 'new' ? 'Create catalog' : 'Edit catalog')}</h2>
-            <button type="button" aria-label={t('Close')} onClick={resetEditor}>
+            <h2 id="catalog-editor-title">{t(editorId === 'new' ? 'Create catalog' : 'Edit catalog')}</h2>
+            <button type="button" aria-label={t('Close')} disabled={busy} onClick={resetEditor}>
               <X size={17} />
             </button>
           </div>
           <form onSubmit={(event) => void saveCatalog(event)}>
+            <ErrorBox message={errorMessage} />
             <div className="form-grid">
               <Field label={t('Catalog title')}>
                 <input
@@ -396,6 +447,52 @@ export function CatalogsPage() {
                 onChange={(e) => setDescription(e.target.value)}
               />
             </Field>
+            <div className="catalog-cover-field">
+              <span className="catalog-cover-label">{t('Cover image (optional)')}</span>
+              <div className="catalog-cover-row">
+                <div className="catalog-cover-preview">
+                  {coverPreview ? (
+                    <img src={coverPreview} alt={t('New cover image')} />
+                  ) : coverImageId && !removeCover && editorId !== 'new' ? (
+                    <img src={`/api/catalogs/${editorId}/cover?v=${encodeURIComponent(coverImageId)}`} alt={t('Current cover image')} />
+                  ) : (
+                    <span>{t('Uses the first product photo')}</span>
+                  )}
+                </div>
+                <div className="catalog-cover-actions">
+                  <label className="button">
+                    <ImagePlus size={15} />
+                    {t(coverPreview || (coverImageId && !removeCover) ? 'Change cover' : 'Upload cover')}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      hidden
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        e.target.value = '';
+                        if (file) {
+                          setCoverFile(file);
+                          setRemoveCover(false);
+                        }
+                      }}
+                    />
+                  </label>
+                  {(coverPreview || (coverImageId && !removeCover)) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCoverFile(null);
+                        setRemoveCover(true);
+                      }}
+                    >
+                      <Trash2 size={14} />
+                      {t('Remove cover')}
+                    </button>
+                  )}
+                  <small className="field-hint">{t('JPEG, PNG or WebP. Shown on the website catalog card and share preview.')}</small>
+                </div>
+              </div>
+            </div>
             <div className="form-grid catalog-options">
               <label className="quotation-check">
                 <input
@@ -547,6 +644,7 @@ export function CatalogsPage() {
           </form>
         </section>
       )}
+      </dialog>
       {webCatalogs.length > 0 && (
         <section className="panel catalog-web-order">
           <div className="section-heading">

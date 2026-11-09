@@ -48,6 +48,8 @@ type CatalogRow = {
   created_by: string;
   assigned_salesperson_email: string;
   publish_to_web: number;
+  cover_image_key: string | null;
+  cover_image_mime: string;
 };
 type CatalogItemRow = {
   id: string;
@@ -288,7 +290,7 @@ async function getProduct(
 async function getCatalog(database: D1Database, slug: string) {
   const catalog = await database
     .prepare(
-      'SELECT id,title,description,slug,status,show_sold,expires_at,created_by,assigned_salesperson_email,publish_to_web FROM catalogs WHERE slug=?',
+      'SELECT id,title,description,slug,status,show_sold,expires_at,created_by,assigned_salesperson_email,publish_to_web,cover_image_key,cover_image_mime FROM catalogs WHERE slug=?',
     )
     .bind(slug)
     .first<CatalogRow>();
@@ -301,6 +303,7 @@ async function getWebCatalog(database: D1Database, slug: string) {
 async function webCatalogs(database: D1Database) {
   const { results } = await database.prepare(
     `SELECT c.slug,c.title,c.description,c.published_to_web_at AS publishedAt,
+       substr(c.cover_image_key,16) AS uploadedCoverId,
        cover.id AS coverItemId,cover_image.id AS coverImageRevision
      FROM catalogs c
      LEFT JOIN catalog_items cover ON cover.id=(
@@ -313,10 +316,12 @@ async function webCatalogs(database: D1Database) {
      WHERE c.publish_to_web=1 AND c.status='ACTIVE'
        AND (c.expires_at IS NULL OR c.expires_at>?)
      ORDER BY c.web_sort_order IS NULL,c.web_sort_order ASC,c.published_to_web_at DESC,c.slug ASC`,
-  ).bind(new Date().toISOString()).all<{slug: string; title: string; description: string; publishedAt: string; coverItemId: string | null; coverImageRevision: string | null}>();
-  return results.map(({coverItemId, coverImageRevision, ...catalog}) => ({
+  ).bind(new Date().toISOString()).all<{slug: string; title: string; description: string; publishedAt: string; uploadedCoverId: string | null; coverItemId: string | null; coverImageRevision: string | null}>();
+  return results.map(({uploadedCoverId, coverItemId, coverImageRevision, ...catalog}) => ({
     ...catalog,
-    coverImageUrl: coverItemId ? `/media/catalogs/${encodeURIComponent(catalog.slug)}/item/${encodeURIComponent(coverItemId)}?v=${encodeURIComponent(coverImageRevision ?? coverItemId)}` : null,
+    coverImageUrl: uploadedCoverId
+      ? `/media/catalogs/${encodeURIComponent(catalog.slug)}/cover?v=${encodeURIComponent(uploadedCoverId)}`
+      : coverItemId ? `/media/catalogs/${encodeURIComponent(catalog.slug)}/item/${encodeURIComponent(coverItemId)}?v=${encodeURIComponent(coverImageRevision ?? coverItemId)}` : null,
   }));
 }
 async function webCatalogResponse(c: PublicContext, catalog: CatalogRow) {
@@ -652,7 +657,9 @@ app.get('/s/:slug', async (c) => {
         companyInfo?.company_name_th ||
         'Corevity';
   const content = `<section class="editorial-intro"><h1>${htmlEscape(catalog.title)}</h1>${catalog.description ? `<p>${htmlEscape(catalog.description)}</p>` : ''}</section>${items.length ? `${privateCatalogEbookToolbar(language)}${privateCatalogEbookPaperStart(catalog.title, catalog.description, language)}<section class="editorial-products" aria-label="${attr(text(language, 'Equipment', 'รายการสินค้า'))}">${rows}</section>${privateCatalogEbookPaperEnd(language)}` : `<div class="empty">${htmlEscape(text(language, 'No published products are currently available in this collection.', 'ไม่มีสินค้าที่เผยแพร่ในแคตตาล็อกนี้ในขณะนี้'))}</div>`}<section class="editorial-contact"><p>${htmlEscape(text(language, 'Message Corevity for actual-unit photos and delivery details', 'ติดต่อ Corevity เพื่อขอภาพสินค้าจริงและรายละเอียดการจัดส่ง'))}</p><small>${htmlEscape(text(language, 'Confirm unit condition, availability and configuration with our team.', 'กรุณายืนยันสภาพสินค้า สถานะ และอุปกรณ์ที่มาพร้อมเครื่องกับทีมงาน'))}</small><small>${htmlEscape(text(language, 'All prices are THB per unit.', 'ราคาทั้งหมดเป็นสกุลเงินบาทต่อเครื่อง'))}</small>${contactLinks(companyInfo, 'catalog', slug, language)}</section>`;
-  const featured = items[0]?.image_key_snapshot
+  const featured = catalog.cover_image_key
+    ? `${base}/media/catalogs/${encodeURIComponent(slug)}/cover?v=${encodeURIComponent(catalog.cover_image_key.slice(15))}`
+    : items[0]?.image_key_snapshot
     ? `${base}/media/catalogs/${encodeURIComponent(slug)}/item/${encodeURIComponent(items[0].id)}`
     : undefined;
   return pageHtml({
@@ -818,6 +825,19 @@ async function serveCatalogImage(c: PublicContext, item: CatalogImage | null, po
     },
   });
 }
+// Registered before '/:position' so "cover" is not read as a position.
+app.get('/media/catalogs/:slug/cover', async (c) => {
+  const catalog = await getCatalog(c.env.DB, c.req.param('slug'));
+  const stored = catalog?.cover_image_key ? await c.env.PRODUCT_IMAGES.get(catalog.cover_image_key) : null;
+  if (!catalog || !stored) return c.notFound();
+  return new Response(stored.body, {
+    headers: {
+      'Content-Type': catalog.cover_image_mime || stored.httpMetadata?.contentType || 'image/jpeg',
+      'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+});
 app.get('/media/catalogs/:slug/:position', async (c) => {
   const catalog = await getCatalog(c.env.DB, c.req.param('slug'));
   if (!catalog) return c.notFound();
