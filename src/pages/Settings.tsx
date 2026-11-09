@@ -19,6 +19,7 @@ import type { Settings } from '../../shared/schemas';
 import { api, useData } from '../lib';
 import { ErrorBox, Field, Header, Loading } from '../components/ui';
 import { MetaIntegrationSettings } from '../components/MetaIntegrationSettings';
+import { GmailIntegrationSettings } from '../components/GmailIntegrationSettings';
 export function SettingsPage() {
   const { data, error: loadError, reload } = useData<Settings>('/settings');
   const [conditions, setConditions] = useState('');
@@ -170,6 +171,7 @@ export function SettingsPage() {
           aria-labelledby="settings-tab-integrations"
           className="settings-panel"
         >
+          <GmailIntegrationSettings />
           <MetaIntegrationSettings />
         </section>
       )}

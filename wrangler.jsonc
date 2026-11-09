@@ -27,6 +27,7 @@
     "MAX_UPLOAD_MB": "10",
     "BUSINESS_TIMEZONE": "Asia/Bangkok",
     "PUBLIC_CATALOG_BASE_URL": "",
+    "GMAIL_MAILBOX": "",
     "AUTH_ADMIN_EMAIL": "",
   },
   "d1_databases": [
@@ -63,6 +64,7 @@
         "MAX_UPLOAD_MB": "10",
         "BUSINESS_TIMEZONE": "Asia/Bangkok",
         "PUBLIC_CATALOG_BASE_URL": "https://catalog.corevityusedgym.com",
+        "GMAIL_MAILBOX": "info@corevityusedgym.com",
         "META_INTEGRATION_ENABLED": "true",
         "META_DEMO_MODE": "false",
         "META_MESSENGER_ENABLED": "true",

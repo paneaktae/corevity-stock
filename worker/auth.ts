@@ -11,6 +11,9 @@ export type Bindings = Env & MetaEnvironment & {
   PUBLIC_CATALOG_BASE_URL?: string;
   AUTH_ADMIN_EMAIL?: string;
   CATALOG_CHAT_INTERNAL_SECRET?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GMAIL_MAILBOX?: string;
 };
 export type AppEnv = {
   Bindings: Bindings;

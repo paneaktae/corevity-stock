@@ -34,3 +34,9 @@ META_PAGE_INSIGHT_METRICS=
 META_PAGE_SCHEDULING_SUPPORTED=false
 # Meta message/note retention; 30–365 days. Existing CRM records are preserved.
 META_DATA_RETENTION_DAYS=90
+
+# Gmail inbox (read-only). Google OAuth client from Google Cloud Console (Internal app).
+# GOOGLE_CLIENT_SECRET is a Worker secret in production. Tokens use META_TOKEN_ENCRYPTION_KEY.
+GMAIL_MAILBOX=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

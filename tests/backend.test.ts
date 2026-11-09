@@ -729,6 +729,33 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/catalogs/${catalog.id}`,'DELETE')).status).toBe(200);
     expect(await bucket.get(lastKey)).toBeNull();
   });
+  it('serves the email inbox to members and lets them reclassify messages', async () => {
+    const status = await json<{ configured: boolean; connected: boolean; isAdmin: boolean; missing: string[] }>(await request('/email/status'));
+    expect(status).toMatchObject({ configured: false, connected: false, isAdmin: true });
+    expect(status.missing).toContain('GOOGLE_CLIENT_ID');
+    const connect = await mf.dispatchFetch('http://localhost/api/integrations/gmail/connect', { redirect: 'manual' });
+    expect(connect.status).toBe(303);
+    expect(connect.headers.get('Location')).toBe('/settings?tab=integrations&gmail=not-configured');
+    const database = await mf.getD1Database('DB');
+    await database.prepare(
+      `INSERT INTO email_messages(id,thread_id,from_name,from_email,subject,snippet,body_text,received_at,classification,reason,created_at) VALUES
+       ('e1','t1','Buyer','buyer@example.org','Need treadmills','Price for 4 units','Price for 4 units please','2026-11-10T02:00:00Z','CUSTOMER','Personal','2026-11-10T02:00:00Z'),
+       ('e2','t2','','news@shop.example','Weekly deals','Sale','Sale','2026-11-10T01:00:00Z','NOT_CUSTOMER','Mailing list','2026-11-10T01:00:00Z')`,
+    ).run();
+    const customers = await json<{ messages: { id: string }[]; total: number; customers: number }>(await request('/email/messages'));
+    expect(customers.messages.map((m) => m.id)).toEqual(['e1']);
+    expect(customers).toMatchObject({ total: 2, customers: 1 });
+    const all = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=all&q=weekly'));
+    expect(all.messages.map((m) => m.id)).toEqual(['e2']);
+    const wildcard = await json<{ messages: unknown[] }>(await request('/email/messages?view=all&q=%25'));
+    expect(wildcard.messages).toHaveLength(0);
+    expect((await json<{ bodyText: string }>(await request('/email/messages/e1'))).bodyText).toBe('Price for 4 units please');
+    expect((await request('/email/messages/e2', 'PATCH', { classification: 'CUSTOMER' })).status).toBe(200);
+    expect((await json<{ customers: number }>(await request('/email/messages'))).customers).toBe(2);
+    expect((await request('/email/messages/missing')).status).toBe(404);
+    expect((await request('/email/settings', 'PATCH', { aiClassify: true })).status).toBe(409);
+    await database.prepare('DELETE FROM email_messages').run();
+  });
   it('allows website chat preflight only from the approved origin', async () => {
     const database = await mf.getD1Database('DB');
     const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');

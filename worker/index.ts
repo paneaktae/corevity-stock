@@ -34,6 +34,8 @@ import { quotationRoutes, quotationSettingsRoutes } from './quotations';
 import { catalogsRoutes, notifyCatalogChat } from './catalogs';
 import { financeRoutes } from './finance';
 import { newsRoutes } from './news';
+import { gmailOAuthRoutes, gmailRoutes } from './gmail';
+import { maintainGmail } from './services/gmail';
 import { eventsRoutes, processCalendarReminders } from './calendar';
 import {
   workspaceSalesEmails,
@@ -350,6 +352,8 @@ app.route('/api/line', lineRoutes);
 app.post('/internal/catalog-chat-notify', (c) => notifyCatalogChat(c.env, c.req.raw));
 app.route('/api/auth', passwordAuthRoutes);
 app.route('/api/integrations/meta', metaRoutes);
+app.route('/api/integrations/gmail', gmailOAuthRoutes);
+app.route('/api/email', gmailRoutes);
 app.route('/api/meta', metaDomainRoutes);
 app.route('/api/chat', chatRoutes);
 app.route('/api/salespeople', salespeopleRoutes);
@@ -1471,6 +1475,7 @@ export default {
       processCalendarReminders(env),
       exchangeRate(env.DB, fetch, new Date(), env.BOT_API_KEY),
       maintainMeta(env),
+      maintainGmail(env),
     ]);
   },
 };

@@ -1,6 +1,6 @@
 import { t } from '../i18n';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Search,
   ArrowUpRight,
@@ -106,7 +106,17 @@ export function CustomerForm() {
     id ? `/customers/${id}` : null,
   );
   const { data: settings } = useData<Settings>('/settings');
-  const [form, setForm] = useState<CustomerFormValues>(blank);
+  const [prefill] = useSearchParams();
+  // "Add as customer" from the email inbox passes the sender's name and address.
+  const [form, setForm] = useState<CustomerFormValues>(() =>
+    id
+      ? blank
+      : {
+          ...blank,
+          name: (prefill.get('name') ?? '').slice(0, 200),
+          email: (prefill.get('email') ?? '').slice(0, 200),
+        },
+  );
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);

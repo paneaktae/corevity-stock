@@ -12,6 +12,7 @@ import {
   Settings,
   MessageCircle,
   MessagesSquare,
+  Mail,
   Sparkles,
   ChevronRight,
   Moon,
@@ -35,6 +36,7 @@ import { CustomersPage, CustomerPage, CustomerForm } from './pages/Customers';
 import { SalesPage, LeadPage, LeadForm, FollowupsPage } from './pages/Sales';
 import { ChatPage } from './pages/Chat';
 import { CatalogChatsPage } from './pages/CatalogChats';
+import { InboxPage } from './pages/Inbox';
 import { InventoryAssistantPage } from './pages/InventoryAssistant';
 import { EquipmentGuidePage } from './pages/EquipmentGuide';
 import { ChatBadge } from './components/ChatBadge';
@@ -53,7 +55,7 @@ const navigationGroups = [
   { label: 'Overview', items: [['/', 'Dashboard', LayoutDashboard]] },
   { label: 'Products & inventory', items: [['/inventory', 'Inventory', Dumbbell], ['/catalogs', 'Catalogs', Share2], ['/equipment-guide', 'Equipment guide', BookOpenText]] },
   { label: 'Customers & sales', items: [['/customers', 'Customers', Users], ['/sales', 'Sales', Kanban], ['/quotations', 'Quotations', FileText], ['/followups', 'Follow-ups', CalendarClock], ['/calendar', 'Calendar & reminders', CalendarDays]] },
-  { label: 'Tools', items: [['/chat', 'Team chat', MessageCircle], ['/catalog-chats', 'Customer chat', MessagesSquare], ['/ai-search', 'AI product search', Sparkles], ['/news', 'News', Newspaper]] },
+  { label: 'Tools', items: [['/chat', 'Team chat', MessageCircle], ['/catalog-chats', 'Customer chat', MessagesSquare], ['/inbox', 'Email inbox', Mail], ['/ai-search', 'AI product search', Sparkles], ['/news', 'News', Newspaper]] },
   { label: 'Meta / Facebook', items: [['/meta/inbox', 'Messenger Inbox', MessagesSquare], ['/meta/leads', 'Meta Leads', Users], ['/meta/ads', 'Ads Dashboard', LayoutDashboard], ['/meta/campaigns', 'Campaigns', FileText], ['/meta/insights', 'Page Insights', Globe2], ['/meta/content', 'Page Content', FileText], ['/meta/webhooks', 'Meta Webhooks', CalendarClock]] },
   { label: 'Finance', items: [['/finance', 'Finance', Wallet], ['/expenses', 'Expenses', ReceiptText]] },
   { label: 'Preferences', items: [['/settings', 'Settings', Settings]] },
@@ -281,6 +283,7 @@ function AppLayout() {
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/chat" element={<ChatPage />} />
               <Route path="/catalog-chats" element={<CatalogChatsPage />} />
+              <Route path="/inbox" element={<InboxPage />} />
               <Route path="/ai-search" element={<InventoryAssistantPage />} />
               <Route path="/news" element={<NewsPage />} />
               <Route path="/finance" element={<FinanceOverviewPage />} />
