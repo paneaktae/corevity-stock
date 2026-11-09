@@ -192,7 +192,7 @@ catalogsRoutes.get('/catalogs', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT c.id,c.title,c.description,c.slug,c.status,c.customer_id AS customerId,
       0 AS showPrices,c.show_sold AS showSold,c.expires_at AS expiresAt,
-      c.publish_to_web AS publishToWeb,c.published_to_web_at AS publishedToWebAt,
+      c.publish_to_web AS publishToWeb,c.published_to_web_at AS publishedToWebAt,c.web_sort_order AS webSortOrder,
       c.created_by AS createdBy,c.assigned_salesperson_email AS assignedSalespersonEmail,
       COALESCE(NULLIF(trim(s.first_name || ' ' || s.last_name),''),c.assigned_salesperson_email) AS assignedSalespersonName,
       CASE WHEN la.email IS NULL THEN 0 ELSE 1 END AS assignedSalespersonLineReady,c.created_at AS createdAt,c.updated_at AS updatedAt,
@@ -472,7 +472,7 @@ catalogsRoutes.post('/catalogs/:id/duplicate', async (c) => {
 
 catalogsRoutes.post('/catalogs/:id/archive', async (c) => {
   const result = await c.env.DB.prepare(
-    `UPDATE catalogs SET status='ARCHIVED',publish_to_web=0,published_to_web_at=NULL,updated_at=? WHERE id=? AND status='ACTIVE'`,
+    `UPDATE catalogs SET status='ARCHIVED',publish_to_web=0,published_to_web_at=NULL,web_sort_order=NULL,updated_at=? WHERE id=? AND status='ACTIVE'`,
   )
     .bind(stamp(), c.req.param('id'))
     .run();
@@ -498,7 +498,12 @@ catalogsRoutes.post('/catalogs/:id/publish-to-web', async (c) => {
     return c.json({error: {message: 'Only an active, unexpired catalog can be published.'}}, 409);
   if (!catalog.publish_to_web) {
     const now = stamp();
-    await c.env.DB.prepare('UPDATE catalogs SET publish_to_web=1,published_to_web_at=?,updated_at=? WHERE id=?').bind(now,now,id).run();
+    // A newly published Catalog goes to the top of the website order.
+    await c.env.DB.prepare(
+      `UPDATE catalogs SET publish_to_web=1,published_to_web_at=?,updated_at=?,
+        web_sort_order=COALESCE((SELECT MIN(web_sort_order) FROM catalogs WHERE publish_to_web=1),0)-1
+       WHERE id=?`,
+    ).bind(now,now,id).run();
     await writeActivity(c,'catalog',id,'published_to_web','Catalog published to website');
   }
   return c.json({ok: true});
@@ -506,10 +511,46 @@ catalogsRoutes.post('/catalogs/:id/publish-to-web', async (c) => {
 
 catalogsRoutes.post('/catalogs/:id/unpublish-from-web', async (c) => {
   const id = c.req.param('id');
-  const result = await c.env.DB.prepare('UPDATE catalogs SET publish_to_web=0,published_to_web_at=NULL,updated_at=? WHERE id=? AND publish_to_web=1').bind(stamp(),id).run();
+  const result = await c.env.DB.prepare('UPDATE catalogs SET publish_to_web=0,published_to_web_at=NULL,web_sort_order=NULL,updated_at=? WHERE id=? AND publish_to_web=1').bind(stamp(),id).run();
   if (!result.meta.changes) return c.json({error: {message: 'Published catalog not found.'}}, 404);
   await writeActivity(c,'catalog',id,'unpublished_from_web','Catalog removed from website');
   return c.json({ok: true});
+});
+
+const webOrderInput = z
+  .object({ ids: z.array(z.string().min(1)).min(1).max(200) })
+  .strict();
+catalogsRoutes.put('/catalogs/web-order', async (c) => {
+  const { ids } = webOrderInput.parse(await c.req.json());
+  const { results } = await c.env.DB.prepare(
+    "SELECT id FROM catalogs WHERE publish_to_web=1 AND status='ACTIVE'",
+  ).all<{ id: string }>();
+  const published = new Set(results.map((row) => row.id));
+  if (new Set(ids).size !== ids.length || ids.length !== published.size || ids.some((id) => !published.has(id)))
+    return c.json({ error: { message: 'The website Catalog list changed. Reload and try again.' } }, 409);
+  await c.env.DB.batch(
+    ids.map((id, index) =>
+      c.env.DB.prepare('UPDATE catalogs SET web_sort_order=? WHERE id=? AND publish_to_web=1').bind(index, id),
+    ),
+  );
+  await writeActivity(c, 'catalog', ids[0], 'web_reordered', 'Website Catalog order updated');
+  return c.json({ ok: true });
+});
+
+catalogsRoutes.delete('/catalogs/:id', async (c) => {
+  const id = c.req.param('id');
+  const catalog = await c.env.DB.prepare('SELECT title,slug FROM catalogs WHERE id=?')
+    .bind(id)
+    .first<{ title: string; slug: string }>();
+  if (!catalog) return c.json({ error: { message: 'Catalog not found.' } }, 404);
+  // Catalog chats keep their own title/slug snapshot, so conversation history is retained.
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM catalog_items WHERE catalog_id=?').bind(id),
+    c.env.DB.prepare("DELETE FROM catalog_events WHERE entity_type='CATALOG' AND entity_slug=?").bind(catalog.slug),
+    c.env.DB.prepare('DELETE FROM catalogs WHERE id=?').bind(id),
+  ]);
+  await writeActivity(c, 'catalog', id, 'deleted', `Shareable catalog deleted: ${catalog.title}`);
+  return c.json({ ok: true });
 });
 
 catalogsRoutes.post('/products/publish-all', async (c) => {

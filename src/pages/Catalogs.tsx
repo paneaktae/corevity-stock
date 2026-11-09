@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Plus,
   Share2,
+  Trash2,
   X,
 } from 'lucide-react';
 import type { Customer, Product, Salesperson } from '../../shared/schemas';
@@ -23,6 +24,7 @@ type CatalogRow = {
   status: 'ACTIVE' | 'ARCHIVED';
   publishToWeb: number | boolean;
   publishedToWebAt: string | null;
+  webSortOrder: number | null;
   customerId: string | null;
   customerName: string | null;
   assignedSalespersonEmail: string;
@@ -219,6 +221,49 @@ export function CatalogsPage() {
       setBusy(false);
     }
   }
+  async function deleteCatalog(catalog: CatalogRow) {
+    if (
+      !window.confirm(
+        `${t('Delete this catalog permanently?')}\n\n${catalog.title}\n\n${t('Its share link and website page will stop working. This cannot be undone.')}`,
+      )
+    )
+      return;
+    setBusy(true);
+    setErrorMessage('');
+    setNotice('');
+    try {
+      await api(`/catalogs/${catalog.id}`, { method: 'DELETE' });
+      if (editorId === catalog.id) resetEditor();
+      reload();
+      setNotice(t('Catalog deleted.'));
+    } catch (e) {
+      setErrorMessage((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function moveWebCatalog(index: number, offset: number) {
+    const target = index + offset;
+    if (target < 0 || target >= webCatalogs.length) return;
+    const ids = webCatalogs.map((catalog) => catalog.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    setBusy(true);
+    setErrorMessage('');
+    setNotice('');
+    try {
+      await api('/catalogs/web-order', {
+        method: 'PUT',
+        body: JSON.stringify({ ids }),
+      });
+      reload();
+      setNotice(t('Website catalog order saved.'));
+    } catch (e) {
+      setErrorMessage((e as Error).message);
+      reload();
+    } finally {
+      setBusy(false);
+    }
+  }
   async function toggleWebPublish(catalog: CatalogRow) {
     setBusy(true);
     setErrorMessage('');
@@ -259,6 +304,14 @@ export function CatalogsPage() {
         .toLocaleLowerCase()
         .includes(query.trim().normalize('NFKC').toLocaleLowerCase()),
   );
+  const webCatalogs = (data?.catalogs ?? [])
+    .filter((catalog) => catalog.status === 'ACTIVE' && Boolean(catalog.publishToWeb))
+    .sort(
+      (a, b) =>
+        (a.webSortOrder ?? Number.MAX_SAFE_INTEGER) - (b.webSortOrder ?? Number.MAX_SAFE_INTEGER) ||
+        (b.publishedToWebAt ?? '').localeCompare(a.publishedToWebAt ?? '') ||
+        a.slug.localeCompare(b.slug),
+    );
   const catalogProducts = new Map(
     (products ?? []).map((product) => [product.id, product]),
   );
@@ -494,6 +547,51 @@ export function CatalogsPage() {
           </form>
         </section>
       )}
+      {webCatalogs.length > 0 && (
+        <section className="panel catalog-web-order">
+          <div className="section-heading">
+            <h2>{t('Website catalog order')}</h2>
+          </div>
+          <p className="muted">
+            {t('Catalogs appear on the website in this order. The first one is featured on the homepage.')}
+          </p>
+          <div className="catalog-order-list">
+            {webCatalogs.map((catalog, index) => (
+              <div className="catalog-order-item catalog-web-order-item" key={catalog.id}>
+                <div className="catalog-order-actions">
+                  <button
+                    type="button"
+                    aria-label={t('Move catalog up')}
+                    disabled={busy || index === 0}
+                    onClick={() => void moveWebCatalog(index, -1)}
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t('Move catalog down')}
+                    disabled={busy || index === webCatalogs.length - 1}
+                    onClick={() => void moveWebCatalog(index, 1)}
+                  >
+                    <ArrowDown size={15} />
+                  </button>
+                </div>
+                <span>
+                  <strong>
+                    {index + 1}. {catalog.title}
+                  </strong>
+                  <small>
+                    {catalog.productCount} {t('Products')}
+                    {catalog.expiresAt && Date.parse(catalog.expiresAt) <= Date.now()
+                      ? ` · ${t('Website publication expired')}`
+                      : ''}
+                  </small>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       {data?.catalogs.map((catalog) => (
         <article className="panel catalog-row" key={catalog.id}>
           <div className="catalog-row-main">
@@ -582,9 +680,29 @@ export function CatalogsPage() {
                 <Archive size={14} />
                 {t('Archive')}
               </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={busy}
+                onClick={() => void deleteCatalog(catalog)}
+              >
+                <Trash2 size={14} />
+                {t('Delete')}
+              </button>
             </div>
           ) : (
-            <span className="badge">{t('Archived')}</span>
+            <div className="catalog-row-actions">
+              <span className="badge">{t('Archived')}</span>
+              <button
+                type="button"
+                className="danger"
+                disabled={busy}
+                onClick={() => void deleteCatalog(catalog)}
+              >
+                <Trash2 size={14} />
+                {t('Delete')}
+              </button>
+            </div>
           )}
         </article>
       ))}

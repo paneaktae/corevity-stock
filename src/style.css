@@ -4087,3 +4087,4 @@ html[data-theme='dark'] .ads-table tr.selected td { background: #1a3455; }
 .ads-breakdown-insight p { margin: 3px 0; }
 .ads-table td:first-child { min-width: 190px; }
 .ads-table td > small { display: block; color: var(--muted-text); font-size: 10px; overflow-wrap: anywhere; }
+.catalog-web-order .catalog-order-item { grid-template-columns: auto minmax(0, 1fr); }

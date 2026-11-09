@@ -296,6 +296,7 @@ export const catalogs = sqliteTable('catalogs', {
   showSold: integer('show_sold', { mode: 'boolean' }).notNull().default(false),
   publishToWeb: integer('publish_to_web', { mode: 'boolean' }).notNull().default(false),
   publishedToWebAt: text('published_to_web_at'),
+  webSortOrder: integer('web_sort_order'),
   expiresAt: text('expires_at'),
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),

@@ -648,6 +648,41 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/catalogs/${expired.id}/publish-to-web`,'POST')).status).toBe(409);
   });
 
+  it('orders website Catalogs manually and deletes Catalogs permanently', async () => {
+    const item = await product('Website ordering');
+    expect((await request(`/products/${item.id}/publish`, 'POST', {showPrice: false})).status).toBe(200);
+    const createCatalog = async (title: string) => json<{id: string; slug: string}>(await request('/catalogs','POST',{
+      title, assignedSalespersonEmail: 'tester@example.test', items: [{productId: item.id}],
+    }));
+    const database = await mf.getD1Database('DB');
+    await database.prepare('UPDATE catalogs SET publish_to_web=0,web_sort_order=NULL').run();
+    const a = await createCatalog('Order A');
+    const b = await createCatalog('Order B');
+    const c = await createCatalog('Order C');
+    for (const catalog of [a, b, c]) expect((await request(`/catalogs/${catalog.id}/publish-to-web`,'POST')).status).toBe(200);
+    const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
+    const ctx = {waitUntil: (promise: Promise<unknown>) => void promise} as ExecutionContext;
+    const fetchPublic = (path: string) => publicCatalogWorker.fetch(
+      new Request(`http://catalog.test${path}`), {DB: database, PRODUCT_IMAGES: bucket}, ctx,
+    );
+    const order = async () => ((await (await fetchPublic('/api/public/storefront/catalogs')).json()) as {catalogs: Array<{slug: string}>}).catalogs.map((value) => value.slug);
+    expect(await order()).toEqual([c.slug, b.slug, a.slug]);
+    expect((await request('/catalogs/web-order','PUT',{ids: [a.id, c.id]})).status).toBe(409);
+    expect((await request('/catalogs/web-order','PUT',{ids: [a.id, c.id, b.id]})).status).toBe(200);
+    expect(await order()).toEqual([a.slug, c.slug, b.slug]);
+    expect(((await (await fetchPublic('/api/public/storefront')).json()) as {slug: string}).slug).toBe(a.slug);
+    const listed = await json<{catalogs: Array<{id: string; webSortOrder: number | null}>}>(await request('/catalogs'));
+    expect(listed.catalogs.find((value) => value.id === c.id)?.webSortOrder).toBe(1);
+    expect((await request(`/catalogs/${c.id}`,'DELETE')).status).toBe(200);
+    expect((await request(`/catalogs/${c.id}`)).status).toBe(404);
+    expect((await request(`/catalogs/${c.id}`,'DELETE')).status).toBe(404);
+    expect(await order()).toEqual([a.slug, b.slug]);
+    expect((await fetchPublic(`/s/${c.slug}`)).status).toBe(404);
+    expect(await database.prepare('SELECT COUNT(*) AS n FROM catalog_items WHERE catalog_id=?').bind(c.id).first('n')).toBe(0);
+    expect((await request(`/catalogs/${b.id}/archive`,'POST')).status).toBe(200);
+    expect((await request(`/catalogs/${b.id}`,'DELETE')).status).toBe(200);
+    expect(await order()).toEqual([a.slug]);
+  });
   it('allows website chat preflight only from the approved origin', async () => {
     const database = await mf.getD1Database('DB');
     const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');

@@ -312,7 +312,7 @@ async function webCatalogs(database: D1Database) {
      LEFT JOIN product_images cover_image ON cover_image.id=(SELECT id FROM product_images WHERE product_id=cover.product_id ORDER BY is_primary DESC,sort_order LIMIT 1)
      WHERE c.publish_to_web=1 AND c.status='ACTIVE'
        AND (c.expires_at IS NULL OR c.expires_at>?)
-     ORDER BY c.published_to_web_at DESC,c.slug ASC`,
+     ORDER BY c.web_sort_order IS NULL,c.web_sort_order ASC,c.published_to_web_at DESC,c.slug ASC`,
   ).bind(new Date().toISOString()).all<{slug: string; title: string; description: string; publishedAt: string; coverItemId: string | null; coverImageRevision: string | null}>();
   return results.map(({coverItemId, coverImageRevision, ...catalog}) => ({
     ...catalog,
