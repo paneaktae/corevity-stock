@@ -21,6 +21,8 @@ const HTML_LIMIT = 400_000;
 // Backfill: the last 90 days (matches retention), one page per sync run, without LINE alerts.
 const BACKFILL_QUERY = `newer_than:${90}d -in:sent -in:drafts -in:trash -in:chats`;
 const BACKFILL_PAGE = 25;
+const SENT_SWEEP_QUERY = 'in:sent newer_than:2d';
+const SENT_BACKFILL_QUERY = 'in:sent newer_than:90d';
 // Outbound calls per sync run (token, Gmail API, AI). Workers cap subrequests per invocation and
 // the cron shares that budget with LINE and other jobs, so stay well below it and resume next run.
 const MAX_CALLS_PER_SYNC = 35;
@@ -366,6 +368,27 @@ export function openAiClassifier(env: Bindings, http: Http = fetch): AiClassifie
   };
 }
 
+// --- Replies ---
+const threadKnown = async (env: Bindings, threadId: string) =>
+  Boolean(await env.DB.prepare('SELECT 1 FROM email_messages WHERE thread_id=? LIMIT 1').bind(threadId).first());
+export async function markReplied(env: Bindings, threadId: string, sentAt: string) {
+  await env.DB.prepare(
+    'UPDATE email_messages SET replied_at=? WHERE thread_id=? AND received_at<? AND (replied_at IS NULL OR replied_at<?)',
+  )
+    .bind(sentAt, threadId, sentAt, sentAt)
+    .run();
+}
+async function recordReply(env: Bindings, token: string, id: string, http: Http) {
+  try {
+    const message = await gmailGet<GmailMessage>(token, `messages/${encodeURIComponent(id)}?format=minimal`, http);
+    const internal = Number(message.internalDate);
+    if (!message.threadId || !Number.isFinite(internal) || !(message.labelIds ?? []).includes('SENT')) return;
+    await markReplied(env, message.threadId, new Date(internal).toISOString());
+  } catch (error) {
+    if (!(error instanceof Error && error.message === 'GMAIL_NOT_FOUND')) throw error;
+  }
+}
+
 // --- Sync ---
 type Connection = {
   email: string;
@@ -378,9 +401,11 @@ type Connection = {
   last_sweep_at: string | null;
   backfill_page_token: string | null;
   backfill_done: number;
+  sent_backfill_token: string | null;
+  sent_backfill_done: number;
 };
 type HistoryPage = {
-  history?: { messagesAdded?: { message: { id: string; labelIds?: string[] } }[] }[];
+  history?: { messagesAdded?: { message: { id: string; threadId?: string; labelIds?: string[] } }[] }[];
   historyId?: string;
   nextPageToken?: string;
 };
@@ -492,6 +517,7 @@ export async function syncGmail(
     const classifier =
       options.classifier !== undefined ? options.classifier : connection.ai_classify ? openAiClassifier(env, http) : null;
     let ids: string[] = [];
+    let sentFromHistory: { id: string; threadId?: string }[] = [];
     let historyId = connection.history_id;
     let notify = true;
     if (historyId) {
@@ -499,6 +525,7 @@ export async function syncGmail(
       try {
         let pageToken = '';
         const found: string[] = [];
+        const sent: { id: string; threadId?: string }[] = [];
         for (let page = 0; page < 3; page++) {
           const history: HistoryPage = await gmailGet<HistoryPage>(
             token,
@@ -508,13 +535,15 @@ export async function syncGmail(
           for (const entry of history.history ?? [])
             for (const added of entry.messagesAdded ?? []) {
               const labels = added.message.labelIds;
-              if (!labels || labels.includes('INBOX') || labels.includes('SPAM')) found.push(added.message.id);
+              if (labels?.includes('SENT') && !labels.includes('INBOX')) sent.push(added.message);
+              else if (!labels || labels.includes('INBOX') || labels.includes('SPAM')) found.push(added.message.id);
             }
           if (history.historyId) historyId = history.historyId;
           if (!history.nextPageToken) break;
           pageToken = history.nextPageToken;
         }
         ids = [...new Set(found)];
+        sentFromHistory = sent;
       } catch (error) {
         if (!(error instanceof Error && error.message === 'GMAIL_NOT_FOUND')) throw error;
         historyId = null; // History expired: fall back to a recent listing (dedupe protects from repeats).
@@ -530,6 +559,14 @@ export async function syncGmail(
           http,
         )
       ).messages?.map((message) => message.id) ?? [];
+    const listWithThreads = async (query: string, pageToken?: string | null) => {
+      const page = await gmailGet<{ messages?: { id: string; threadId: string }[]; nextPageToken?: string }>(
+        token,
+        `messages?maxResults=${BACKFILL_PAGE}&q=${encodeURIComponent(query)}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`,
+        http,
+      );
+      return { messages: page.messages ?? [], nextPageToken: page.nextPageToken };
+    };
     let swept = false;
     if (!historyId) {
       const profile = await gmailGet<{ historyId?: string }>(token, 'profile', http);
@@ -572,10 +609,38 @@ export async function syncGmail(
         backfillDone = backfillToken ? 0 : 1;
       }
     }
+    // Replies sent from the mailbox: mark the matching thread as replied. Sent mail in threads
+    // the CRM doesn't hold is skipped without a fetch.
+    const sentQueue = [...sentFromHistory];
+    if (swept && budgetLeft() > 6) sentQueue.push(...(await listWithThreads(SENT_SWEEP_QUERY)).messages);
+    let sentToken = connection.sent_backfill_token;
+    let sentDone = connection.sent_backfill_done;
+    let sentPageComplete = true;
+    let sentPageNext: string | null = null;
+    if (!sentDone && budgetLeft() > 6) {
+      const page = await listWithThreads(SENT_BACKFILL_QUERY, sentToken);
+      sentQueue.push(...page.messages);
+      sentPageNext = page.nextPageToken ?? null;
+    } else sentPageComplete = false;
+    const seen = new Set<string>();
+    for (const message of sentQueue) {
+      if (seen.has(message.id)) continue;
+      seen.add(message.id);
+      if (message.threadId && !(await threadKnown(env, message.threadId))) continue;
+      if (budgetLeft() < 2) {
+        sentPageComplete = false;
+        break;
+      }
+      await recordReply(env, token, message.id, http);
+    }
+    if (!sentDone && sentPageComplete) {
+      sentToken = sentPageNext;
+      sentDone = sentToken ? 0 : 1;
+    }
     await env.DB.prepare(
-      "UPDATE gmail_connection SET history_id=?,last_sync_at=?,last_sweep_at=CASE WHEN ?=1 THEN ? ELSE last_sweep_at END,backfill_page_token=?,backfill_done=?,last_error=NULL,health_alerted_at=NULL,sync_lease_until=NULL,updated_at=? WHERE id='workspace'",
+      "UPDATE gmail_connection SET history_id=?,last_sync_at=?,last_sweep_at=CASE WHEN ?=1 THEN ? ELSE last_sweep_at END,backfill_page_token=?,backfill_done=?,sent_backfill_token=?,sent_backfill_done=?,last_error=NULL,health_alerted_at=NULL,sync_lease_until=NULL,updated_at=? WHERE id='workspace'",
     )
-      .bind(historyId, now, Number(swept), now, backfillToken, backfillDone, now)
+      .bind(historyId, now, Number(swept), now, backfillToken, backfillDone, sentToken, sentDone, now)
       .run();
     return { status: 'ok', imported, customers, backfillDone: Boolean(backfillDone) };
   } catch (error) {
@@ -613,6 +678,65 @@ export async function reclassifyStoredEmails(env: Bindings) {
     }),
   );
   return results.length;
+}
+
+// The whole Gmail conversation for one thread, including replies sent from the mailbox.
+export type ThreadMessage = {
+  id: string;
+  fromName: string;
+  fromEmail: string;
+  to: string;
+  subject: string;
+  receivedAt: string;
+  sent: boolean;
+  inSpam: boolean;
+  bodyText: string;
+  bodyHtml: string;
+};
+async function mailboxAccessToken(env: Bindings, http: Http) {
+  if (!gmailConfig(env).ready) return null;
+  const connection = await env.DB.prepare(
+    "SELECT email,token_ciphertext,token_nonce,token_key_version FROM gmail_connection WHERE id='workspace' AND status='CONNECTED'",
+  ).first<{ email: string; token_ciphertext: string; token_nonce: string; token_key_version: string }>();
+  if (!connection) return null;
+  const refresh = await decryptRefreshToken(env, connection.email, {
+    ciphertext: connection.token_ciphertext,
+    nonce: connection.token_nonce,
+    keyVersion: connection.token_key_version,
+  });
+  return { token: await accessToken(env, refresh, http), mailbox: connection.email };
+}
+export async function loadThread(env: Bindings, threadId: string, http: Http = fetch): Promise<ThreadMessage[] | null> {
+  try {
+    const access = await mailboxAccessToken(env, http);
+    if (!access) return null;
+    const thread = await gmailGet<{ messages?: GmailMessage[] }>(access.token, `threads/${encodeURIComponent(threadId)}?format=full`, http);
+    const messages = (thread.messages ?? [])
+      .filter((message) => !(message.labelIds ?? []).some((label) => label === 'DRAFT' || label === 'TRASH'))
+      .slice(-50)
+      .map((raw) => {
+        const message = parseMessage(raw);
+        const sent = message.labels.includes('SENT') || message.fromEmail === access.mailbox;
+        return {
+          id: message.id,
+          fromName: message.fromName,
+          fromEmail: message.fromEmail,
+          to: message.to,
+          subject: message.subject,
+          receivedAt: message.receivedAt,
+          sent,
+          inSpam: message.labels.includes('SPAM'),
+          bodyText: message.body,
+          bodyHtml: message.html,
+        };
+      })
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+    const lastSent = messages.filter((message) => message.sent).at(-1);
+    if (lastSent) await markReplied(env, threadId, lastSent.receivedAt);
+    return messages;
+  } catch {
+    return null;
+  }
 }
 
 // Older rows were stored as text only: fetch the HTML part once, when the email is opened.

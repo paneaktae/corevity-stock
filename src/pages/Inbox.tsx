@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ExternalLink, Mail, RefreshCw, UserCheck } from 'lucide-react';
+import { CornerUpLeft, ExternalLink, Mail, RefreshCw, UserCheck } from 'lucide-react';
 import { api, useData, useDebounce } from '../lib';
 import { getLanguage, t } from '../i18n';
 import { ErrorBox, Header, Loading } from '../components/ui';
@@ -29,10 +29,23 @@ type EmailRow = {
   customerId: string | null;
   customerName: string | null;
   inSpam: number;
+  repliedAt: string | null;
 };
 type EmailDetail = EmailRow & { toText: string; bodyText: string; bodyHtml: string | null };
 type EmailList = { messages: EmailRow[]; total: number; customers: number; inbox: number; other: number; junk: number };
 // Inbox = real emails from people; ads, newsletters and system notifications are kept, but apart.
+type ThreadMessage = {
+  id: string;
+  fromName: string;
+  fromEmail: string;
+  to: string;
+  subject: string;
+  receivedAt: string;
+  sent: boolean;
+  inSpam: boolean;
+  bodyText: string;
+  bodyHtml: string;
+};
 type View = 'inbox' | 'other' | 'junk';
 const views: [View, string, keyof Pick<EmailList, 'inbox' | 'other' | 'junk'>][] = [
   ['inbox', 'Inbox', 'inbox'],
@@ -70,19 +83,42 @@ export function InboxPage() {
     `/email/messages?view=${view}&q=${encodeURIComponent(debounced)}`,
   );
   const [detail, setDetail] = useState<EmailDetail | null>(null);
+  const [thread, setThread] = useState<ThreadMessage[] | null>(null);
+  const [threadState, setThreadState] = useState<'idle' | 'loading' | 'failed'>('idle');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState('');
   const [notice, setNotice] = useState('');
 
+  const detailRef = useRef<EmailDetail | null>(null);
+  detailRef.current = detail;
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
       return;
     }
     let active = true;
+    setThread(null);
+    setThreadState('loading');
     api<EmailDetail>(`/email/messages/${encodeURIComponent(selectedId)}`)
-      .then((value) => active && setDetail(value))
-      .catch((e: Error) => active && setMessage(e.message));
+      .then((value) => {
+        if (!active) return;
+        setDetail(value);
+        // The full conversation (including our replies) comes live from Gmail.
+        return api<{ messages: ThreadMessage[] }>(`/email/threads/${encodeURIComponent(value.threadId)}`).then((result) => {
+          if (!active) return;
+          setThread(result.messages);
+          setThreadState('idle');
+          const latest = result.messages.at(-1)?.id;
+          setExpanded(new Set([selectedId, ...(latest ? [latest] : [])]));
+          if (result.messages.some((message) => message.sent)) reload();
+        });
+      })
+      .catch((e: Error) => {
+        if (!active) return;
+        if (detailRef.current) setThreadState('failed');
+        else setMessage(e.message);
+      });
     return () => {
       active = false;
     };
@@ -226,6 +262,11 @@ export function InboxPage() {
                         <span className="email-tag">{t('Possible customer')}</span>
                       ) : null}
                       {Boolean(row.inSpam) && view !== 'junk' && <span className="email-tag junk">{t('Junk')}</span>}
+                      {row.repliedAt && (
+                        <span className="email-tag replied">
+                          <CornerUpLeft size={12} /> {t('Replied')}
+                        </span>
+                      )}
                     </button>
                   </li>
                 ))}
@@ -280,20 +321,61 @@ export function InboxPage() {
                 <small className="field-hint">
                   {t('Why')}: {t(detail.reason)}
                 </small>
-                {detail.bodyHtml ? (
-                  <>
-                    <iframe
-                      className="email-html"
-                      title={detail.subject || t('Email content')}
-                      sandbox="allow-popups allow-popups-to-escape-sandbox"
-                      referrerPolicy="no-referrer"
-                      srcDoc={emailDocument(detail.bodyHtml)}
-                    />
-                    <small className="field-hint">{t('Images from outside are hidden for safety. Open in Gmail to see them.')}</small>
-                  </>
+                {thread && thread.length > 0 ? (
+                  <ol className="email-thread" aria-label={t('Conversation')}>
+                    {thread.map((item) => {
+                      const open = expanded.has(item.id);
+                      return (
+                        <li key={item.id} className={`email-thread-item${item.sent ? ' sent' : ''}${open ? ' open' : ''}`}>
+                          <button
+                            type="button"
+                            className="email-thread-head"
+                            aria-expanded={open}
+                            onClick={() =>
+                              setExpanded((current) => {
+                                const next = new Set(current);
+                                if (next.has(item.id)) next.delete(item.id);
+                                else next.add(item.id);
+                                return next;
+                              })
+                            }
+                          >
+                            <span className="email-thread-who">
+                              <strong>{item.sent ? `${t('We replied')} · ${item.fromName || item.fromEmail}` : item.fromName || item.fromEmail}</strong>
+                              {!open && <small>{(item.bodyText || '').replace(/\s+/g, ' ').slice(0, 140)}</small>}
+                            </span>
+                            <time dateTime={item.receivedAt}>{when(item.receivedAt)}</time>
+                          </button>
+                          {open &&
+                            (item.bodyHtml ? (
+                              <iframe
+                                className="email-html thread"
+                                title={item.subject || t('Email content')}
+                                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                                referrerPolicy="no-referrer"
+                                srcDoc={emailDocument(item.bodyHtml)}
+                              />
+                            ) : (
+                              <pre className="email-body">{item.bodyText}</pre>
+                            ))}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : detail.bodyHtml ? (
+                  <iframe
+                    className="email-html"
+                    title={detail.subject || t('Email content')}
+                    sandbox="allow-popups allow-popups-to-escape-sandbox"
+                    referrerPolicy="no-referrer"
+                    srcDoc={emailDocument(detail.bodyHtml)}
+                  />
                 ) : (
                   <pre className="email-body">{detail.bodyText || detail.snippet}</pre>
                 )}
+                {threadState === 'loading' && <small className="field-hint">{t('Loading the conversation from Gmail…')}</small>}
+                {threadState === 'failed' && <small className="field-hint">{t('Could not load replies from Gmail. Showing this email only.')}</small>}
+                <small className="field-hint">{t('Images from outside are hidden for safety. Open in Gmail to see them.')}</small>
               </article>
             ) : (
               <p className="muted email-placeholder">{t('Select an email to read it.')}</p>

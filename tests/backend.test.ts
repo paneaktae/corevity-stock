@@ -763,6 +763,8 @@ describe('D1-backed inventory and sales', () => {
     expect((await json<{ customers: number }>(await request('/email/messages'))).customers).toBe(2);
     expect((await json<{ bodyHtml: string | null }>(await request('/email/messages/e3'))).bodyHtml).toBe('');
     expect((await request('/email/messages/missing')).status).toBe(404);
+    expect((await request('/email/threads/unknown-thread')).status).toBe(404);
+    expect((await request('/email/threads/t1')).status).toBe(502);
     expect((await request('/email/settings', 'PATCH', { aiClassify: true })).status).toBe(409);
     await database.prepare('DELETE FROM email_messages').run();
   });

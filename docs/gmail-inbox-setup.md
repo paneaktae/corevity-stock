@@ -21,6 +21,11 @@ email looks like a customer. It cannot send, delete or change mail.
 - HTML emails are shown in a sandboxed frame (no scripts, no access to the CRM, remote images blocked
   by the page CSP). Emails stored before HTML support fetch their HTML once when opened.
 
+- Replies: opening an email loads the whole Gmail conversation live (threads.get), including messages
+  sent from the mailbox, marked "We replied". Emails with a later reply from the mailbox show a
+  **Replied** badge; this is tracked from sent mail in the change history, the hourly sweep and a
+  one-time 90-day sent backfill (sent mail in threads the CRM doesn't hold is skipped unfetched).
+
 ## How customer emails are picked
 
 1. Skipped as not-customer: our own domain, `noreply`/notification senders, newsletters

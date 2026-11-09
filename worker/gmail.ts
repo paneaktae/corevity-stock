@@ -14,6 +14,7 @@ import {
   gmailConfig,
   gmailGet,
   loadMessageHtml,
+  loadThread,
   openAiClassifier,
   reclassifyStoredEmails,
   revokeToken,
@@ -76,7 +77,8 @@ gmailRoutes.get('/messages', async (c) => {
   const like = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
   const { results } = await c.env.DB.prepare(
     `SELECT m.id,m.thread_id AS threadId,m.from_name AS fromName,m.from_email AS fromEmail,m.subject,m.snippet,
-      m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,c.name AS customerName,m.in_spam AS inSpam
+      m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,c.name AS customerName,m.in_spam AS inSpam,
+      m.replied_at AS repliedAt
      FROM email_messages m LEFT JOIN customers c ON c.id=m.customer_id
      WHERE CASE ? WHEN 'inbox' THEN m.in_spam=0 AND m.classification='CUSTOMER' WHEN 'other' THEN m.in_spam=0 AND m.classification='NOT_CUSTOMER' WHEN 'junk' THEN m.in_spam=1 WHEN 'customer' THEN m.classification='CUSTOMER' ELSE 1 END
        AND (?='' OR m.subject LIKE ? ESCAPE '\\' OR m.from_email LIKE ? ESCAPE '\\' OR m.from_name LIKE ? ESCAPE '\\' OR m.snippet LIKE ? ESCAPE '\\')
@@ -102,7 +104,7 @@ gmailRoutes.get('/messages/:id', async (c) => {
   const message = await c.env.DB.prepare(
     `SELECT m.id,m.thread_id AS threadId,m.from_name AS fromName,m.from_email AS fromEmail,m.to_text AS toText,m.subject,
       m.body_text AS bodyText,m.body_html AS bodyHtml,m.snippet,m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,
-      c.name AS customerName,m.in_spam AS inSpam
+      c.name AS customerName,m.in_spam AS inSpam,m.replied_at AS repliedAt
      FROM email_messages m LEFT JOIN customers c ON c.id=m.customer_id WHERE m.id=?`,
   )
     .bind(c.req.param('id'))
@@ -111,6 +113,17 @@ gmailRoutes.get('/messages/:id', async (c) => {
   if ((message as { bodyHtml: string | null }).bodyHtml === null)
     (message as { bodyHtml: string | null }).bodyHtml = await loadMessageHtml(c.env, c.req.param('id'));
   return c.json(message);
+});
+
+gmailRoutes.get('/threads/:threadId', async (c) => {
+  await memberAccess(c);
+  const threadId = c.req.param('threadId');
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(threadId)) return c.json({ error: { message: 'Email not found.' } }, 404);
+  const known = await c.env.DB.prepare('SELECT 1 FROM email_messages WHERE thread_id=? LIMIT 1').bind(threadId).first();
+  if (!known) return c.json({ error: { message: 'Email not found.' } }, 404);
+  const messages = await loadThread(c.env, threadId);
+  if (!messages) return c.json({ error: { message: 'Gmail could not be checked. Please retry shortly.' } }, 502);
+  return c.json({ messages });
 });
 
 const classificationInput = z.object({ classification: z.enum(['CUSTOMER', 'NOT_CUSTOMER']) }).strict();

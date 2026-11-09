@@ -14,6 +14,7 @@ import {
   reclassifyStoredEmails,
   sanitizeEmailHtml,
   loadMessageHtml,
+  loadThread,
   syncGmail,
   type GmailMessage,
 } from '../worker/services/gmail';
@@ -81,6 +82,7 @@ function fakeGoogle(state: Mailbox) {
       });
     }
     if (path === 'messages') {
+      if (url.searchParams.get('q')?.startsWith('in:sent')) return Response.json({ messages: [] });
       expect(url.searchParams.get('includeSpamTrash')).toBe('true');
       expect(url.searchParams.get('q')).toContain('-in:trash');
       return Response.json({ messages: state.listing.map((id) => ({ id })) });
@@ -94,10 +96,10 @@ function fakeGoogle(state: Mailbox) {
 async function connect(historyId: string | null = null, backfillDone = true) {
   const token = await encryptRefreshToken(env, mailbox, 'refresh-token-1');
   await env.DB.prepare(
-    `INSERT INTO gmail_connection(id,email,status,token_ciphertext,token_nonce,token_key_version,history_id,connected_by,connected_at,updated_at,backfill_done)
-     VALUES('workspace',?,'CONNECTED',?,?,?,?,?,?,?,?)`,
+    `INSERT INTO gmail_connection(id,email,status,token_ciphertext,token_nonce,token_key_version,history_id,connected_by,connected_at,updated_at,backfill_done,sent_backfill_done)
+     VALUES('workspace',?,'CONNECTED',?,?,?,?,?,?,?,?,?)`,
   )
-    .bind(mailbox, token.ciphertext, token.nonce, token.keyVersion, historyId, sales, '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z', Number(backfillDone))
+    .bind(mailbox, token.ciphertext, token.nonce, token.keyVersion, historyId, sales, '2026-11-10T00:00:00Z', '2026-11-10T00:00:00Z', Number(backfillDone), Number(backfillDone))
     .run();
 }
 
@@ -308,7 +310,8 @@ describe('Gmail sync and LINE alerts', () => {
     };
     const google = fakeGoogle(state);
     expect(await syncGmail(env, { http: google.http, classifier: null })).toMatchObject({ status: 'ok', imported: 1, customers: 1 });
-    expect(google.calls.some((call) => call.includes('/messages/sent1'))).toBe(false);
+    // Sent mail is only looked up (format=minimal) for reply tracking, never imported into the inbox.
+    expect(google.calls.some((call) => call.includes('/messages/sent1?format=full'))).toBe(false);
     expect(google.calls.find((call) => call.includes('/history?'))).not.toContain('labelId');
     expect(await env.DB.prepare("SELECT in_spam FROM email_messages WHERE id='spam1'").first('in_spam')).toBe(1);
     const texts: string[] = [];
@@ -333,7 +336,8 @@ describe('Gmail sync and LINE alerts', () => {
     const start = Date.now();
     expect(await syncGmail(env, { http: google.http, classifier: null, time: start })).toMatchObject({ imported: 1, customers: 1 });
     expect(await env.DB.prepare("SELECT notified FROM email_messages WHERE id='missed1'").first('notified')).toBe(1);
-    const listings = () => google.calls.filter((call) => call.startsWith('/gmail/v1/users/me/messages?')).length;
+    const listings = () =>
+      google.calls.filter((call) => call.startsWith('/gmail/v1/users/me/messages?') && !call.includes('q=in%3Asent')).length;
     expect(listings()).toBe(1);
     await syncGmail(env, { http: google.http, classifier: null, time: start + 10 * 60_000 });
     expect(listings()).toBe(1);
@@ -387,6 +391,7 @@ describe('Gmail sync and LINE alerts', () => {
       const path = url.pathname.replace('/gmail/v1/users/me/', '');
       if (path === 'history') return Response.json({ historyId: '100', history: [] });
       if (path === 'messages') {
+        if (url.searchParams.get('q')?.startsWith('in:sent')) return Response.json({ messages: [] });
         expect(url.searchParams.get('q')).toContain('newer_than:90d');
         const page = pages[url.searchParams.get('pageToken') ?? ''];
         seen.push(url.searchParams.get('pageToken') ?? 'first');
@@ -467,6 +472,72 @@ describe('Gmail sync and LINE alerts', () => {
       { id: 'p1', classification: 'CUSTOMER', reason: 'Email from a person outside the company' },
     ]);
     expect(await reclassifyStoredEmails(env)).toBe(0);
+  });
+
+  it('marks threads as replied from sent mail (history and 90-day backfill), skipping unknown threads', async () => {
+    await connect('100');
+    await env.DB.prepare("UPDATE gmail_connection SET last_sweep_at=?,sent_backfill_done=0").bind(new Date().toISOString()).run();
+    await env.DB.prepare(
+      `INSERT INTO email_messages(id,thread_id,from_email,received_at,classification,created_at) VALUES
+       ('c1','th1','a@buyer.example','2026-11-08T01:00:00Z','CUSTOMER','2026-11-08T01:00:00Z'),
+       ('c2','th2','b@buyer.example','2026-11-08T02:00:00Z','CUSTOMER','2026-11-08T02:00:00Z'),
+       ('c3','th3','c@buyer.example','2026-11-09T05:00:00Z','CUSTOMER','2026-11-09T05:00:00Z')`,
+    ).run();
+    const sentMessages: Record<string, { threadId: string; at: string }> = {
+      s1: { threadId: 'th1', at: '2026-11-08T03:00:00Z' }, // reply after the customer email
+      s2: { threadId: 'th3', at: '2026-11-09T01:00:00Z' }, // sent BEFORE the customer email: not a reply to it
+      s3: { threadId: 'other', at: '2026-11-08T04:00:00Z' }, // thread not in the CRM: never fetched
+      s4: { threadId: 'th2', at: '2026-11-09T09:00:00Z' }, // arrives via history
+    };
+    const fetched: string[] = [];
+    const http = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === 'oauth2.googleapis.com') return Response.json({ access_token: 'a' });
+      const path = url.pathname.replace('/gmail/v1/users/me/', '');
+      if (path === 'history')
+        return Response.json({ historyId: '101', history: [{ messagesAdded: [{ message: { id: 's4', threadId: 'th2', labelIds: ['SENT'] } }] }] });
+      if (path === 'messages') {
+        expect(url.searchParams.get('q')).toBe('in:sent newer_than:90d');
+        return Response.json({ messages: ['s1', 's2', 's3'].map((id) => ({ id, threadId: sentMessages[id].threadId })) });
+      }
+      const id = decodeURIComponent(path.replace('messages/', ''));
+      fetched.push(id);
+      expect(url.searchParams.get('format')).toBe('minimal');
+      return Response.json({ id, threadId: sentMessages[id].threadId, labelIds: ['SENT'], internalDate: String(Date.parse(sentMessages[id].at)) });
+    }) as typeof fetch;
+    expect((await syncGmail(env, { http, classifier: null })).status).toBe('ok');
+    expect(fetched.sort()).toEqual(['s1', 's2', 's4']);
+    const rows = (await env.DB.prepare('SELECT id,replied_at FROM email_messages ORDER BY id').all()).results;
+    expect(rows).toEqual([
+      { id: 'c1', replied_at: '2026-11-08T03:00:00.000Z' },
+      { id: 'c2', replied_at: '2026-11-09T09:00:00.000Z' },
+      { id: 'c3', replied_at: null },
+    ]);
+    expect(await env.DB.prepare("SELECT sent_backfill_done FROM gmail_connection").first('sent_backfill_done')).toBe(1);
+  });
+
+  it('loads the whole conversation including our replies, in order', async () => {
+    await connect('100');
+    await env.DB.prepare(
+      "INSERT INTO email_messages(id,thread_id,from_email,received_at,classification,created_at) VALUES('q1','thr','buyer@x.example','2026-11-10T01:00:00Z','CUSTOMER','2026-11-10T01:00:00Z')",
+    ).run();
+    const question = { ...gmailMessage('q1', 'Buyer <buyer@x.example>', 'Price?', 'How much?'), threadId: 'thr', internalDate: String(Date.parse('2026-11-10T01:00:00Z')) };
+    const answer = {
+      ...gmailMessage('a1', `Corevity <${mailbox}>`, 'Re: Price?', 'It is 50,000 THB', { labels: ['SENT'], html: true }),
+      threadId: 'thr',
+      internalDate: String(Date.parse('2026-11-10T02:00:00Z')),
+    };
+    const draft = { ...gmailMessage('d1', `Corevity <${mailbox}>`, 'Re: Price?', 'draft', { labels: ['DRAFT'] }), threadId: 'thr' };
+    const http = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.hostname === 'oauth2.googleapis.com') return Response.json({ access_token: 'a' });
+      expect(url.pathname).toBe('/gmail/v1/users/me/threads/thr');
+      return Response.json({ messages: [answer, draft, question] });
+    }) as typeof fetch;
+    const thread = await loadThread(env, 'thr', http);
+    expect(thread?.map((m) => [m.id, m.sent])).toEqual([['q1', false], ['a1', true]]);
+    expect(thread?.[1].bodyHtml).toContain('50,000 THB');
+    expect(await env.DB.prepare("SELECT replied_at FROM email_messages WHERE id='q1'").first('replied_at')).toBe('2026-11-10T02:00:00.000Z');
   });
 
   it('skips when Gmail is not configured and removes mail older than 90 days', async () => {

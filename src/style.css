@@ -4156,3 +4156,15 @@ html[data-theme='dark'] .email-junk-note { border-color: #6b2a2a; background: #2
 .email-view-toggle button.junk.active { color: #a22b2b; }
 .email-html { display: block; width: 100%; height: min(70vh, 900px); border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .email-view-toggle button { padding: 6px 8px; font-size: 12.5px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
+.email-tag.replied { background: #dbeafe; color: #1d4ed8; }
+html[data-theme='dark'] .email-tag.replied { background: #172c4a; color: #9cc3ff; }
+.email-thread { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.email-thread-item { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.email-thread-item.sent { border-left: 4px solid var(--brand-blue); }
+.email-thread-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: 0; background: transparent; text-align: left; cursor: pointer; }
+.email-thread-item.sent .email-thread-head { background: color-mix(in srgb, var(--brand-soft) 60%, transparent); }
+.email-thread-who { display: grid; gap: 2px; min-width: 0; }
+.email-thread-who small { overflow: hidden; color: var(--muted-text); text-overflow: ellipsis; white-space: nowrap; }
+.email-thread-head time { flex: none; color: var(--muted-text); font-size: 12px; }
+.email-thread-item .email-html.thread { height: min(55vh, 640px); border: 0; border-top: 1px solid var(--border); border-radius: 0; }
+.email-thread-item .email-body { margin: 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; }
