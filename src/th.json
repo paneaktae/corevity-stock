@@ -1095,5 +1095,9 @@
   "LINE messages this month": "ข้อความ LINE เดือนนี้",
   "no monthly limit": "ไม่จำกัดต่อเดือน",
   "Send a test LINE message": "ส่งข้อความทดสอบทาง LINE",
-  "Test message sent — check your LINE.": "ส่งข้อความทดสอบแล้ว กรุณาเช็ก LINE ของคุณ"
+  "Test message sent — check your LINE.": "ส่งข้อความทดสอบแล้ว กรุณาเช็ก LINE ของคุณ",
+  "Remove this email from the CRM? It stays in Gmail.": "ลบอีเมลนี้ออกจาก CRM ใช่ไหม (อีเมลยังอยู่ใน Gmail)",
+  "ads/notifications skipped": "โฆษณา/แจ้งเตือนที่ข้าม",
+  "Only emails that look like customers are kept. Ads, newsletters and notifications are not saved (they stay in Gmail).": "เก็บเฉพาะอีเมลที่น่าจะเป็นลูกค้า โฆษณา จดหมายข่าว และอีเมลแจ้งเตือนจะไม่ถูกบันทึก (ยังอยู่ใน Gmail)",
+  "Website contact form": "ฟอร์มติดต่อบนเว็บไซต์"
 }

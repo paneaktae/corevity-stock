@@ -72,7 +72,7 @@ gmailRoutes.get('/status', async (c) => {
 gmailRoutes.get('/messages', async (c) => {
   await memberAccess(c);
   const requested = c.req.query('view') ?? 'inbox';
-  const view = ['inbox', 'other', 'customer', 'junk', 'all'].includes(requested) ? requested : 'inbox';
+  const view = ['inbox', 'junk'].includes(requested) ? requested : 'inbox';
   const q = (c.req.query('q') ?? '').trim().slice(0, 100);
   const like = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
   const { results } = await c.env.DB.prepare(
@@ -80,21 +80,19 @@ gmailRoutes.get('/messages', async (c) => {
       m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,c.name AS customerName,m.in_spam AS inSpam,
       m.replied_at AS repliedAt
      FROM email_messages m LEFT JOIN customers c ON c.id=m.customer_id
-     WHERE CASE ? WHEN 'inbox' THEN m.in_spam=0 AND m.classification='CUSTOMER' WHEN 'other' THEN m.in_spam=0 AND m.classification='NOT_CUSTOMER' WHEN 'junk' THEN m.in_spam=1 WHEN 'customer' THEN m.classification='CUSTOMER' ELSE 1 END
+     WHERE CASE ? WHEN 'junk' THEN m.in_spam=1 ELSE m.in_spam=0 END
        AND (?='' OR m.subject LIKE ? ESCAPE '\\' OR m.from_email LIKE ? ESCAPE '\\' OR m.from_name LIKE ? ESCAPE '\\' OR m.snippet LIKE ? ESCAPE '\\')
      ORDER BY m.received_at DESC LIMIT 200`,
   )
     .bind(view, q, like, like, like, like)
     .all();
   const counts = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS total,SUM(classification='CUSTOMER') AS customers,SUM(in_spam=0 AND classification='CUSTOMER') AS inbox,SUM(in_spam=0 AND classification='NOT_CUSTOMER') AS other,SUM(in_spam=1) AS junk FROM email_messages",
-  ).first<{ total: number; customers: number | null; inbox: number | null; other: number | null; junk: number | null }>();
+    'SELECT COUNT(*) AS total,SUM(in_spam=0) AS inbox,SUM(in_spam=1) AS junk FROM email_messages',
+  ).first<{ total: number; inbox: number | null; junk: number | null }>();
   return c.json({
     messages: results,
     total: counts?.total ?? 0,
-    customers: counts?.customers ?? 0,
     inbox: counts?.inbox ?? 0,
-    other: counts?.other ?? 0,
     junk: counts?.junk ?? 0,
   });
 });
@@ -126,14 +124,16 @@ gmailRoutes.get('/threads/:threadId', async (c) => {
   return c.json({ messages });
 });
 
-const classificationInput = z.object({ classification: z.enum(['CUSTOMER', 'NOT_CUSTOMER']) }).strict();
-gmailRoutes.patch('/messages/:id', async (c) => {
-  const access = await memberAccess(c);
-  const input = classificationInput.parse(await c.req.json());
-  const result = await c.env.DB.prepare('UPDATE email_messages SET classification=?,reason=? WHERE id=?')
-    .bind(input.classification, `Marked by ${access.email}`, c.req.param('id'))
-    .run();
-  if (!result.meta.changes) return c.json({ error: { message: 'Email not found.' } }, 404);
+// "Not a customer": only customer mail is kept, so this removes the copy from the CRM (the email
+// stays in Gmail) and remembers the id so it is not imported again.
+gmailRoutes.delete('/messages/:id', async (c) => {
+  await memberAccess(c);
+  const id = c.req.param('id');
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare('INSERT OR IGNORE INTO email_skipped(id,seen_at) SELECT id,? FROM email_messages WHERE id=?').bind(now(), id),
+    c.env.DB.prepare('DELETE FROM email_messages WHERE id=?').bind(id),
+  ]);
+  if (!results[1].meta.changes) return c.json({ error: { message: 'Email not found.' } }, 404);
   return c.json({ ok: true });
 });
 
@@ -154,7 +154,7 @@ gmailRoutes.get('/sync-log', async (c) => {
   const [runs, alerts, failures, recipients] = await Promise.all([
     c.env.DB.prepare(
       `SELECT id,started_at AS startedAt,duration_ms AS durationMs,trigger,status,mode,imported,customers,
-        alerts_queued AS alertsQueued,api_calls AS apiCalls,error
+        alerts_queued AS alertsQueued,dropped,api_calls AS apiCalls,error
        FROM gmail_sync_log ORDER BY started_at DESC LIMIT 30`,
     ).all(),
     c.env.DB.prepare(

@@ -46,3 +46,14 @@ User explicitly requested "Commit and deploy".
   anonymous `/api/email/threads/:id` 401.
 - First run on `beadaa9c` (18:05 UTC): no error; sent backfill complete in one run; 1 of 109 emails
   marked replied. Not yet verified: a signed-in conversation view against live Gmail.
+
+## Update 2026-11-10: customer-only inbox (migration 0041)
+
+- Only mail that looks like a customer is stored. Ads, newsletters, sign-in/automated mail and Gmail
+  promotions/social/updates are dropped on arrival (they remain in Gmail). The "Ads & alerts" tab is gone.
+- `email_skipped` remembers dropped ids for 7 days so the hourly re-check does not fetch them again.
+- Migration 0041 deletes the already stored non-customer mail (and their alert rows) and seeds that ledger.
+- "Not a customer" on a stored email now removes the CRM copy (`DELETE /api/email/messages/:id`).
+- Website contact-form mail (`COREVITY inquiry: ...`, sent from our own domain) is always kept, shown under
+  the visitor's Reply-To identity, found by its own hourly search and accepted even when Gmail labels it
+  INBOX+SENT. `gmail_sync_log.dropped` and the `reasons` field of the `gmail_sync` log line show what was dropped and why.

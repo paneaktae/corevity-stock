@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+import { Hono } from 'hono';
+import { gmailRoutes } from '../worker/gmail';
 import { readFileSync, readdirSync } from 'node:fs';
 import type { Bindings } from '../worker/auth';
 import {
@@ -224,20 +226,23 @@ describe('Gmail sync and LINE alerts', () => {
     state.messages.known1 = gmailMessage('known1', 'owner@gymco.example', 'Re: delivery', 'When can you ship?', {
       headers: { 'List-Unsubscribe': '<mailto:x@y>' },
     });
-    expect(await syncGmail(env, { http: google.http, classifier: null })).toMatchObject({ status: 'ok', imported: 3, customers: 2 });
+    expect(await syncGmail(env, { http: google.http, classifier: null })).toMatchObject({ status: 'ok', imported: 2, customers: 2, dropped: 1 });
     expect(google.calls.some((call) => call.startsWith('/gmail/v1/users/me/history?startHistoryId=100'))).toBe(true);
     const rows = await env.DB.prepare('SELECT id,classification,reason,customer_id,notified FROM email_messages ORDER BY id').all();
     expect(rows.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'new1', classification: 'CUSTOMER', notified: 1 }),
-        expect.objectContaining({ id: 'news1', classification: 'NOT_CUSTOMER', notified: 0 }),
         expect.objectContaining({ id: 'known1', classification: 'CUSTOMER', reason: 'Known customer', customer_id: 'cust1', notified: 1 }),
       ]),
     );
     expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(2);
+    // Ads/newsletters are not stored at all: only their id is remembered so they are not fetched again.
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM email_messages WHERE id='news1'").first('n')).toBe(0);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM email_skipped WHERE id='news1'").first('n')).toBe(1);
 
     // Re-delivered history entries never create duplicate rows or alerts.
     expect((await syncGmail(env, { http: google.http, classifier: null })).imported).toBe(0);
+    expect(google.calls.filter((call) => call.includes('messages/news1')).length).toBe(1);
     expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(2);
 
     const pushes: { to: string; text: string; retryKey: string | null }[] = [];
@@ -267,9 +272,10 @@ describe('Gmail sync and LINE alerts', () => {
     };
     const classifier = vi.fn(async () => ({ customer: false, reason: 'AI: supplier offer' }));
     const result = await syncGmail(env, { http: fakeGoogle(state).http, classifier });
-    expect(result).toMatchObject({ status: 'ok', imported: 1, customers: 0 });
+    expect(result).toMatchObject({ status: 'ok', imported: 0, customers: 0, dropped: 1 });
     expect(classifier).toHaveBeenCalledOnce();
-    expect(await env.DB.prepare("SELECT reason FROM email_messages WHERE id='sup1'").first('reason')).toBe('AI: supplier offer');
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_messages').first('n')).toBe(0);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM email_skipped WHERE id='sup1'").first('n')).toBe(1);
     expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(0);
   });
 
@@ -338,11 +344,12 @@ describe('Gmail sync and LINE alerts', () => {
     expect(await env.DB.prepare("SELECT notified FROM email_messages WHERE id='missed1'").first('notified')).toBe(1);
     const listings = () =>
       google.calls.filter((call) => call.startsWith('/gmail/v1/users/me/messages?') && !call.includes('q=in%3Asent')).length;
-    expect(listings()).toBe(1);
-    await syncGmail(env, { http: google.http, classifier: null, time: start + 10 * 60_000 });
-    expect(listings()).toBe(1);
-    await syncGmail(env, { http: google.http, classifier: null, time: start + 61 * 60_000 });
+    // Each sweep lists the last 2 days plus the website-form query.
     expect(listings()).toBe(2);
+    await syncGmail(env, { http: google.http, classifier: null, time: start + 10 * 60_000 });
+    expect(listings()).toBe(2);
+    await syncGmail(env, { http: google.http, classifier: null, time: start + 61 * 60_000 });
+    expect(listings()).toBe(4);
   });
 
   it('alerts the admin on LINE once when the mailbox stops being readable, and again after recovery', async () => {
@@ -468,9 +475,9 @@ describe('Gmail sync and LINE alerts', () => {
     const rows = (await env.DB.prepare('SELECT id,classification,reason FROM email_messages ORDER BY id').all()).results;
     expect(rows).toEqual([
       { id: 'm1', classification: 'CUSTOMER', reason: 'Marked by sale@example.test' },
-      { id: 'n1', classification: 'NOT_CUSTOMER', reason: 'Advertising or newsletter' },
       { id: 'p1', classification: 'CUSTOMER', reason: 'Email from a person outside the company' },
     ]);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM email_skipped WHERE id='n1'").first('n')).toBe(1);
     expect(await reclassifyStoredEmails(env)).toBe(0);
   });
 
@@ -622,5 +629,131 @@ describe('Gmail sync log', () => {
     expect(await env.DB.prepare('SELECT status,last_error FROM email_notifications').first()).toMatchObject({ status: 'pending', last_error: 'LINE_HTTP_500' });
     expect(log).toHaveBeenCalledWith(expect.stringContaining('"event":"email_line_alerts"'));
     log.mockRestore();
+  });
+});
+
+describe('Customer-only inbox and website form mail', () => {
+  const inquiryBody = 'Name: Somchai Jaidee\nCompany: Fit Co\nEmail: somchai@buyer.example\nPhone: 0812345678\nInterest: Strength\n\nNeed 5 machines';
+  const inquiry = (id: string, labels = ['INBOX']) =>
+    gmailMessage(id, `Corevity Website <website@corevity.test>`, 'COREVITY inquiry: Strength', inquiryBody, {
+      labels,
+      headers: { 'Reply-To': 'somchai@buyer.example' },
+    });
+
+  it('keeps website-form mail sent from our own domain, even self-addressed (INBOX+SENT), under the visitor identity', async () => {
+    await connect('100');
+    const state: Mailbox = {
+      historyId: '120',
+      history: [
+        { id: 'w1', labels: ['INBOX', 'SENT'] },
+        { id: 'self1', labels: ['INBOX', 'SENT'] },
+      ],
+      listing: [],
+      messages: {
+        w1: inquiry('w1', ['INBOX', 'SENT']),
+        self1: gmailMessage('self1', `Me <${mailbox}>`, 'Note to self', 'remember this', { labels: ['INBOX', 'SENT'] }),
+      },
+    };
+    const result = await syncGmail(env, { http: fakeGoogle(state).http, classifier: null });
+    expect(result).toMatchObject({ status: 'ok', imported: 1, customers: 1, queued: 1, dropped: 1 });
+    expect(result.reasons).toEqual({ 'Sent from our own domain': 1 });
+    expect(await env.DB.prepare("SELECT from_email,from_name,reason,in_spam,notified FROM email_messages WHERE id='w1'").first()).toMatchObject({
+      from_email: 'somchai@buyer.example',
+      from_name: 'Somchai Jaidee',
+      reason: 'Website contact form',
+      in_spam: 0,
+      notified: 1,
+    });
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_messages').first('n')).toBe(1);
+  });
+
+  it('finds a website inquiry the history feed missed with its own search, and does not ask the AI about it', async () => {
+    await connect('100');
+    const classifier = vi.fn(async () => ({ customer: false, reason: 'AI says no' }));
+    const state: Mailbox = { historyId: '101', history: [], listing: ['w2'], messages: { w2: inquiry('w2', ['INBOX', 'SENT']) } };
+    const google = fakeGoogle(state);
+    expect(await syncGmail(env, { http: google.http, classifier })).toMatchObject({ imported: 1, customers: 1 });
+    expect(classifier).not.toHaveBeenCalled();
+    expect(google.calls.some((call) => decodeURIComponent(call).includes('subject:"COREVITY inquiry"'))).toBe(true);
+  });
+
+  it('keeps a website inquiry that Gmail put in Junk', async () => {
+    await connect('100');
+    const state: Mailbox = {
+      historyId: '101',
+      history: [{ id: 'w3', labels: ['SPAM'] }],
+      listing: [],
+      messages: { w3: inquiry('w3', ['SPAM']) },
+    };
+    expect(await syncGmail(env, { http: fakeGoogle(state).http, classifier: null })).toMatchObject({ imported: 1 });
+    expect(await env.DB.prepare("SELECT in_spam FROM email_messages WHERE id='w3'").first('in_spam')).toBe(1);
+  });
+
+  it('explains dropped mail by reason without storing it', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await connect('100');
+    const state: Mailbox = {
+      historyId: '101',
+      history: [{ id: 'ad1' }, { id: 'arch1', labels: ['CATEGORY_PERSONAL'] }],
+      listing: [],
+      messages: {
+        ad1: gmailMessage('ad1', 'promo@brand.example', 'Big sale', 'x', { headers: { 'List-Id': 'promo.brand.example' } }),
+        arch1: gmailMessage('arch1', 'a@buyer.example', 'Archived', 'x', { labels: ['CATEGORY_PERSONAL'] }),
+      },
+    };
+    const result = await syncGmail(env, { http: fakeGoogle(state).http, classifier: null });
+    expect(result).toMatchObject({ imported: 0, dropped: 1 });
+    expect(result.reasons).toEqual({ 'Mailing list or newsletter': 1 });
+    expect(await env.DB.prepare('SELECT dropped FROM gmail_sync_log').first('dropped')).toBe(1);
+    expect(log.mock.calls.flat().join('')).toContain('"reasons":{"Mailing list or newsletter":1}');
+    log.mockRestore();
+  });
+
+  it('"Not a customer" removes the CRM copy and keeps it from coming back; counts only cover kept mail', async () => {
+    await connect('100');
+    const state: Mailbox = {
+      historyId: '101',
+      history: [{ id: 'c1' }],
+      listing: [],
+      messages: { c1: gmailMessage('c1', 'Buyer <b@buyer.example>', 'Price?', 'Need prices') },
+    };
+    const google = fakeGoogle(state);
+    await syncGmail(env, { http: google.http, classifier: null });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('email' as never, sales as never);
+      await next();
+    });
+    app.route('/', gmailRoutes as never);
+    const list = (await (await app.request('/messages', {}, env as never)).json()) as { total: number; inbox: number; junk: number };
+    expect(list).toMatchObject({ total: 1, inbox: 1, junk: 0 });
+    expect((await app.request('/messages/c1', { method: 'DELETE' }, env as never)).status).toBe(200);
+    expect((await app.request('/messages/c1', { method: 'DELETE' }, env as never)).status).toBe(404);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(0);
+    await env.DB.prepare("UPDATE gmail_connection SET last_sweep_at=NULL").run();
+    state.listing = ['c1'];
+    expect(await syncGmail(env, { http: google.http, classifier: null })).toMatchObject({ imported: 0 });
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_messages').first('n')).toBe(0);
+  });
+
+  it('migration 0041 removes stored ads/alerts, remembers their ids and cascades their alerts', async () => {
+    await env.DB.prepare(
+      `INSERT INTO email_messages(id,thread_id,from_email,subject,received_at,classification,reason,created_at) VALUES
+       ('ad','t1','a@shop.example','Sale','2026-11-10T00:00:00Z','NOT_CUSTOMER','Advertising or newsletter','2026-11-10T00:00:00Z'),
+       ('keep','t2','b@buyer.example','Price?','2026-11-10T00:00:00Z','CUSTOMER','Email from a person outside the company','2026-11-10T00:00:00Z')`,
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO email_notifications(id,message_id,email,line_user_id,next_attempt_at,created_at) VALUES('n','ad',?,?,'2026-11-10T00:00:00Z','2026-11-10T00:00:00Z')",
+    )
+      .bind(sales, lineUser)
+      .run();
+    const purge = readFileSync('drizzle/migrations/0041_gmail_customer_only.sql', 'utf8')
+      .split('\n')
+      .filter((line) => /^(INSERT|DELETE)/.test(line))
+      .join(' ');
+    await env.DB.exec(purge);
+    expect((await env.DB.prepare('SELECT id FROM email_messages').all<{ id: string }>()).results.map((r) => r.id)).toEqual(['keep']);
+    expect((await env.DB.prepare('SELECT id FROM email_skipped').all<{ id: string }>()).results.map((r) => r.id)).toEqual(['ad']);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(0);
   });
 });

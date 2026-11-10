@@ -21,6 +21,10 @@ const HTML_LIMIT = 400_000;
 // Backfill: the last 90 days (matches retention), one page per sync run, without LINE alerts.
 const BACKFILL_QUERY = `newer_than:${90}d -in:sent -in:drafts -in:trash -in:chats`;
 const BACKFILL_PAGE = 25;
+// Website contact-form mail is sent from our own domain (sometimes to our own address), so it can
+// carry labels the normal sweep query excludes. Look for it explicitly.
+const INQUIRY_QUERY = 'newer_than:2d subject:"COREVITY inquiry" -in:trash -in:drafts';
+const SKIPPED_RETENTION_DAYS = 7;
 const SENT_SWEEP_QUERY = 'in:sent newer_than:2d';
 const SENT_BACKFILL_QUERY = 'in:sent newer_than:90d';
 // Outbound calls per sync run (token, Gmail API, AI). Workers cap subrequests per invocation and
@@ -283,9 +287,19 @@ export function contentClassification(subject: string, body: string) {
     return 'Automated notification';
   return null;
 }
+export const WEBSITE_REASON = 'Website contact form';
+// The website form sends "COREVITY inquiry: <interest>" from our own sender, with the visitor in
+// Reply-To and "Name: ..." in the body. Those are the most valuable emails, so they are always kept.
+export function websiteInquiry(message: Pick<ParsedMessage, 'subject' | 'body' | 'headers'>) {
+  if (!/^\s*COREVITY inquiry:/i.test(message.subject)) return null;
+  const reply = parseAddress(message.headers.get('reply-to') ?? '');
+  const name = message.body.match(/^Name:\s*(.+)$/m)?.[1]?.trim() ?? reply.name;
+  return { email: reply.email, name: name.slice(0, 200) };
+}
 export function ruleClassification(message: ParsedMessage, mailbox: string) {
   const [local = '', domain = ''] = message.fromEmail.split('@');
   const ownDomain = mailbox.split('@')[1] ?? '';
+  if (websiteInquiry(message)) return { customer: true, reason: WEBSITE_REASON };
   if (!message.fromEmail) return { customer: false, reason: 'No sender address' };
   if (domain === ownDomain) return { customer: false, reason: 'Sent from our own domain' };
   if (AUTOMATED_LOCAL.test(local)) return { customer: false, reason: 'Automated sender address' };
@@ -416,6 +430,8 @@ export type SyncResult = {
   backfillDone?: boolean;
   error?: string;
   queued?: number;
+  dropped?: number;
+  reasons?: Record<string, number>;
   apiCalls?: number;
   mode?: 'first' | 'history' | 'sweep';
 };
@@ -438,13 +454,25 @@ async function enqueueNotifications(env: Bindings, messageId: string, now: strin
   return recipients.length;
 }
 
+type Imported = { stored: boolean; queued: number; dropped?: string };
+
 async function importMessage(
   env: Bindings,
   token: string,
   id: string,
   options: { notify: boolean; mailbox: string; classifier: AiClassifier | null; http: Http },
-) {
-  if (await env.DB.prepare('SELECT 1 FROM email_messages WHERE id=?').bind(id).first()) return null;
+): Promise<Imported | null> {
+  if (
+    await env.DB.prepare('SELECT 1 FROM email_messages WHERE id=? UNION ALL SELECT 1 FROM email_skipped WHERE id=? LIMIT 1')
+      .bind(id, id)
+      .first()
+  )
+    return null;
+  // Not a customer (or not mail we keep): remember the id only, so it is not fetched again.
+  const skip = async (reason: string): Promise<Imported> => {
+    await env.DB.prepare('INSERT OR IGNORE INTO email_skipped(id,seen_at) VALUES(?,?)').bind(id, new Date().toISOString()).run();
+    return { stored: false, queued: 0, dropped: reason };
+  };
   let raw: GmailMessage;
   try {
     raw = await gmailGet<GmailMessage>(token, `messages/${encodeURIComponent(id)}?format=full`, options.http);
@@ -454,8 +482,16 @@ async function importMessage(
   }
   const labels = raw.labelIds ?? [];
   const inSpam = labels.includes('SPAM');
-  if ((!labels.includes('INBOX') && !inSpam) || labels.some((label) => ['TRASH', 'DRAFT', 'SENT'].includes(label))) return null;
+  const inInbox = labels.includes('INBOX');
+  // Mail we sent ourselves to our own address carries both INBOX and SENT: keep judging it.
+  const blocked = labels.find((label) => label === 'TRASH' || label === 'DRAFT') ?? (labels.includes('SENT') && !inInbox ? 'SENT' : !inInbox && !inSpam ? 'NOT_IN_INBOX' : '');
+  if (blocked) return skip(`label:${blocked}`);
   const message = parseMessage(raw);
+  const inquiry = websiteInquiry(message);
+  if (inquiry?.email) {
+    message.fromEmail = inquiry.email;
+    if (inquiry.name) message.fromName = inquiry.name;
+  }
   const known = message.fromEmail
     ? await env.DB.prepare("SELECT id FROM customers WHERE lower(trim(email))=? AND email<>'' LIMIT 1")
         .bind(message.fromEmail)
@@ -464,27 +500,28 @@ async function importMessage(
   let verdict = ruleClassification(message, options.mailbox);
   if (known && message.fromEmail.split('@')[1] !== options.mailbox.split('@')[1]) {
     verdict = { customer: true, reason: 'Known customer' };
-  } else if (verdict.customer && options.classifier) {
+  } else if (verdict.customer && verdict.reason !== WEBSITE_REASON && options.classifier) {
     verdict = (await options.classifier(message)) ?? verdict;
   }
+  if (!verdict.customer) return skip(verdict.reason);
   const now = new Date().toISOString();
   const inserted = await env.DB.prepare(
     `INSERT OR IGNORE INTO email_messages(id,thread_id,from_name,from_email,to_text,subject,snippet,body_text,body_html,received_at,classification,reason,customer_id,in_spam,notified,created_at)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)`,
+     VALUES(?,?,?,?,?,?,?,?,?,?,'CUSTOMER',?,?,?,0,?)`,
   )
     .bind(
       message.id, message.threadId, message.fromName, message.fromEmail, message.to, message.subject,
-      message.snippet, message.body, message.html, message.receivedAt, verdict.customer ? 'CUSTOMER' : 'NOT_CUSTOMER',
+      message.snippet, message.body, message.html, message.receivedAt,
       verdict.reason, known?.id ?? null, Number(inSpam), now,
     )
     .run();
   if (!inserted.meta.changes) return null;
   let queued = 0;
-  if (verdict.customer && options.notify) {
+  if (options.notify) {
     queued = await enqueueNotifications(env, message.id, now);
     if (queued) await env.DB.prepare('UPDATE email_messages SET notified=1 WHERE id=?').bind(message.id).run();
   }
-  return { customer: verdict.customer, queued };
+  return { stored: true, queued };
 }
 
 type SyncOptions = { http?: Http; classifier?: AiClassifier | null; time?: number };
@@ -511,6 +548,20 @@ async function runGmailSync(env: Bindings, options: SyncOptions): Promise<SyncRe
   let imported = 0;
   let customers = 0;
   let queued = 0;
+  let dropped = 0;
+  const reasons: Record<string, number> = {};
+  const tally = (result: Imported | null) => {
+    if (!result) return;
+    if (result.stored) {
+      imported++;
+      customers++;
+      queued += result.queued;
+    } else {
+      dropped++;
+      const reason = result.dropped ?? 'unknown';
+      reasons[reason] = (reasons[reason] ?? 0) + 1;
+    }
+  };
   try {
     const refresh = await decryptRefreshToken(env, connection.email, {
       ciphertext: connection.token_ciphertext,
@@ -574,20 +625,16 @@ async function runGmailSync(env: Bindings, options: SyncOptions): Promise<SyncRe
     let swept = false;
     if (!historyId) {
       const profile = await gmailGet<{ historyId?: string }>(token, 'profile', http);
-      ids = await list(connection.history_id ? SWEEP_QUERY : FIRST_SYNC_QUERY);
+      ids = [...new Set([...(await list(connection.history_id ? SWEEP_QUERY : FIRST_SYNC_QUERY)), ...(await list(INQUIRY_QUERY))])];
       historyId = profile.historyId ?? null;
       swept = true;
     } else if (!connection.last_sweep_at || Date.parse(connection.last_sweep_at) <= time - SWEEP_INTERVAL_MS) {
-      ids = [...new Set([...ids, ...(await list(SWEEP_QUERY))])];
+      ids = [...new Set([...ids, ...(await list(SWEEP_QUERY)), ...(await list(INQUIRY_QUERY))])];
       swept = true;
     }
     for (const id of ids.slice(-MAX_MESSAGES_PER_SYNC * 2)) {
       if (budgetLeft() < 3) break; // the hourly sweep / next run picks up the rest
-      const result = await importMessage(env, token, id, { notify, mailbox: connection.email, classifier, http });
-      if (!result) continue;
-      imported++;
-      queued += result.queued;
-      if (result.customer) customers++;
+      tally(await importMessage(env, token, id, { notify, mailbox: connection.email, classifier, http }));
     }
     // Backfill older mail a page at a time (no alerts) until the 90-day window is complete.
     let backfillToken = connection.backfill_page_token;
@@ -604,11 +651,7 @@ async function runGmailSync(env: Bindings, options: SyncOptions): Promise<SyncRe
           complete = false; // finish this page next run; already-imported ids are skipped without a fetch
           break;
         }
-        const result = await importMessage(env, token, message.id, { notify: false, mailbox: connection.email, classifier, http });
-        if (!result) continue;
-        imported++;
-        queued += result.queued;
-        if (result.customer) customers++;
+        tally(await importMessage(env, token, message.id, { notify: false, mailbox: connection.email, classifier, http }));
       }
       if (complete) {
         backfillToken = page.nextPageToken ?? null;
@@ -653,6 +696,8 @@ async function runGmailSync(env: Bindings, options: SyncOptions): Promise<SyncRe
       imported,
       customers,
       queued,
+      dropped,
+      reasons,
       apiCalls: calls,
       mode: connection.history_id ? (swept ? 'sweep' : 'history') : 'first',
       backfillDone: Boolean(backfillDone),
@@ -668,7 +713,7 @@ async function runGmailSync(env: Bindings, options: SyncOptions): Promise<SyncRe
     )
       .bind(reconnect ? 'RECONNECT_REQUIRED' : 'CONNECTED', code, now)
       .run();
-    return { status: reconnect ? 'reconnect' : 'error', imported, customers, queued, apiCalls: calls, error: code };
+    return { status: reconnect ? 'reconnect' : 'error', imported, customers, queued, dropped, reasons, apiCalls: calls, error: code };
   }
 }
 
@@ -684,14 +729,15 @@ async function recordSyncRun(env: Bindings, run: { trigger: 'cron' | 'manual'; s
     imported: result.imported,
     customers: result.customers,
     alertsQueued: result.queued ?? 0,
+    dropped: result.dropped ?? 0,
     apiCalls: result.apiCalls ?? 0,
     durationMs: run.durationMs,
     error: result.error ?? null,
   };
-  console.log(JSON.stringify({ event: 'gmail_sync', ...entry }));
+  console.log(JSON.stringify({ event: 'gmail_sync', ...entry, reasons: result.reasons ?? {} }));
   try {
     await env.DB.prepare(
-      'INSERT INTO gmail_sync_log(id,started_at,duration_ms,trigger,status,mode,imported,customers,alerts_queued,api_calls,error) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO gmail_sync_log(id,started_at,duration_ms,trigger,status,mode,imported,customers,alerts_queued,dropped,api_calls,error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
     )
       .bind(
         crypto.randomUUID(),
@@ -703,6 +749,7 @@ async function recordSyncRun(env: Bindings, run: { trigger: 'cron' | 'manual'; s
         entry.imported,
         entry.customers,
         entry.alertsQueued,
+        entry.dropped,
         entry.apiCalls,
         entry.error,
       )
@@ -740,15 +787,23 @@ export async function reclassifyStoredEmails(env: Bindings) {
     .bind(LEGACY_PERSONAL_REASON)
     .all<{ id: string; subject: string; body_text: string }>();
   if (!results.length) return 0;
+  const time = new Date().toISOString();
   await env.DB.batch(
-    results.map((row) => {
+    results.flatMap((row) => {
       const automated = contentClassification(row.subject, row.body_text);
-      return env.DB.prepare('UPDATE email_messages SET classification=?,reason=? WHERE id=? AND reason=?').bind(
-        automated ? 'NOT_CUSTOMER' : 'CUSTOMER',
-        automated ?? PERSONAL_REASON,
-        row.id,
-        LEGACY_PERSONAL_REASON,
-      );
+      return automated
+        ? [
+            env.DB.prepare('INSERT OR IGNORE INTO email_skipped(id,seen_at) VALUES(?,?)').bind(row.id, time),
+            env.DB.prepare('DELETE FROM email_messages WHERE id=? AND reason=?').bind(row.id, LEGACY_PERSONAL_REASON),
+          ]
+        : [
+            env.DB.prepare('UPDATE email_messages SET classification=?,reason=? WHERE id=? AND reason=?').bind(
+              'CUSTOMER',
+              PERSONAL_REASON,
+              row.id,
+              LEGACY_PERSONAL_REASON,
+            ),
+          ];
     }),
   );
   return results.length;
@@ -938,6 +993,7 @@ export async function cleanupGmail(env: Bindings, time = Date.now()) {
     env.DB.prepare('DELETE FROM email_notifications WHERE message_id IN (SELECT id FROM email_messages WHERE received_at<?)').bind(cutoff),
     env.DB.prepare('DELETE FROM email_messages WHERE received_at<?').bind(cutoff),
     env.DB.prepare('DELETE FROM gmail_oauth_states WHERE expires_at<?').bind(new Date(time).toISOString()),
+    env.DB.prepare('DELETE FROM email_skipped WHERE seen_at<?').bind(new Date(time - SKIPPED_RETENTION_DAYS * 86_400_000).toISOString()),
     env.DB.prepare('DELETE FROM gmail_sync_log WHERE started_at<?').bind(new Date(time - 14 * 86_400_000).toISOString()),
   ]);
 }

@@ -729,7 +729,7 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/catalogs/${catalog.id}`,'DELETE')).status).toBe(200);
     expect(await bucket.get(lastKey)).toBeNull();
   });
-  it('serves the email inbox to members and lets them reclassify messages', async () => {
+  it('serves the customer-only email inbox to members and lets them remove messages', async () => {
     const status = await json<{ configured: boolean; connected: boolean; isAdmin: boolean; missing: string[] }>(await request('/email/status'));
     expect(status).toMatchObject({ configured: false, connected: false, isAdmin: true });
     expect(status.missing).toContain('GOOGLE_CLIENT_ID');
@@ -740,33 +740,35 @@ describe('D1-backed inventory and sales', () => {
     await database.prepare(
       `INSERT INTO email_messages(id,thread_id,from_name,from_email,subject,snippet,body_text,received_at,classification,reason,created_at) VALUES
        ('e1','t1','Buyer','buyer@example.org','Need treadmills','Price for 4 units','Price for 4 units please','2026-11-10T02:00:00Z','CUSTOMER','Personal','2026-11-10T02:00:00Z'),
-       ('e2','t2','','news@shop.example','Weekly deals','Sale','Sale','2026-11-10T01:00:00Z','NOT_CUSTOMER','Mailing list','2026-11-10T01:00:00Z')`,
+       ('e2','t2','','lead@shop.example','Weekly delivery','Sale','Sale','2026-11-10T01:00:00Z','CUSTOMER','Personal','2026-11-10T01:00:00Z')`,
     ).run();
     await database.prepare(
-      "INSERT INTO email_messages(id,thread_id,from_email,subject,received_at,classification,in_spam,body_html,created_at) VALUES('e3','t3','x@y.example','Spammy','2026-11-09T01:00:00Z','NOT_CUSTOMER',1,'','2026-11-09T01:00:00Z')",
+      "INSERT INTO email_messages(id,thread_id,from_email,subject,received_at,classification,in_spam,body_html,created_at) VALUES('e3','t3','x@y.example','Spammy','2026-11-09T01:00:00Z','CUSTOMER',1,'','2026-11-09T01:00:00Z')",
     ).run();
-    const inbox = await json<{ messages: { id: string }[]; total: number; customers: number; inbox: number; other: number; junk: number }>(await request('/email/messages'));
-    expect(inbox.messages.map((m) => m.id)).toEqual(['e1']);
-    expect(inbox).toMatchObject({ total: 3, customers: 1, inbox: 1, other: 1, junk: 1 });
-    const other = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=other'));
-    expect(other.messages.map((m) => m.id)).toEqual(['e2']);
-    const customers = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=customer'));
-    expect(customers.messages.map((m) => m.id)).toEqual(['e1']);
+    const inbox = await json<{ messages: { id: string }[]; total: number; inbox: number; junk: number }>(await request('/email/messages'));
+    expect(inbox.messages.map((m) => m.id)).toEqual(['e1', 'e2']);
+    expect(inbox).toMatchObject({ total: 3, inbox: 2, junk: 1 });
+    // The old "Ads & alerts" view no longer exists: unknown views fall back to the inbox.
+    const legacy = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=other'));
+    expect(legacy.messages.map((m) => m.id)).toEqual(['e1', 'e2']);
     const junk = await json<{ messages: { id: string; inSpam: number }[] }>(await request('/email/messages?view=junk'));
     expect(junk.messages).toEqual([expect.objectContaining({ id: 'e3', inSpam: 1 })]);
-    const all = await json<{ messages: { id: string }[] }>(await request('/email/messages?view=all&q=weekly'));
-    expect(all.messages.map((m) => m.id)).toEqual(['e2']);
-    const wildcard = await json<{ messages: unknown[] }>(await request('/email/messages?view=all&q=%25'));
+    const found = await json<{ messages: { id: string }[] }>(await request('/email/messages?q=weekly'));
+    expect(found.messages.map((m) => m.id)).toEqual(['e2']);
+    const wildcard = await json<{ messages: unknown[] }>(await request('/email/messages?q=%25'));
     expect(wildcard.messages).toHaveLength(0);
     expect((await json<{ bodyText: string }>(await request('/email/messages/e1'))).bodyText).toBe('Price for 4 units please');
-    expect((await request('/email/messages/e2', 'PATCH', { classification: 'CUSTOMER' })).status).toBe(200);
-    expect((await json<{ customers: number }>(await request('/email/messages'))).customers).toBe(2);
+    expect((await request('/email/messages/e2', 'DELETE')).status).toBe(200);
+    expect((await request('/email/messages/e2', 'DELETE')).status).toBe(404);
+    expect((await json<{ inbox: number }>(await request('/email/messages'))).inbox).toBe(1);
+    expect(await database.prepare("SELECT COUNT(*) AS n FROM email_skipped WHERE id='e2'").first('n')).toBe(1);
     expect((await json<{ bodyHtml: string | null }>(await request('/email/messages/e3'))).bodyHtml).toBe('');
     expect((await request('/email/messages/missing')).status).toBe(404);
     expect((await request('/email/threads/unknown-thread')).status).toBe(404);
     expect((await request('/email/threads/t1')).status).toBe(502);
     expect((await request('/email/settings', 'PATCH', { aiClassify: true })).status).toBe(409);
     await database.prepare('DELETE FROM email_messages').run();
+    await database.prepare('DELETE FROM email_skipped').run();
   });
   it('allows website chat preflight only from the approved origin', async () => {
     const database = await mf.getD1Database('DB');

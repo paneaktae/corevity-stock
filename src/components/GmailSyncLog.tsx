@@ -11,6 +11,7 @@ type SyncRun = {
   imported: number;
   customers: number;
   alertsQueued: number;
+  dropped: number;
   error: string | null;
 };
 type SyncLog = {
@@ -79,8 +80,8 @@ export function GmailSyncLog() {
                       <td>{t(run.trigger === 'manual' ? 'Manual' : 'Automatic')}</td>
                       <td>{run.status === 'ok' ? t('OK') : `${t('Problem')}: ${run.error ?? run.status}`}</td>
                       <td>
-                        {run.imported} {t('new emails')} · {run.customers} {t('possible customers')} · {run.alertsQueued}{' '}
-                        {t('LINE alerts queued')}
+                        {run.imported} {t('new emails')} · {run.alertsQueued} {t('LINE alerts queued')} · {run.dropped}{' '}
+                        {t('ads/notifications skipped')}
                       </td>
                     </tr>
                   ))}

@@ -75,6 +75,7 @@ export function GmailIntegrationSettings() {
       <ul className="gmail-safety">
         <li>{t('Checks Inbox and Junk/Spam automatically every 5 minutes.')}</li>
         <li>{t('Re-checks the last 2 days every hour in case an email was missed.')}</li>
+        <li>{t('Only emails that look like customers are kept. Ads, newsletters and notifications are not saved (they stay in Gmail).')}</li>
         <li>{t('If the mailbox cannot be read for 30 minutes, the administrator gets a LINE alert.')}</li>
       </ul>
       {result && <div className={result[1] ? 'success' : 'error'} role="status">{t(result[0])}</div>}

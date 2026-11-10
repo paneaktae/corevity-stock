@@ -32,7 +32,7 @@ type EmailRow = {
   repliedAt: string | null;
 };
 type EmailDetail = EmailRow & { toText: string; bodyText: string; bodyHtml: string | null };
-type EmailList = { messages: EmailRow[]; total: number; customers: number; inbox: number; other: number; junk: number };
+type EmailList = { messages: EmailRow[]; total: number; inbox: number; junk: number };
 // Inbox = real emails from people; ads, newsletters and system notifications are kept, but apart.
 type ThreadMessage = {
   id: string;
@@ -46,10 +46,9 @@ type ThreadMessage = {
   bodyText: string;
   bodyHtml: string;
 };
-type View = 'inbox' | 'other' | 'junk';
-const views: [View, string, keyof Pick<EmailList, 'inbox' | 'other' | 'junk'>][] = [
+type View = 'inbox' | 'junk';
+const views: [View, string, keyof Pick<EmailList, 'inbox' | 'junk'>][] = [
   ['inbox', 'Inbox', 'inbox'],
-  ['other', 'Ads & alerts', 'other'],
   ['junk', 'Junk', 'junk'],
 ];
 // Email HTML is shown in a sandboxed frame: no scripts, no same-origin access, links open in a new
@@ -159,13 +158,12 @@ export function InboxPage() {
       setSyncing(false);
     }
   }
-  async function reclassify(id: string, classification: EmailRow['classification']) {
+  // Only customer mail is kept in the CRM, so "not a customer" removes this copy (it stays in Gmail).
+  async function remove(id: string) {
+    if (!window.confirm(t('Remove this email from the CRM? It stays in Gmail.'))) return;
     try {
-      await api(`/email/messages/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ classification }),
-      });
-      setDetail((current) => (current && current.id === id ? { ...current, classification } : current));
+      await api(`/email/messages/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      select(null);
       reload();
     } catch (e) {
       setMessage((e as Error).message);
@@ -254,7 +252,7 @@ export function InboxPage() {
             {!data ? (
               <Loading />
             ) : data.messages.length === 0 ? (
-              <p className="muted email-empty">{t(view === 'inbox' ? 'No emails from people yet.' : view === 'junk' ? 'No junk emails.' : 'No ads or alerts.')}</p>
+              <p className="muted email-empty">{t(view === 'inbox' ? 'No emails from people yet.' : 'No junk emails.')}</p>
             ) : (
               <ul className="email-list">
                 {data.messages.map((row) => (
@@ -319,15 +317,9 @@ export function InboxPage() {
                       {t('Add as customer')}
                     </Link>
                   )}
-                  {detail.classification === 'CUSTOMER' ? (
-                    <button type="button" onClick={() => void reclassify(detail.id, 'NOT_CUSTOMER')}>
-                      {t(detail.inSpam ? 'Not a customer' : 'Move to Ads & alerts')}
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => void reclassify(detail.id, 'CUSTOMER')}>
-                      {t(detail.inSpam ? 'Mark as customer' : 'Move to Inbox')}
-                    </button>
-                  )}
+                  <button type="button" onClick={() => void remove(detail.id)}>
+                    {t('Not a customer')}
+                  </button>
                 </div>
                 {Boolean(detail.inSpam) && (
                   <div className="email-junk-note" role="note">
