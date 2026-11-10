@@ -608,7 +608,7 @@ describe('D1-backed inventory and sales', () => {
     expect((await request(`/products/${item.id}/publish`, 'POST', {showPrice: false})).status).toBe(200);
     const createCatalog = async (title: string) => json<{id: string; slug: string}>(await request('/catalogs','POST',{
       title, description: 'Website description', customerId: customerRecord.id,
-      assignedSalespersonEmail: 'tester@example.test', showPrices: false, showSold: false,
+      assignedSalespersonEmail: 'tester@example.test', showSold: false,
       expiresAt: '2099-12-31T23:59:59.999Z', items: [{productId: item.id}],
     }));
     const first = await createCatalog('Website first');
@@ -646,6 +646,42 @@ describe('D1-backed inventory and sales', () => {
     const expired = await createCatalog('Website expired');
     await database.prepare('UPDATE catalogs SET expires_at=? WHERE id=?').bind('2020-01-01T00:00:00.000Z',expired.id).run();
     expect((await request(`/catalogs/${expired.id}/publish-to-web`,'POST')).status).toBe(409);
+  });
+
+  it('controls where Catalog prices are shown (private link, website, both, none)', async () => {
+    const item = await product('Price visibility');
+    expect((await request(`/products/${item.id}/publish`, 'POST', {showPrice: false})).status).toBe(200);
+    const database = await mf.getD1Database('DB');
+    const bucket = await mf.getR2Bucket('PRODUCT_IMAGES');
+    const ctx = {waitUntil: (promise: Promise<unknown>) => void promise} as ExecutionContext;
+    const fetchPublic = (path: string) => publicCatalogWorker.fetch(
+      new Request(`http://catalog.test${path}`), {DB: database, PRODUCT_IMAGES: bucket}, ctx,
+    );
+    const make = async (flags: {showPricePrivate?: boolean; showPriceWeb?: boolean}) => {
+      const created = await json<{id: string; slug: string}>(await request('/catalogs', 'POST', {
+        title: 'Price flags', assignedSalespersonEmail: 'tester@example.test',
+        items: [{productId: item.id, displayPrice: 98765}], ...flags,
+      }));
+      expect((await request(`/catalogs/${created.id}/publish-to-web`, 'POST')).status).toBe(200);
+      return created;
+    };
+    const seen = async (catalog: {slug: string}) => {
+      const page = await (await fetchPublic(`/s/${catalog.slug}`)).text();
+      const web = await (await fetchPublic(`/api/public/storefront/catalogs/${catalog.slug}`)).json() as {
+        catalog: {showPrices: boolean}; products: Array<{price: number | null}>;
+      };
+      return {privatePrice: page.includes('98,765'), webPrice: web.products[0].price, webFlag: web.catalog.showPrices};
+    };
+    expect(await seen(await make({}))).toEqual({privatePrice: true, webPrice: null, webFlag: false});
+    expect(await seen(await make({showPricePrivate: false}))).toEqual({privatePrice: false, webPrice: null, webFlag: false});
+    expect(await seen(await make({showPriceWeb: true}))).toEqual({privatePrice: true, webPrice: 98765, webFlag: true});
+    expect(await seen(await make({showPricePrivate: false, showPriceWeb: true}))).toEqual({privatePrice: false, webPrice: 98765, webFlag: true});
+    const both = await make({showPriceWeb: true});
+    const detail = await json<{catalog: {showPricePrivate: number; showPriceWeb: number}}>(await request(`/catalogs/${both.id}`));
+    expect([detail.catalog.showPricePrivate, detail.catalog.showPriceWeb]).toEqual([1, 1]);
+    const duplicate = await json<{id: string}>(await request(`/catalogs/${both.id}/duplicate`, 'POST'));
+    const copy = await json<{catalog: {showPricePrivate: number; showPriceWeb: number}}>(await request(`/catalogs/${duplicate.id}`));
+    expect([copy.catalog.showPricePrivate, copy.catalog.showPriceWeb]).toEqual([1, 1]);
   });
 
   it('orders website Catalogs manually and deletes Catalogs permanently', async () => {
@@ -831,7 +867,7 @@ describe('D1-backed inventory and sales', () => {
       description: 'Selected products for a customer',
       customerId: customerRecord.id,
       assignedSalespersonEmail: 'tester@example.test',
-      showPrices: true,
+      showPricePrivate: true,
       showSold: false,
       expiresAt: '2099-12-31T23:59:59.999Z',
       items: [
@@ -865,7 +901,7 @@ describe('D1-backed inventory and sales', () => {
       title: 'Snapshot collection revised',
       description: 'Selected products for a customer',
       customerId: customerRecord.id,
-      showPrices: true,
+      showPricePrivate: true,
       showSold: false,
       expiresAt: '2099-12-31T23:59:59.999Z',
       items: [{ productId: item.id, description: '' }],

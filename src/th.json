@@ -1101,5 +1101,9 @@
   "Only emails that look like customers are kept. Ads, newsletters and notifications are not saved (they stay in Gmail).": "เก็บเฉพาะอีเมลที่น่าจะเป็นลูกค้า โฆษณา จดหมายข่าว และอีเมลแจ้งเตือนจะไม่ถูกบันทึก (ยังอยู่ใน Gmail)",
   "Website contact form": "ฟอร์มติดต่อบนเว็บไซต์",
   "unread emails": "อีเมลที่ยังไม่ได้อ่าน",
-  "Unread": "ยังไม่ได้อ่าน"
+  "Unread": "ยังไม่ได้อ่าน",
+  "Show product prices": "แสดงราคาสินค้า",
+  "On the private share link": "บนลิงก์แชร์ส่วนตัว (private)",
+  "On the website": "บนเว็บไซต์",
+  "Leave both unchecked to hide prices everywhere.": "ไม่ติ๊กทั้งสองช่อง = ไม่แสดงราคาเลย"
 }

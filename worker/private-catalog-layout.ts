@@ -40,9 +40,9 @@ function manualCopy(value: string) {
 }
 
 export function privateCatalogProduct(item: PrivateCatalogProduct, options: {
-  slug: string; language: string; detail?: boolean;
+  slug: string; language: string; detail?: boolean; showPrice?: boolean;
 }) {
-  const { slug, language, detail } = options;
+  const { slug, language, detail, showPrice = true } = options;
   const href = `/s/${encodeURIComponent(slug)}/p/${encodeURIComponent(item.product_slug)}?lang=${language}`;
   const photo = item.image_key_snapshot
     ? `/media/catalogs/${encodeURIComponent(slug)}/item/${encodeURIComponent(item.id)}` : '';
@@ -55,7 +55,7 @@ export function privateCatalogProduct(item: PrivateCatalogProduct, options: {
   const name = item.model_snapshot || item.product_name_snapshot;
   const heading = detail ? 'h1' : 'h2';
   const description = privateCatalogDescription(item, language);
-  const price = typeof item.display_price === 'number' && Number.isFinite(item.display_price)
+  const price = !showPrice ? '' : typeof item.display_price === 'number' && Number.isFinite(item.display_price)
     ? `<div class="editorial-price"><span>THB</span> <strong>${new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(item.display_price)}</strong> <small>${local(language, '/ unit', '/ เครื่อง')}</small></div>`
     : `<p class="editorial-price-request">${local(language, 'Contact us for pricing', 'ติดต่อสอบถามราคา')}</p>`;
   const photoContent = photo

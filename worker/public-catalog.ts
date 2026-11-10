@@ -44,6 +44,8 @@ type CatalogRow = {
   slug: string;
   status: string;
   show_sold: number;
+  show_price_private: number;
+  show_price_web: number;
   expires_at: string | null;
   created_by: string;
   assigned_salesperson_email: string;
@@ -290,7 +292,7 @@ async function getProduct(
 async function getCatalog(database: D1Database, slug: string) {
   const catalog = await database
     .prepare(
-      'SELECT id,title,description,slug,status,show_sold,expires_at,created_by,assigned_salesperson_email,publish_to_web,cover_image_key,cover_image_mime FROM catalogs WHERE slug=?',
+      'SELECT id,title,description,slug,status,show_sold,show_price_private,show_price_web,expires_at,created_by,assigned_salesperson_email,publish_to_web,cover_image_key,cover_image_mime FROM catalogs WHERE slug=?',
     )
     .bind(slug)
     .first<CatalogRow>();
@@ -328,7 +330,7 @@ async function webCatalogResponse(c: PublicContext, catalog: CatalogRow) {
   const items = await catalogItems(c.env.DB, catalog);
   return {
     slug: catalog.slug,
-    catalog: { title: catalog.title, description: catalog.description, showPrices: false, expiresAt: catalog.expires_at },
+    catalog: { title: catalog.title, description: catalog.description, showPrices: Boolean(catalog.show_price_web), expiresAt: catalog.expires_at },
     products: items.map((item) => ({
       itemId: item.id,
       slug: `${item.product_slug}-catalog-item-${item.id}`,
@@ -340,7 +342,7 @@ async function webCatalogResponse(c: PublicContext, catalog: CatalogRow) {
       availability: item.status,
       description: item.description_snapshot,
       imageUrl: item.image_key_snapshot ? `/media/catalogs/${encodeURIComponent(catalog.slug)}/item/${encodeURIComponent(item.id)}?v=${encodeURIComponent(item.image_revision ?? item.id)}` : null,
-      price: null,
+      price: catalog.show_price_web && typeof item.display_price === 'number' ? item.display_price : null,
     })),
   };
 }
@@ -608,7 +610,7 @@ app.get('/s/:slug/p/:productSlug', async (c) => {
     ? `/media/catalogs/${encodeURIComponent(slug)}/item/${encodeURIComponent(item.id)}`
     : '';
   const description = privateCatalogDescription(item, language);
-  const content = `<a class="editorial-back" href="/s/${encodeURIComponent(slug)}?lang=${language}">← ${htmlEscape(text(language, 'Back to collection', 'กลับไปแคตตาล็อกนี้'))}</a>${privateCatalogProduct(item, { slug, language, detail: true })}<section class="editorial-contact"><p>${htmlEscape(text(language, 'Message Corevity for actual-unit photos and delivery details', 'ติดต่อ Corevity เพื่อขอภาพสินค้าจริงและรายละเอียดการจัดส่ง'))}</p>${contactLinks(companyInfo, 'catalog', slug, language, item.product_slug)}</section>`;
+  const content = `<a class="editorial-back" href="/s/${encodeURIComponent(slug)}?lang=${language}">← ${htmlEscape(text(language, 'Back to collection', 'กลับไปแคตตาล็อกนี้'))}</a>${privateCatalogProduct(item, { slug, language, detail: true, showPrice: Boolean(catalog.show_price_private) })}<section class="editorial-contact"><p>${htmlEscape(text(language, 'Message Corevity for actual-unit photos and delivery details', 'ติดต่อ Corevity เพื่อขอภาพสินค้าจริงและรายละเอียดการจัดส่ง'))}</p>${contactLinks(companyInfo, 'catalog', slug, language, item.product_slug)}</section>`;
   return pageHtml({
     request: c.req.raw,
     env: c.env,
@@ -647,7 +649,7 @@ app.get('/s/:slug', async (c) => {
   const companyInfo = await company(c.env.DB);
   await logEvent(c.env.DB, 'CATALOG', slug, 'PAGE_VIEW');
   const base = baseUrl(c.req.raw, c.env);
-  const rows = items.map((item) => privateCatalogProduct(item, { slug, language })).join('');
+  const rows = items.map((item) => privateCatalogProduct(item, { slug, language, showPrice: Boolean(catalog.show_price_private) })).join('');
   const companyName =
     language === 'th'
       ? companyInfo?.company_name_th ||
@@ -656,7 +658,7 @@ app.get('/s/:slug', async (c) => {
       : companyInfo?.company_name_en ||
         companyInfo?.company_name_th ||
         'Corevity';
-  const content = `<section class="editorial-intro"><h1>${htmlEscape(catalog.title)}</h1>${catalog.description ? `<p>${htmlEscape(catalog.description)}</p>` : ''}</section>${items.length ? `${privateCatalogEbookToolbar(language)}${privateCatalogEbookPaperStart(catalog.title, catalog.description, language)}<section class="editorial-products" aria-label="${attr(text(language, 'Equipment', 'รายการสินค้า'))}">${rows}</section>${privateCatalogEbookPaperEnd(language)}` : `<div class="empty">${htmlEscape(text(language, 'No published products are currently available in this collection.', 'ไม่มีสินค้าที่เผยแพร่ในแคตตาล็อกนี้ในขณะนี้'))}</div>`}<section class="editorial-contact"><p>${htmlEscape(text(language, 'Message Corevity for actual-unit photos and delivery details', 'ติดต่อ Corevity เพื่อขอภาพสินค้าจริงและรายละเอียดการจัดส่ง'))}</p><small>${htmlEscape(text(language, 'Confirm unit condition, availability and configuration with our team.', 'กรุณายืนยันสภาพสินค้า สถานะ และอุปกรณ์ที่มาพร้อมเครื่องกับทีมงาน'))}</small><small>${htmlEscape(text(language, 'All prices are THB per unit.', 'ราคาทั้งหมดเป็นสกุลเงินบาทต่อเครื่อง'))}</small>${contactLinks(companyInfo, 'catalog', slug, language)}</section>`;
+  const content = `<section class="editorial-intro"><h1>${htmlEscape(catalog.title)}</h1>${catalog.description ? `<p>${htmlEscape(catalog.description)}</p>` : ''}</section>${items.length ? `${privateCatalogEbookToolbar(language)}${privateCatalogEbookPaperStart(catalog.title, catalog.description, language)}<section class="editorial-products" aria-label="${attr(text(language, 'Equipment', 'รายการสินค้า'))}">${rows}</section>${privateCatalogEbookPaperEnd(language, Boolean(catalog.show_price_private))}` : `<div class="empty">${htmlEscape(text(language, 'No published products are currently available in this collection.', 'ไม่มีสินค้าที่เผยแพร่ในแคตตาล็อกนี้ในขณะนี้'))}</div>`}<section class="editorial-contact"><p>${htmlEscape(text(language, 'Message Corevity for actual-unit photos and delivery details', 'ติดต่อ Corevity เพื่อขอภาพสินค้าจริงและรายละเอียดการจัดส่ง'))}</p><small>${htmlEscape(text(language, 'Confirm unit condition, availability and configuration with our team.', 'กรุณายืนยันสภาพสินค้า สถานะ และอุปกรณ์ที่มาพร้อมเครื่องกับทีมงาน'))}</small>${catalog.show_price_private ? `<small>${htmlEscape(text(language, 'All prices are THB per unit.', 'ราคาทั้งหมดเป็นสกุลเงินบาทต่อเครื่อง'))}</small>` : ''}${contactLinks(companyInfo, 'catalog', slug, language)}</section>`;
   const featured = catalog.cover_image_key
     ? `${base}/media/catalogs/${encodeURIComponent(slug)}/cover?v=${encodeURIComponent(catalog.cover_image_key.slice(15))}`
     : items[0]?.image_key_snapshot

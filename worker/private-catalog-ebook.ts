@@ -70,8 +70,8 @@ const escapeBookText = (value: string) => value.replace(/[&<>"']/g, (character) 
 export function privateCatalogEbookPaperStart(title: string, description: string, language: string) {
   return `<div class="ebook-stage"><div class="ebook-page-frame"><section class="ebook-paper" aria-label="${language === 'th' ? 'หน้ากระดาษ Catalog' : 'Catalog page'}"><header class="ebook-paper-header"><div class="ebook-paper-wordmark">COR<span>E</span>VITY<small>USED GYM EQUIPMENT</small></div><div class="ebook-paper-heading">EQUIPMENT CATALOGUE<strong>${escapeBookText(title)}</strong></div></header><div class="ebook-paper-title"><h1>${escapeBookText(title)}</h1>${description ? `<p>${escapeBookText(description)}</p>` : ''}</div>`;
 }
-export function privateCatalogEbookPaperEnd(language: string) {
-  return `<footer class="ebook-paper-footer"><div><strong>${language === 'th' ? 'ติดต่อ Corevity เพื่อขอภาพสินค้าจริงและรายละเอียดการจัดส่ง' : 'Message Corevity for actual-unit photos and delivery details'}</strong>${language === 'th' ? 'ราคาสกุลเงินบาทต่อเครื่อง · กรุณายืนยันสถานะสินค้าก่อนสั่งซื้อ' : 'All prices are THB per unit · Contact our team to confirm availability'}</div><output data-book-paper-count></output></footer></section></div></div>`;
+export function privateCatalogEbookPaperEnd(language: string, showPrice = true) {
+  return `<footer class="ebook-paper-footer"><div><strong>${language === 'th' ? 'ติดต่อ Corevity เพื่อขอภาพสินค้าจริงและรายละเอียดการจัดส่ง' : 'Message Corevity for actual-unit photos and delivery details'}</strong>${language === 'th' ? (showPrice ? 'ราคาสกุลเงินบาทต่อเครื่อง · ' : '') + 'กรุณายืนยันสถานะสินค้าก่อนสั่งซื้อ' : (showPrice ? 'All prices are THB per unit · ' : '') + 'Contact our team to confirm availability'}</div><output data-book-paper-count></output></footer></section></div></div>`;
 }
 
 export const privateCatalogEbookScript = `

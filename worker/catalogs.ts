@@ -36,7 +36,8 @@ const catalogInput = z
     description: z.string().trim().max(5000).default(''),
     customerId: z.string().nullable().default(null),
     assignedSalespersonEmail: z.string().email().optional(),
-    showPrices: z.boolean().default(false),
+    showPricePrivate: z.boolean().default(true),
+    showPriceWeb: z.boolean().default(false),
     showSold: z.boolean().default(false),
     expiresAt: z.string().datetime().nullable().default(null),
     items: z
@@ -191,7 +192,7 @@ function itemStatements(
 catalogsRoutes.get('/catalogs', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT c.id,c.title,c.description,c.slug,c.status,c.customer_id AS customerId,
-      0 AS showPrices,c.show_sold AS showSold,c.expires_at AS expiresAt,
+      c.show_price_private AS showPricePrivate,c.show_price_web AS showPriceWeb,c.show_sold AS showSold,c.expires_at AS expiresAt,
       c.publish_to_web AS publishToWeb,c.published_to_web_at AS publishedToWebAt,c.web_sort_order AS webSortOrder,
       CASE WHEN c.cover_image_key IS NULL THEN NULL ELSE substr(c.cover_image_key,16) END AS coverImageId,
       c.created_by AS createdBy,c.assigned_salesperson_email AS assignedSalespersonEmail,
@@ -240,7 +241,7 @@ catalogsRoutes.get('/catalogs/analytics', async (c) => {
 
 catalogsRoutes.get('/catalogs/:id', async (c) => {
   const catalog = await c.env.DB.prepare(
-    `SELECT catalogs.id,title,description,slug,status,customer_id AS customerId,0 AS showPrices,
+    `SELECT catalogs.id,title,description,slug,status,customer_id AS customerId,show_price_private AS showPricePrivate,show_price_web AS showPriceWeb,
       publish_to_web AS publishToWeb,published_to_web_at AS publishedToWebAt,
       CASE WHEN cover_image_key IS NULL THEN NULL ELSE substr(cover_image_key,16) END AS coverImageId,
       show_sold AS showSold,expires_at AS expiresAt,created_by AS createdBy,
@@ -291,15 +292,16 @@ catalogsRoutes.post('/catalogs', async (c) => {
   const time = stamp();
   const operations = [
     c.env.DB.prepare(
-      `INSERT INTO catalogs(id,title,description,slug,status,customer_id,show_prices,show_sold,expires_at,created_by,assigned_salesperson_email,created_at,updated_at)
-       VALUES(?,?,?,?,'ACTIVE',?,?,?,?,?,?,?,?)`,
+      `INSERT INTO catalogs(id,title,description,slug,status,customer_id,show_prices,show_price_private,show_price_web,show_sold,expires_at,created_by,assigned_salesperson_email,created_at,updated_at)
+       VALUES(?,?,?,?,'ACTIVE',?,0,?,?,?,?,?,?,?,?)`,
     ).bind(
       id,
       input.title,
       input.description,
       slug,
       input.customerId,
-      0,
+      Number(input.showPricePrivate),
+      Number(input.showPriceWeb),
       Number(input.showSold),
       input.expiresAt,
       c.get('email'),
@@ -390,13 +392,14 @@ catalogsRoutes.patch('/catalogs/:id', async (c) => {
   });
   const statements = [
     c.env.DB.prepare(
-      `UPDATE catalogs SET title=?,description=?,customer_id=?,assigned_salesperson_email=?,show_prices=?,show_sold=?,expires_at=?,updated_at=? WHERE id=?`,
+      `UPDATE catalogs SET title=?,description=?,customer_id=?,assigned_salesperson_email=?,show_price_private=?,show_price_web=?,show_sold=?,expires_at=?,updated_at=? WHERE id=?`,
     ).bind(
       input.title,
       input.description,
       input.customerId,
       assignedEmail,
-      0,
+      Number(input.showPricePrivate),
+      Number(input.showPriceWeb),
       Number(input.showSold),
       input.expiresAt,
       stamp(),
@@ -418,13 +421,14 @@ catalogsRoutes.patch('/catalogs/:id', async (c) => {
 
 catalogsRoutes.post('/catalogs/:id/duplicate', async (c) => {
   const source = await c.env.DB.prepare(
-    "SELECT title,description,show_prices,show_sold,assigned_salesperson_email FROM catalogs WHERE id=? AND status='ACTIVE'",
+    "SELECT title,description,show_price_private,show_price_web,show_sold,assigned_salesperson_email FROM catalogs WHERE id=? AND status='ACTIVE'",
   )
     .bind(c.req.param('id'))
     .first<{
       title: string;
       description: string;
-      show_prices: number;
+      show_price_private: number;
+      show_price_web: number;
       show_sold: number;
       assigned_salesperson_email: string;
     }>();
@@ -439,14 +443,15 @@ catalogsRoutes.post('/catalogs/:id/duplicate', async (c) => {
     .all<Record<string, unknown>>();
   const statements = [
     c.env.DB.prepare(
-      `INSERT INTO catalogs(id,title,description,slug,status,customer_id,show_prices,show_sold,expires_at,created_by,assigned_salesperson_email,created_at,updated_at)
-       VALUES(?,?,?,?,'ACTIVE',NULL,?,?,NULL,?,?,?,?)`,
+      `INSERT INTO catalogs(id,title,description,slug,status,customer_id,show_prices,show_price_private,show_price_web,show_sold,expires_at,created_by,assigned_salesperson_email,created_at,updated_at)
+       VALUES(?,?,?,?,'ACTIVE',NULL,0,?,?,?,NULL,?,?,?,?)`,
     ).bind(
       id,
       `${source.title} (copy)`.slice(0, 160),
       source.description,
       slug,
-      0,
+      source.show_price_private,
+      source.show_price_web,
       source.show_sold,
       c.get('email'),
       source.assigned_salesperson_email,

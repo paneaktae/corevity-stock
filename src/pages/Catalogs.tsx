@@ -34,7 +34,8 @@ type CatalogRow = {
   assignedSalespersonEmail: string;
   assignedSalespersonName: string;
   assignedSalespersonLineReady: number | boolean;
-  showPrices: number | boolean;
+  showPricePrivate: number | boolean;
+  showPriceWeb: number | boolean;
   showSold: number | boolean;
   expiresAt: string | null;
   productCount: number;
@@ -68,6 +69,8 @@ export function CatalogsPage() {
   const [customerId, setCustomerId] = useState('');
   const [assignedSalespersonEmail, setAssignedSalespersonEmail] = useState('');
   const [showSold, setShowSold] = useState(false);
+  const [showPricePrivate, setShowPricePrivate] = useState(true);
+  const [showPriceWeb, setShowPriceWeb] = useState(false);
   const [expires, setExpires] = useState('');
   const [items, setItems] = useState<CatalogItemDraft[]>([]);
   const [query, setQuery] = useState('');
@@ -104,6 +107,8 @@ export function CatalogsPage() {
     setCustomerId('');
     setAssignedSalespersonEmail(salespeople?.find((person) => person.lineReady)?.email ?? salespeople?.[0]?.email ?? '');
     setShowSold(false);
+    setShowPricePrivate(true);
+    setShowPriceWeb(false);
     setExpires('');
     setItems([]);
     setCoverImageId(null);
@@ -127,6 +132,8 @@ export function CatalogsPage() {
       setCustomerId(detail.catalog.customerId ?? '');
       setAssignedSalespersonEmail(detail.catalog.assignedSalespersonEmail ?? '');
       setShowSold(Boolean(detail.catalog.showSold));
+      setShowPricePrivate(Boolean(detail.catalog.showPricePrivate));
+      setShowPriceWeb(Boolean(detail.catalog.showPriceWeb));
       setExpires(detail.catalog.expiresAt?.slice(0, 10) ?? '');
       setCoverImageId(detail.catalog.coverImageId ?? null);
       setCoverFile(null);
@@ -183,7 +190,8 @@ export function CatalogsPage() {
         description,
         customerId: customerId || null,
         assignedSalespersonEmail,
-        showPrices: false,
+        showPricePrivate,
+        showPriceWeb,
         showSold,
         expiresAt: expires ? `${expires}T23:59:59.999Z` : null,
         items: items.map((item) => ({
@@ -499,6 +507,28 @@ export function CatalogsPage() {
                 />
                 {t('Include sold products')}
               </label>
+              <fieldset className="catalog-price-visibility">
+                <legend>{t('Show product prices')}</legend>
+                <label className="quotation-check">
+                  <input
+                    type="checkbox"
+                    checked={showPricePrivate}
+                    onChange={(e) => setShowPricePrivate(e.target.checked)}
+                  />
+                  {t('On the private share link')}
+                </label>
+                <label className="quotation-check">
+                  <input
+                    type="checkbox"
+                    checked={showPriceWeb}
+                    onChange={(e) => setShowPriceWeb(e.target.checked)}
+                  />
+                  {t('On the website')}
+                </label>
+                <small className="field-hint">
+                  {t('Leave both unchecked to hide prices everywhere.')}
+                </small>
+              </fieldset>
               <Field label={t('Expiration date (optional)')}>
                 <input
                   type="date"
