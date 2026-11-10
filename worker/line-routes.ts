@@ -18,6 +18,7 @@ lineRoutes.get('/status', async (c) => {
   let botId: string | null = null;
   let providerError = '';
   let webhookActive = false;
+  let quota: { type: string; limit: number | null; used: number | null } | null = null;
   if (lineConfigured(c.env)) {
     try {
       const r = await lineRequest(c.env, 'info');
@@ -33,6 +34,24 @@ lineRoutes.get('/status', async (c) => {
           webhookActive =
             hook.active === true &&
             hook.endpoint === `${c.env.APP_URL}/api/line/webhook`;
+        }
+        // Monthly push allowance: once it is used up LINE answers 429 and alerts silently stop.
+        try {
+          const [limit, usage] = await Promise.all([
+            lineRequest(c.env, 'message/quota'),
+            lineRequest(c.env, 'message/quota/consumption'),
+          ]);
+          if (limit.ok && usage.ok) {
+            const l = (await limit.json()) as { type?: string; value?: number };
+            const u = (await usage.json()) as { totalUsage?: number };
+            quota = {
+              type: l.type ?? 'unknown',
+              limit: l.type === 'limited' ? (l.value ?? null) : null,
+              used: u.totalUsage ?? null,
+            };
+          }
+        } catch {
+          /* quota is informational */
         }
       } else {
         providerError =
@@ -52,6 +71,7 @@ lineRoutes.get('/status', async (c) => {
     botId,
     providerError,
     webhookActive,
+    quota,
     recent: latest.results,
   });
 });
@@ -66,6 +86,45 @@ lineRoutes.post('/link', async (c) => {
     .bind(c.get('email'), await hashCode(code), expiresAt)
     .run();
   return c.json({ code: `COREVITY ${code}`, expiresAt });
+});
+// End-to-end check: pushes one short message to the signed-in user's own linked LINE account.
+lineRoutes.post('/test', async (c) => {
+  if (!lineConfigured(c.env))
+    return c.json({ error: { message: 'LINE is not configured.' } }, 503);
+  const account = await c.env.DB.prepare(
+    'SELECT line_user_id FROM line_accounts WHERE email=? AND enabled=1',
+  )
+    .bind(c.get('email'))
+    .first<{ line_user_id: string }>();
+  if (!account)
+    return c.json({ error: { message: 'Connect your LINE account first.' } }, 422);
+  try {
+    const response = await lineRequest(c.env, 'message/push', {
+      method: 'POST',
+      headers: { 'X-Line-Retry-Key': crypto.randomUUID() },
+      body: JSON.stringify({
+        to: account.line_user_id,
+        messages: [{ type: 'text', text: 'Corevity · ทดสอบการแจ้งเตือน LINE สำเร็จ ✓' }],
+      }),
+    });
+    if (!response.ok) {
+      console.error(JSON.stringify({ event: 'line_test_failed', status: response.status }));
+      return c.json(
+        {
+          error: {
+            message:
+              response.status === 429
+                ? 'LINE monthly message limit reached. Alerts will not send until it resets.'
+                : `LINE rejected the message (HTTP ${response.status}).`,
+          },
+        },
+        502,
+      );
+    }
+    return c.json({ ok: true });
+  } catch {
+    return c.json({ error: { message: 'Could not reach LINE. Please try again.' } }, 502);
+  }
 });
 lineRoutes.patch('/preferences', async (c) => {
   const { enabled } = z

@@ -1469,13 +1469,26 @@ export default {
     return app.fetch(request, env, ctx);
   },
   async scheduled(_event: ScheduledController, env: Bindings) {
-    await Promise.all([
-      processLineReminders(env),
-      processChatMentionNotifications(env),
-      processCalendarReminders(env),
-      exchangeRate(env.DB, fetch, new Date(), env.BOT_API_KEY),
-      maintainMeta(env),
-      maintainGmail(env),
-    ]);
+    // allSettled + log: one failing job must neither hide behind the others nor go unrecorded.
+    const jobs = {
+      lineReminders: processLineReminders(env),
+      chatMentions: processChatMentionNotifications(env),
+      calendarReminders: processCalendarReminders(env),
+      exchangeRate: exchangeRate(env.DB, fetch, new Date(), env.BOT_API_KEY),
+      meta: maintainMeta(env),
+      gmail: maintainGmail(env),
+    };
+    const settled = await Promise.allSettled(Object.values(jobs));
+    Object.keys(jobs).forEach((name, index) => {
+      const outcome = settled[index];
+      if (outcome.status === 'rejected')
+        console.error(
+          JSON.stringify({
+            event: 'cron_job_failed',
+            job: name,
+            error: outcome.reason instanceof Error ? `${outcome.reason.name}: ${outcome.reason.message}`.slice(0, 160) : 'unknown',
+          }),
+        );
+    });
   },
 };

@@ -561,3 +561,66 @@ describe('Gmail sync and LINE alerts', () => {
     expect(text.endsWith('https://crm.example.test/inbox?message=abc')).toBe(true);
   });
 });
+
+describe('Gmail sync log', () => {
+  it('records each real run with counts only, tagged manual or cron, and ignores skipped runs', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await connect('100');
+    const state: Mailbox = {
+      historyId: '101',
+      history: [{ id: 'n1' }],
+      listing: [],
+      messages: { n1: gmailMessage('n1', 'Khun A <a@buyer.example>', 'ขอใบเสนอราคา', 'สนใจเครื่องวิ่ง') },
+    };
+    const google = fakeGoogle(state);
+    expect(await syncGmail(env, { http: google.http, classifier: null, trigger: 'manual' })).toMatchObject({ status: 'ok', imported: 1, queued: 1 });
+    const row = await env.DB.prepare('SELECT * FROM gmail_sync_log').first<Record<string, unknown>>();
+    expect(row).toMatchObject({ trigger: 'manual', status: 'ok', imported: 1, customers: 1, alerts_queued: 1, error: null });
+    expect(Number(row!.api_calls)).toBeGreaterThan(0);
+    expect(JSON.stringify(row)).not.toMatch(/buyer\.example|ขอใบเสนอราคา/);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('"event":"gmail_sync"'));
+    expect(log.mock.calls.flat().join('')).not.toMatch(/buyer\.example/);
+
+    await syncGmail(env, { http: google.http, classifier: null });
+    expect(await env.DB.prepare("SELECT trigger FROM gmail_sync_log ORDER BY started_at DESC LIMIT 1").first('trigger')).toBe('cron');
+
+    await env.DB.prepare("UPDATE gmail_connection SET sync_lease_until='2999-01-01T00:00:00Z'").run();
+    expect((await syncGmail(env, { http: google.http, classifier: null })).status).toBe('skipped');
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM gmail_sync_log').first('n')).toBe(2);
+    log.mockRestore();
+  });
+
+  it('logs failed runs with their error code and prunes history after 14 days', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await connect('100');
+    const google = fakeGoogle({ historyId: '101', history: [], listing: [], messages: {}, tokenError: true });
+    expect((await syncGmail(env, { http: google.http, classifier: null, trigger: 'manual' })).status).toBe('reconnect');
+    expect(await env.DB.prepare('SELECT status,error FROM gmail_sync_log').first()).toMatchObject({ status: 'reconnect', error: 'GMAIL_RECONNECT_REQUIRED' });
+
+    await env.DB.prepare(
+      "INSERT INTO gmail_sync_log(id,started_at,trigger,status) VALUES('old','2026-10-01T00:00:00Z','cron','ok'),('recent','2026-11-09T00:00:00Z','cron','ok')",
+    ).run();
+    await cleanupGmail(env, Date.parse('2026-11-10T00:00:00Z'));
+    const ids = (await env.DB.prepare('SELECT id FROM gmail_sync_log').all<{ id: string }>()).results.map((r) => r.id);
+    expect(ids).toContain('recent');
+    expect(ids).not.toContain('old');
+    log.mockRestore();
+  });
+
+  it('reports how many LINE alerts were sent, retried or failed, and keeps the error code', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await connect('100');
+    const google = fakeGoogle({
+      historyId: '101',
+      history: [{ id: 'n1' }],
+      listing: [],
+      messages: { n1: gmailMessage('n1', 'a@buyer.example', 'Quote', 'Need prices') },
+    });
+    await syncGmail(env, { http: google.http, classifier: null });
+    vi.stubGlobal('fetch', async () => new Response('{}', { status: 500 }));
+    expect(await processEmailNotifications(env)).toMatchObject({ sent: 0, retrying: 1, failed: 0 });
+    expect(await env.DB.prepare('SELECT status,last_error FROM email_notifications').first()).toMatchObject({ status: 'pending', last_error: 'LINE_HTTP_500' });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('"event":"email_line_alerts"'));
+    log.mockRestore();
+  });
+});

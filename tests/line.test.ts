@@ -365,3 +365,50 @@ describe('LINE linking and reminders', () => {
     expect(reminder?.status).toBe('sent');
   });
 });
+
+describe('LINE status and test message', () => {
+  async function call(path: string, init: RequestInit = {}) {
+    const { Hono } = await import('hono');
+    const { lineRoutes } = await import('../worker/line-routes');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('email' as never, email as never);
+      await next();
+    });
+    app.route('/', lineRoutes as never);
+    return app.request(path, init, env as never);
+  }
+
+  it('pushes a test message only to the signed-in user and explains a monthly-limit rejection', async () => {
+    const pushes: { to: string }[] = [];
+    let status = 200;
+    vi.stubGlobal('fetch', async (_input: RequestInfo | URL, init?: RequestInit) => {
+      pushes.push(JSON.parse(String(init?.body)));
+      return new Response('{}', { status });
+    });
+    const ok = await call('/test', { method: 'POST' });
+    expect(ok.status).toBe(200);
+    expect(pushes).toEqual([expect.objectContaining({ to: userId })]);
+    status = 429;
+    const limited = await call('/test', { method: 'POST' });
+    expect(limited.status).toBe(502);
+    expect(JSON.stringify(await limited.json())).toContain('monthly');
+    await env.DB.prepare('UPDATE line_accounts SET enabled=0').run();
+    expect((await call('/test', { method: 'POST' })).status).toBe(422);
+    expect(pushes).toHaveLength(2);
+  });
+
+  it('shows the monthly message quota in the status', async () => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/info')) return Response.json({ basicId: '@corevity' });
+      if (url.endsWith('/webhook/endpoint')) return Response.json({ endpoint: 'https://example.test/api/line/webhook', active: true });
+      if (url.endsWith('/quota')) return Response.json({ type: 'limited', value: 200 });
+      if (url.endsWith('/quota/consumption')) return Response.json({ totalUsage: 37 });
+      return new Response('{}', { status: 404 });
+    });
+    const body = (await (await call('/status')).json()) as { quota: unknown; webhookActive: boolean };
+    expect(body.quota).toEqual({ type: 'limited', limit: 200, used: 37 });
+    expect(body.webhookActive).toBe(true);
+  });
+});

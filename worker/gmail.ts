@@ -139,12 +139,47 @@ gmailRoutes.patch('/messages/:id', async (c) => {
 
 gmailRoutes.post('/sync', async (c) => {
   await memberAccess(c);
-  const result = await syncGmail(c.env);
+  const result = await syncGmail(c.env, { trigger: 'manual' });
   await reclassifyStoredEmails(c.env);
   if (result.status === 'reconnect')
     return c.json({ error: { message: 'Gmail needs to be reconnected by the administrator.' } }, 409);
   if (result.status === 'error') return c.json({ error: { message: 'Gmail could not be checked. Please retry shortly.' } }, 502);
   return c.json(result);
+});
+
+// Counts-only history of sync runs and LINE alert delivery, so "did it check?" and "did LINE fire?"
+// can be answered without reading logs. Never returns sender, subject or body.
+gmailRoutes.get('/sync-log', async (c) => {
+  await memberAccess(c);
+  const [runs, alerts, failures, recipients] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id,started_at AS startedAt,duration_ms AS durationMs,trigger,status,mode,imported,customers,
+        alerts_queued AS alertsQueued,api_calls AS apiCalls,error
+       FROM gmail_sync_log ORDER BY started_at DESC LIMIT 30`,
+    ).all(),
+    c.env.DB.prepare(
+      "SELECT status,COUNT(*) AS n,MAX(COALESCE(sent_at,created_at)) AS latest FROM email_notifications GROUP BY status",
+    ).all<{ status: string; n: number; latest: string | null }>(),
+    c.env.DB.prepare(
+      `SELECT message_id AS messageId,status,attempts,last_error AS lastError,created_at AS createdAt
+       FROM email_notifications WHERE status IN ('pending','failed') AND last_error IS NOT NULL
+       ORDER BY created_at DESC LIMIT 10`,
+    ).all(),
+    c.env.DB.prepare('SELECT COUNT(*) AS n FROM line_accounts WHERE enabled=1').first<{ n: number }>(),
+  ]);
+  const byStatus = Object.fromEntries(alerts.results.map((row) => [row.status, { count: row.n, latest: row.latest }]));
+  return c.json({
+    runs: runs.results,
+    alerts: {
+      recipients: recipients?.n ?? 0,
+      sent: byStatus.sent?.count ?? 0,
+      lastSentAt: byStatus.sent?.latest ?? null,
+      pending: byStatus.pending?.count ?? 0,
+      failed: byStatus.failed?.count ?? 0,
+      cancelled: byStatus.cancelled?.count ?? 0,
+      problems: failures.results,
+    },
+  });
 });
 
 const settingsInput = z.object({ aiClassify: z.boolean() }).strict();

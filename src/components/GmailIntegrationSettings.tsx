@@ -3,6 +3,7 @@ import { Mail } from 'lucide-react';
 import { api, useData } from '../lib';
 import { getLanguage, t } from '../i18n';
 import { ErrorBox } from './ui';
+import { GmailSyncLog } from './GmailSyncLog';
 
 type GmailStatus = {
   configured: boolean;
@@ -90,6 +91,7 @@ export function GmailIntegrationSettings() {
           </>
         )}
       </dl>
+      {data.connected && <GmailSyncLog />}
       {!data.configured ? (
         <p className="field-hint">
           {t('Server setup is incomplete.')}

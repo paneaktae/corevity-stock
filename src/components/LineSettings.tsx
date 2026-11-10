@@ -9,6 +9,7 @@ type LineStatus = {
   linked: boolean;
   enabled: boolean;
   botId: string | null;
+  quota: { type: string; limit: number | null; used: number | null } | null;
   recent: {
     status: string;
     sent_at: string | null;
@@ -26,7 +27,8 @@ export function LineSettings() {
     null,
   );
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [tested, setTested] = useState(false);
   async function action(path: string, method: string, body?: object) {
     setBusy(true);
     setError('');
@@ -161,6 +163,36 @@ export function LineSettings() {
           )}
           {data.linked && (
             <p>{t(data.enabled ? 'Reminders enabled' : 'Reminders paused')}</p>
+          )}
+          {data.quota && (
+            <p className={data.quota.limit !== null && data.quota.used !== null && data.quota.used >= data.quota.limit ? 'attention' : undefined}>
+              {t('LINE messages this month')}:{' '}
+              {data.quota.used ?? '—'}
+              {data.quota.limit !== null ? ` / ${data.quota.limit}` : ` (${t('no monthly limit')})`}
+            </p>
+          )}
+          {data.linked && data.enabled && (
+            <div className="button-row">
+              <button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError('');
+                  setTested(false);
+                  try {
+                    await api('/line/test', { method: 'POST' });
+                    setTested(true);
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {t('Send a test LINE message')}
+              </button>
+              {tested && <span role="status">{t('Test message sent — check your LINE.')}</span>}
+            </div>
           )}
           {!!data.recent.length && (
             <>

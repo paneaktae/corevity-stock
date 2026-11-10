@@ -1,5 +1,5 @@
 import { t, getLanguage } from './i18n';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -45,20 +45,33 @@ export function useData<T>(path: string | null) {
   const [data, setData] = useState<T>();
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
+  const quiet = useRef(false);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
+  // Background refresh: keeps the current data on screen and ignores transient errors.
+  const refresh = useCallback(() => {
+    quiet.current = true;
+    setVersion((v) => v + 1);
+  }, []);
   useEffect(() => {
     if (!path) return;
     const controller = new AbortController();
-    setError('');
-    setData(undefined);
+    const silent = quiet.current;
+    quiet.current = false;
+    if (!silent) {
+      setError('');
+      setData(undefined);
+    }
     api<T>(path, { signal: controller.signal })
-      .then(setData)
+      .then((value) => {
+        setData(value);
+        if (silent) setError('');
+      })
       .catch((e) => {
-        if (e.name !== 'AbortError') setError(e.message);
+        if (e.name !== 'AbortError' && !silent) setError(e.message);
       });
     return () => controller.abort();
   }, [path, version]);
-  return { data, error, reload };
+  return { data, error, reload, refresh };
 }
 export function useDebounce(value: string) {
   const [result, setResult] = useState(value);

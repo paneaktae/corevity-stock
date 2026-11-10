@@ -415,6 +415,9 @@ export type SyncResult = {
   customers: number;
   backfillDone?: boolean;
   error?: string;
+  queued?: number;
+  apiCalls?: number;
+  mode?: 'first' | 'history' | 'sweep';
 };
 
 async function enqueueNotifications(env: Bindings, messageId: string, now: string) {
@@ -476,17 +479,17 @@ async function importMessage(
     )
     .run();
   if (!inserted.meta.changes) return null;
+  let queued = 0;
   if (verdict.customer && options.notify) {
-    const count = await enqueueNotifications(env, message.id, now);
-    if (count) await env.DB.prepare('UPDATE email_messages SET notified=1 WHERE id=?').bind(message.id).run();
+    queued = await enqueueNotifications(env, message.id, now);
+    if (queued) await env.DB.prepare('UPDATE email_messages SET notified=1 WHERE id=?').bind(message.id).run();
   }
-  return { customer: verdict.customer };
+  return { customer: verdict.customer, queued };
 }
 
-export async function syncGmail(
-  env: Bindings,
-  options: { http?: Http; classifier?: AiClassifier | null; time?: number } = {},
-): Promise<SyncResult> {
+type SyncOptions = { http?: Http; classifier?: AiClassifier | null; time?: number };
+
+async function runGmailSync(env: Bindings, options: SyncOptions): Promise<SyncResult> {
   const baseHttp = options.http ?? fetch;
   let calls = 0;
   const http: Http = (input, init) => {
@@ -507,6 +510,7 @@ export async function syncGmail(
   const connection = (await env.DB.prepare("SELECT * FROM gmail_connection WHERE id='workspace'").first<Connection>())!;
   let imported = 0;
   let customers = 0;
+  let queued = 0;
   try {
     const refresh = await decryptRefreshToken(env, connection.email, {
       ciphertext: connection.token_ciphertext,
@@ -582,6 +586,7 @@ export async function syncGmail(
       const result = await importMessage(env, token, id, { notify, mailbox: connection.email, classifier, http });
       if (!result) continue;
       imported++;
+      queued += result.queued;
       if (result.customer) customers++;
     }
     // Backfill older mail a page at a time (no alerts) until the 90-day window is complete.
@@ -602,6 +607,7 @@ export async function syncGmail(
         const result = await importMessage(env, token, message.id, { notify: false, mailbox: connection.email, classifier, http });
         if (!result) continue;
         imported++;
+        queued += result.queued;
         if (result.customer) customers++;
       }
       if (complete) {
@@ -642,7 +648,15 @@ export async function syncGmail(
     )
       .bind(historyId, now, Number(swept), now, backfillToken, backfillDone, sentToken, sentDone, now)
       .run();
-    return { status: 'ok', imported, customers, backfillDone: Boolean(backfillDone) };
+    return {
+      status: 'ok',
+      imported,
+      customers,
+      queued,
+      apiCalls: calls,
+      mode: connection.history_id ? (swept ? 'sweep' : 'history') : 'first',
+      backfillDone: Boolean(backfillDone),
+    };
   } catch (error) {
     const code =
       error instanceof Error && /^GMAIL_[A-Z0-9_]+$/.test(error.message)
@@ -654,8 +668,68 @@ export async function syncGmail(
     )
       .bind(reconnect ? 'RECONNECT_REQUIRED' : 'CONNECTED', code, now)
       .run();
-    return { status: reconnect ? 'reconnect' : 'error', imported, customers, error: code };
+    return { status: reconnect ? 'reconnect' : 'error', imported, customers, queued, apiCalls: calls, error: code };
   }
+}
+
+// Every real run (not "skipped") leaves one counts-only row plus a structured log line, so a
+// missed email can be traced to "ran, found nothing" vs "failed" vs "never ran".
+async function recordSyncRun(env: Bindings, run: { trigger: 'cron' | 'manual'; startedAt: number; durationMs: number; result: SyncResult }) {
+  const { result } = run;
+  if (result.status === 'skipped') return;
+  const entry = {
+    trigger: run.trigger,
+    status: result.status,
+    mode: result.mode ?? '',
+    imported: result.imported,
+    customers: result.customers,
+    alertsQueued: result.queued ?? 0,
+    apiCalls: result.apiCalls ?? 0,
+    durationMs: run.durationMs,
+    error: result.error ?? null,
+  };
+  console.log(JSON.stringify({ event: 'gmail_sync', ...entry }));
+  try {
+    await env.DB.prepare(
+      'INSERT INTO gmail_sync_log(id,started_at,duration_ms,trigger,status,mode,imported,customers,alerts_queued,api_calls,error) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+    )
+      .bind(
+        crypto.randomUUID(),
+        new Date(run.startedAt).toISOString(),
+        entry.durationMs,
+        entry.trigger,
+        entry.status,
+        entry.mode,
+        entry.imported,
+        entry.customers,
+        entry.alertsQueued,
+        entry.apiCalls,
+        entry.error,
+      )
+      .run();
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'gmail_sync_log_failed', error: error instanceof Error ? error.name : 'unknown' }));
+  }
+}
+
+export async function syncGmail(env: Bindings, options: SyncOptions & { trigger?: 'cron' | 'manual' } = {}): Promise<SyncResult> {
+  const begun = Date.now();
+  let result: SyncResult | undefined;
+  let thrown: unknown;
+  try {
+    result = await runGmailSync(env, options);
+  } catch (error) {
+    thrown = error;
+    result = {
+      status: 'error',
+      imported: 0,
+      customers: 0,
+      error: `GMAIL_SYNC_FAILED: ${(error instanceof Error ? `${error.name} ${error.message}` : String(error)).replace(/[^\x20-\x7E]/g, '').slice(0, 160)}`,
+    };
+  }
+  await recordSyncRun(env, { trigger: options.trigger ?? 'cron', startedAt: options.time ?? begun, durationMs: Date.now() - begun, result });
+  if (thrown) throw thrown;
+  return result;
 }
 
 // Emails classified before the content rules existed: re-check them once with the new rules.
@@ -804,11 +878,14 @@ export async function processEmailNotifications(env: Bindings, time = Date.now()
   )
     .bind(now, now)
     .all<EmailJob>();
+  const outcome = { sent: 0, retrying: 0, failed: 0, cancelled: 0 };
+  const errors = new Set<string>();
   for (const job of jobs.results) {
     if (!allowed.has(job.email.toLowerCase())) {
       await env.DB.prepare("UPDATE email_notifications SET status='cancelled',lease_until=NULL,last_error='RECIPIENT_REMOVED' WHERE id=?")
         .bind(job.id)
         .run();
+      outcome.cancelled++;
       continue;
     }
     const lease = await env.DB.prepare(
@@ -826,9 +903,12 @@ export async function processEmailNotifications(env: Bindings, time = Date.now()
       });
       const accepted = response.ok || (response.status === 409 && !!response.headers.get('x-line-accepted-request-id'));
       const retryable = response.status === 429 || response.status >= 500;
+      const next = accepted ? 'sent' : retryable && attempts < 10 ? 'pending' : 'failed';
+      outcome[next === 'pending' ? 'retrying' : next]++;
+      if (!accepted) errors.add(`LINE_HTTP_${response.status}`);
       await env.DB.prepare('UPDATE email_notifications SET status=?,sent_at=?,lease_until=NULL,next_attempt_at=?,last_error=? WHERE id=?')
         .bind(
-          accepted ? 'sent' : retryable && attempts < 10 ? 'pending' : 'failed',
+          next,
           accepted ? now : null,
           new Date(time + (retryable ? Math.min(60, 2 ** attempts) : 0) * 60_000).toISOString(),
           accepted ? null : `LINE_HTTP_${response.status}`,
@@ -836,6 +916,8 @@ export async function processEmailNotifications(env: Bindings, time = Date.now()
         )
         .run();
     } catch (error) {
+      outcome[attempts < 10 ? 'retrying' : 'failed']++;
+      errors.add(error instanceof Error ? error.name : 'LINE_REQUEST_FAILED');
       await env.DB.prepare('UPDATE email_notifications SET status=?,lease_until=NULL,next_attempt_at=?,last_error=? WHERE id=?')
         .bind(
           attempts < 10 ? 'pending' : 'failed',
@@ -846,6 +928,8 @@ export async function processEmailNotifications(env: Bindings, time = Date.now()
         .run();
     }
   }
+  if (jobs.results.length) console.log(JSON.stringify({ event: 'email_line_alerts', ...outcome, errors: [...errors] }));
+  return outcome;
 }
 
 export async function cleanupGmail(env: Bindings, time = Date.now()) {
@@ -854,24 +938,31 @@ export async function cleanupGmail(env: Bindings, time = Date.now()) {
     env.DB.prepare('DELETE FROM email_notifications WHERE message_id IN (SELECT id FROM email_messages WHERE received_at<?)').bind(cutoff),
     env.DB.prepare('DELETE FROM email_messages WHERE received_at<?').bind(cutoff),
     env.DB.prepare('DELETE FROM gmail_oauth_states WHERE expires_at<?').bind(new Date(time).toISOString()),
+    env.DB.prepare('DELETE FROM gmail_sync_log WHERE started_at<?').bind(new Date(time - 14 * 86_400_000).toISOString()),
   ]);
 }
 
-// Cron entry point: never throws, so other scheduled jobs keep running.
+// Cron entry point: never throws, so other scheduled jobs keep running. Each step is isolated so a
+// failure in one (e.g. reclassify) can't silently skip LINE alerts or the health check after it.
 export async function maintainGmail(env: Bindings) {
-  try {
-    await syncGmail(env);
-  } catch {
-    /* recorded on the connection row */
-  }
-  try {
-    await reclassifyStoredEmails(env);
-    await processEmailNotifications(env);
-    await checkGmailHealth(env);
-    await cleanupGmail(env);
-  } catch {
-    /* retried on the next run */
-  }
+  const step = async (name: string, run: () => Promise<unknown>) => {
+    try {
+      await run();
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: 'gmail_maintain_failed',
+          step: name,
+          error: error instanceof Error ? `${error.name}: ${error.message}`.replace(/[^\x20-\x7E]/g, '').slice(0, 160) : 'unknown',
+        }),
+      );
+    }
+  };
+  await step('sync', () => syncGmail(env, { trigger: 'cron' }));
+  await step('reclassify', () => reclassifyStoredEmails(env));
+  await step('notify', () => processEmailNotifications(env));
+  await step('health', () => checkGmailHealth(env));
+  await step('cleanup', () => cleanupGmail(env));
 }
 
 // Watchdog: if the mailbox can't be read (revoked access, repeated errors), tell the admin on

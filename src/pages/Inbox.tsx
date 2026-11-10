@@ -78,8 +78,8 @@ export function InboxPage() {
   const [view, setView] = useState<View>('inbox');
   const [query, setQuery] = useState('');
   const debounced = useDebounce(query);
-  const { data: status, reload: reloadStatus } = useData<GmailStatus>('/email/status');
-  const { data, error, reload } = useData<EmailList>(
+  const { data: status, reload: reloadStatus, refresh: refreshStatus } = useData<GmailStatus>('/email/status');
+  const { data, error, reload, refresh } = useData<EmailList>(
     `/email/messages?view=${view}&q=${encodeURIComponent(debounced)}`,
   );
   const [detail, setDetail] = useState<EmailDetail | null>(null);
@@ -92,6 +92,22 @@ export function InboxPage() {
 
   const detailRef = useRef<EmailDetail | null>(null);
   detailRef.current = detail;
+  // The server checks Gmail every 5 minutes; pick up its results without a manual reload.
+  const connected = Boolean(status?.connected);
+  useEffect(() => {
+    if (!connected) return;
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      refresh();
+      refreshStatus();
+    };
+    const timer = window.setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [connected, refresh, refreshStatus]);
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
@@ -170,7 +186,7 @@ export function InboxPage() {
         title={t('Email inbox')}
         subtitle={
           status?.mailbox
-            ? `${status.email || status.mailbox} · ${t('Checked every 5 minutes')}${status.connected && !status.backfillDone ? ` · ${t('Loading the last 90 days…')}` : ''}`
+            ? `${status.email || status.mailbox} · ${t('Checked every 5 minutes')} · ${t('Last checked')} ${when(status.lastSyncAt)}${status.connected && !status.backfillDone ? ` · ${t('Loading the last 90 days…')}` : ''}`
             : t('Company Gmail inbox')
         }
         action={
