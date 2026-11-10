@@ -1099,5 +1099,7 @@
   "Remove this email from the CRM? It stays in Gmail.": "ลบอีเมลนี้ออกจาก CRM ใช่ไหม (อีเมลยังอยู่ใน Gmail)",
   "ads/notifications skipped": "โฆษณา/แจ้งเตือนที่ข้าม",
   "Only emails that look like customers are kept. Ads, newsletters and notifications are not saved (they stay in Gmail).": "เก็บเฉพาะอีเมลที่น่าจะเป็นลูกค้า โฆษณา จดหมายข่าว และอีเมลแจ้งเตือนจะไม่ถูกบันทึก (ยังอยู่ใน Gmail)",
-  "Website contact form": "ฟอร์มติดต่อบนเว็บไซต์"
+  "Website contact form": "ฟอร์มติดต่อบนเว็บไซต์",
+  "unread emails": "อีเมลที่ยังไม่ได้อ่าน",
+  "Unread": "ยังไม่ได้อ่าน"
 }

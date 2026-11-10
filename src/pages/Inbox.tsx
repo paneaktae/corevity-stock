@@ -30,9 +30,10 @@ type EmailRow = {
   customerName: string | null;
   inSpam: number;
   repliedAt: string | null;
+  unread?: number;
 };
 type EmailDetail = EmailRow & { toText: string; bodyText: string; bodyHtml: string | null };
-type EmailList = { messages: EmailRow[]; total: number; inbox: number; junk: number };
+type EmailList = { messages: EmailRow[]; unread: number; total: number; inbox: number; junk: number };
 // Inbox = real emails from people; ads, newsletters and system notifications are kept, but apart.
 type ThreadMessage = {
   id: string;
@@ -119,6 +120,9 @@ export function InboxPage() {
       .then((value) => {
         if (!active) return;
         setDetail(value);
+        // Opening an email marks it read for this person: refresh the list and the menu badge.
+        refresh();
+        window.dispatchEvent(new Event('corevity:email-read'));
         // The full conversation (including our replies) comes live from Gmail.
         return api<{ messages: ThreadMessage[] }>(`/email/threads/${encodeURIComponent(value.threadId)}`).then((result) => {
           if (!active) return;
@@ -259,11 +263,14 @@ export function InboxPage() {
                   <li key={row.id}>
                     <button
                       type="button"
-                      className={`email-row${row.id === selectedId ? ' active' : ''}`}
+                      className={`email-row${row.id === selectedId ? ' active' : ''}${row.unread ? ' unread' : ''}`}
                       onClick={() => select(row.id)}
                     >
                       <span className="email-row-top">
-                        <strong>{row.fromName || row.fromEmail}</strong>
+                        <strong>
+                          {Boolean(row.unread) && <span className="email-unread-dot" role="img" aria-label={t('Unread')} />}
+                          {row.fromName || row.fromEmail}
+                        </strong>
                         <time dateTime={row.receivedAt}>{when(row.receivedAt)}</time>
                       </span>
                       <span className="email-row-subject">{row.subject || t('(no subject)')}</span>

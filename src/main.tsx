@@ -99,6 +99,7 @@ function AppLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [chatPopupOpen, setChatPopupOpen] = useState(false);
   const [unreadCustomerChats, setUnreadCustomerChats] = useState(0);
+  const [unreadEmails, setUnreadEmails] = useState(0);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       const saved = localStorage.getItem('corevity-theme');
@@ -165,6 +166,34 @@ function AppLayout() {
       document.removeEventListener('visibilitychange', update);
     };
   }, [location.pathname, location.search]);
+  // Emails this person has not opened in the CRM yet (the server syncs Gmail every 5 minutes).
+  useEffect(() => {
+    let mounted = true;
+    let refreshing = false;
+    const refreshEmails = async () => {
+      if (refreshing || document.visibilityState !== 'visible') return;
+      refreshing = true;
+      try {
+        const result = await api<{ unread: number }>('/email/unread');
+        if (mounted) setUnreadEmails(result.unread);
+      } catch {
+        // Keep the workspace usable if the mailbox status is temporarily unavailable.
+      } finally {
+        refreshing = false;
+      }
+    };
+    void refreshEmails();
+    const timer = window.setInterval(() => void refreshEmails(), 30_000);
+    const update = () => void refreshEmails();
+    window.addEventListener('corevity:email-read', update);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+      window.removeEventListener('corevity:email-read', update);
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
   document.documentElement.lang = language;
   return (
     <>
@@ -189,6 +218,7 @@ function AppLayout() {
                   <NavLink key={to} to={to} end={to === '/'}>
                     <Icon size={19} />
                     <span>{t(name)}</span>
+                    {to === '/inbox' && unreadEmails > 0 && <span className="customer-chat-nav-badge" role="status" aria-label={`${unreadEmails} ${t('unread emails')}`}>{unreadEmails > 99 ? '99+' : unreadEmails}</span>}
                     {to === '/catalog-chats' && unreadCustomerChats > 0 && <span className="customer-chat-nav-badge" aria-label={`${unreadCustomerChats} ${t('unread customer chats')}`}>{unreadCustomerChats > 9 ? '9+' : unreadCustomerChats}</span>}
                     <ChevronRight className="nav-arrow" size={15} />
                   </NavLink>

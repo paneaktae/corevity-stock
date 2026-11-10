@@ -1,7 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
-import type { AppEnv } from './auth';
+import type { AppEnv, Bindings } from './auth';
 import { digest } from './auth';
 import { allowedSales, workspaceSalesEmails } from './services/line';
 import { sessionToken } from './services/meta/oauth';
@@ -69,8 +69,25 @@ gmailRoutes.get('/status', async (c) => {
   });
 });
 
+// Per-person unread: an email is unread for someone until they open it in the CRM.
+const unreadCount = async (env: Bindings, email: string) =>
+  (
+    await env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM email_messages m WHERE NOT EXISTS (SELECT 1 FROM email_reads r WHERE r.message_id=m.id AND r.email=?)',
+    )
+      .bind(email)
+      .first<{ n: number }>()
+  )?.n ?? 0;
+
+// Polled by the menu badge for every signed-in user, so non-members get 0 instead of a 403.
+gmailRoutes.get('/unread', async (c) => {
+  const email = c.get('email').trim().toLowerCase();
+  if (!email || !(await workspaceSalesEmails(c.env)).includes(email)) return c.json({ unread: 0 });
+  return c.json({ unread: await unreadCount(c.env, email) });
+});
+
 gmailRoutes.get('/messages', async (c) => {
-  await memberAccess(c);
+  const access = await memberAccess(c);
   const requested = c.req.query('view') ?? 'inbox';
   const view = ['inbox', 'junk'].includes(requested) ? requested : 'inbox';
   const q = (c.req.query('q') ?? '').trim().slice(0, 100);
@@ -78,19 +95,21 @@ gmailRoutes.get('/messages', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT m.id,m.thread_id AS threadId,m.from_name AS fromName,m.from_email AS fromEmail,m.subject,m.snippet,
       m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,c.name AS customerName,m.in_spam AS inSpam,
-      m.replied_at AS repliedAt
+      m.replied_at AS repliedAt,
+      NOT EXISTS (SELECT 1 FROM email_reads r WHERE r.message_id=m.id AND r.email=?) AS unread
      FROM email_messages m LEFT JOIN customers c ON c.id=m.customer_id
      WHERE CASE ? WHEN 'junk' THEN m.in_spam=1 ELSE m.in_spam=0 END
        AND (?='' OR m.subject LIKE ? ESCAPE '\\' OR m.from_email LIKE ? ESCAPE '\\' OR m.from_name LIKE ? ESCAPE '\\' OR m.snippet LIKE ? ESCAPE '\\')
      ORDER BY m.received_at DESC LIMIT 200`,
   )
-    .bind(view, q, like, like, like, like)
+    .bind(access.email, view, q, like, like, like, like)
     .all();
   const counts = await c.env.DB.prepare(
     'SELECT COUNT(*) AS total,SUM(in_spam=0) AS inbox,SUM(in_spam=1) AS junk FROM email_messages',
   ).first<{ total: number; inbox: number | null; junk: number | null }>();
   return c.json({
     messages: results,
+    unread: await unreadCount(c.env, access.email),
     total: counts?.total ?? 0,
     inbox: counts?.inbox ?? 0,
     junk: counts?.junk ?? 0,
@@ -98,7 +117,7 @@ gmailRoutes.get('/messages', async (c) => {
 });
 
 gmailRoutes.get('/messages/:id', async (c) => {
-  await memberAccess(c);
+  const access = await memberAccess(c);
   const message = await c.env.DB.prepare(
     `SELECT m.id,m.thread_id AS threadId,m.from_name AS fromName,m.from_email AS fromEmail,m.to_text AS toText,m.subject,
       m.body_text AS bodyText,m.body_html AS bodyHtml,m.snippet,m.received_at AS receivedAt,m.classification,m.reason,m.customer_id AS customerId,
@@ -108,6 +127,10 @@ gmailRoutes.get('/messages/:id', async (c) => {
     .bind(c.req.param('id'))
     .first();
   if (!message) return c.json({ error: { message: 'Email not found.' } }, 404);
+  // Opening an email in the CRM (including from a LINE alert link) marks it read for this person.
+  await c.env.DB.prepare('INSERT OR IGNORE INTO email_reads(message_id,email,read_at) VALUES(?,?,?)')
+    .bind(c.req.param('id'), access.email, now())
+    .run();
   if ((message as { bodyHtml: string | null }).bodyHtml === null)
     (message as { bodyHtml: string | null }).bodyHtml = await loadMessageHtml(c.env, c.req.param('id'));
   return c.json(message);

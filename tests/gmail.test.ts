@@ -757,3 +757,51 @@ describe('Customer-only inbox and website form mail', () => {
     expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_notifications').first('n')).toBe(0);
   });
 });
+
+describe('Unread emails per person', () => {
+  const asUser = (email: string) => {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('email' as never, email as never);
+      await next();
+    });
+    app.route('/', gmailRoutes as never);
+    return app;
+  };
+  const call = (email: string, path: string, init: RequestInit = {}) => asUser(email).request(path, init, env as never);
+
+  it('stays unread until that person opens it, without affecting colleagues, and non-members just see 0', async () => {
+    await connect('100');
+    const colleague = 'second@example.test';
+    (env as unknown as { ALLOWED_EMAILS: string }).ALLOWED_EMAILS = `${sales},${colleague}`;
+    const state: Mailbox = {
+      historyId: '101',
+      history: [{ id: 'c1' }, { id: 'c2' }],
+      listing: [],
+      messages: {
+        c1: gmailMessage('c1', 'Buyer One <one@buyer.example>', 'Price?', 'Need prices'),
+        c2: gmailMessage('c2', 'Buyer Two <two@buyer.example>', 'Delivery?', 'Need delivery'),
+      },
+    };
+    await syncGmail(env, { http: fakeGoogle(state).http, classifier: null });
+
+    expect(await (await call(sales, '/unread')).json()).toEqual({ unread: 2 });
+    const list = (await (await call(sales, '/messages')).json()) as { unread: number; messages: { id: string; unread: number }[] };
+    expect(list.unread).toBe(2);
+    expect(list.messages.every((row) => row.unread === 1)).toBe(true);
+
+    expect((await call(sales, '/messages/c1')).status).toBe(200);
+    expect(await (await call(sales, '/unread')).json()).toEqual({ unread: 1 });
+    expect(await (await call(colleague, '/unread')).json()).toEqual({ unread: 2 });
+    const after = (await (await call(sales, '/messages')).json()) as { messages: { id: string; unread: number }[] };
+    expect(Object.fromEntries(after.messages.map((row) => [row.id, row.unread]))).toEqual({ c1: 0, c2: 1 });
+
+    const stranger = await call('stranger@example.test', '/unread');
+    expect(stranger.status).toBe(200);
+    expect(await stranger.json()).toEqual({ unread: 0 });
+
+    expect((await call(sales, '/messages/c1', { method: 'DELETE' })).status).toBe(200);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM email_reads').first('n')).toBe(0);
+    expect(await (await call(colleague, '/unread')).json()).toEqual({ unread: 1 });
+  });
+});

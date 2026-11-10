@@ -4120,6 +4120,8 @@ html[data-theme='dark'] .ads-table tr.selected td { background: #1a3455; }
 .email-row { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; justify-items: stretch; align-items: start; gap: 3px; width: 100%; min-height: 0; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; text-align: left; cursor: pointer; }
 .email-row:hover { background: color-mix(in srgb, var(--brand-soft) 45%, transparent); }
 .email-row.active { background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand-blue); }
+.email-row.unread .email-row-top strong, .email-row.unread .email-row-subject { font-weight: 800; }
+.email-unread-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #dc2626; vertical-align: middle; }
 .email-row-top { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
 .email-row-top strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .email-row-top time { flex: none; color: var(--muted-text); font-size: 11px; }
