@@ -4155,6 +4155,10 @@ html[data-theme='dark'] .ads-table tr.selected td { background: #1a3455; }
 html[data-theme='dark'] .email-junk-note { border-color: #6b2a2a; background: #2a1616; color: #ffb4b4; }
 .gmail-safety { margin: 0; padding-left: 18px; color: var(--muted-text); font-size: 13px; line-height: 1.7; }
 .email-view-toggle button.junk.active { background: #a22b2b; color: #fff; }
+/* Dark theme gives every button a filled background; keep the tab state obvious there too. */
+html[data-theme='dark'] .email-view-toggle button[role='tab'][aria-selected='false'] { background-color: transparent; border-color: transparent; color: var(--muted-text); }
+html[data-theme='dark'] .email-view-toggle button[role='tab'][aria-selected='true'] { background-color: #2166d9; border-color: transparent; color: #fff; }
+html[data-theme='dark'] .email-view-toggle button.junk[role='tab'][aria-selected='true'] { background-color: #b83232; }
 .email-html { display: block; width: 100%; height: min(70vh, 900px); border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .email-view-toggle button { padding: 6px 8px; font-size: 12.5px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
 .email-tag.replied { background: #dbeafe; color: #1d4ed8; }
