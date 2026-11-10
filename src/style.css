@@ -4112,9 +4112,10 @@ html[data-theme='dark'] .ads-table tr.selected td { background: #1a3455; }
 .email-inbox { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 0; padding: 0; overflow: hidden; min-height: 560px; }
 .email-list-pane { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border); }
 .email-filters { display: grid; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); }
-.email-view-toggle { display: grid; grid-template-columns: repeat(3, minmax(min-content, 1fr)); gap: 4px; padding: 3px; border-radius: 10px; background: var(--page); }
+.email-view-toggle { display: grid; grid-template-columns: repeat(2, minmax(min-content, 1fr)); gap: 4px; padding: 3px; border-radius: 10px; background: var(--page); }
 .email-view-toggle button { min-height: 34px; border: 0; background: transparent; font-size: 13px; }
-.email-view-toggle button.active { background: var(--surface); color: var(--brand-blue); font-weight: 700; box-shadow: 0 1px 3px rgb(9 20 35 / 12%); }
+.email-view-toggle button:not(.active) { color: var(--muted-text); }
+.email-view-toggle button.active { background: var(--brand-blue); color: #fff; font-weight: 700; box-shadow: 0 1px 3px rgb(9 20 35 / 25%); }
 .email-list { margin: 0; padding: 0; list-style: none; overflow-y: auto; max-height: 70vh; }
 .email-row { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: stretch; justify-items: stretch; align-items: start; gap: 3px; width: 100%; min-height: 0; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; text-align: left; cursor: pointer; }
 .email-row:hover { background: color-mix(in srgb, var(--brand-soft) 45%, transparent); }
@@ -4153,7 +4154,7 @@ html[data-theme='dark'] .ads-table tr.selected td { background: #1a3455; }
 .email-junk-note { padding: 10px 12px; border: 1px solid #f3b4b4; border-radius: 10px; background: #fff3f3; color: #8f2222; font-size: 13px; }
 html[data-theme='dark'] .email-junk-note { border-color: #6b2a2a; background: #2a1616; color: #ffb4b4; }
 .gmail-safety { margin: 0; padding-left: 18px; color: var(--muted-text); font-size: 13px; line-height: 1.7; }
-.email-view-toggle button.junk.active { color: #a22b2b; }
+.email-view-toggle button.junk.active { background: #a22b2b; color: #fff; }
 .email-html { display: block; width: 100%; height: min(70vh, 900px); border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .email-view-toggle button { padding: 6px 8px; font-size: 12.5px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
 .email-tag.replied { background: #dbeafe; color: #1d4ed8; }
