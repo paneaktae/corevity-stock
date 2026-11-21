@@ -74,3 +74,17 @@ User requested "Commit and deploy".
 - Worker `e6d204a4` → `206d1799-761a-4f1d-a5a4-9dc502e2d041`; no migration, secret or var changes.
 - Verified live: custom domain serves `index-B8jZD3z5.js` (matches `dist/client`),
   `QuotationPdf-Btf4T3rl.js` 200; anonymous `/api/quotations` returns 401.
+
+## Follow-up 2026-11-22: spec in default item name (ba8649c)
+
+User requested "Commit and deploy" after reporting the spec was not in the product name.
+
+- Production check (read-only): QT-2026-0003 names already contained the spec; QT-2026-0004 stored
+  "Hammer Strength Plate Loaded" (spec "DY Row" was added only at render time, not in the form);
+  many products have an empty spec.
+- Adding a product to a quotation now defaults the editable display name to brand + model + spec
+  (`quotationItemTitle`). Rendering still skips the spec when the name already contains it.
+- Checks: `npm run check`, 201 tests; checked adding a product in the local app.
+- Worker `206d1799` → `ec129703-182a-4b20-a254-a750f5599e0f`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-CCrpDdSR.js` (matches `dist/client`); anonymous
+  `/api/quotations` returns 401.
