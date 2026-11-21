@@ -37,3 +37,17 @@ User requested "Commit and deploy".
 - Worker `9ef3724c` → `c88fd45c-39c3-44e0-b271-145f69abe174`; no migration, secret or var changes.
 - Verified live: custom domain serves `index-DLxm9nfX.js` (matches `dist/client`);
   `QuotationPdf-8E5ChEuk.js` contains the new 760px rules; anonymous `/api/quotations` returns 401.
+
+## Follow-up 2026-11-21: specification instead of condition (9bc6878)
+
+User requested "Commit and deploy".
+
+- Quotation items (detail page, PDF, downloaded HTML) show `SKU · <specification>` instead of the
+  condition; no "Specification" label, per the user. Spec = `products.target_body_part`, read live via
+  the existing `LEFT JOIN products` (no migration), so existing quotations show it too.
+- `/api/quotations/products?q=` also matches `target_body_part` and returns `targetBodyPart`; the
+  picker lists it under each result. Placeholder: "ค้นหาแบรนด์ รุ่น SKU หมวดหมู่ หรือสเปก".
+- Checks: `npm run check`, 199 tests; checked search, picker and detail page in the local app.
+- Worker `c88fd45c` → `c4e8585d-7c47-4311-b327-a314183ca820`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-D6N3SfV1.js` (matches `dist/client`, has the new
+  placeholder) and `QuotationPdf-DuRFNZ1u.js`; anonymous `/api/quotations/products` returns 401.
