@@ -200,7 +200,7 @@ export function QuotationForm() {
       blank.deliveryTerms=company.deliveryTerms;
       blank.warrantyTerms=company.warrantyTerms;
       const productId=queryParams.get('productId');
-      if(productId){api<ProductDetail>(`/products/${productId}`).then(({product,images})=>setForm({...blank,items:[{productId:product.id,imageId:images.find((photo)=>photo.isPrimary)?.id??images[0]?.id??null,displayName:`${product.brand} ${product.model}`,description:product.shortDescription||product.descriptionTh||product.descriptionEn,quantity:1,unitPrice:String(product.sellingPrice),discount:''}]})).catch(()=>setForm(blank))}
+      if(productId){api<ProductDetail>(`/products/${productId}`).then(({product,images})=>setForm({...blank,items:[{productId:product.id,imageId:images.find((photo)=>photo.isPrimary)?.id??images[0]?.id??null,displayName:quotationItemTitle(`${product.brand} ${product.model}`,product.targetBodyPart??''),description:product.shortDescription||product.descriptionTh||product.descriptionEn,quantity:1,unitPrice:String(product.sellingPrice),discount:''}]})).catch(()=>setForm(blank))}
       else setForm(blank);
       setInitialized(true);
     }
@@ -221,7 +221,7 @@ export function QuotationForm() {
   function updateItem(index:number,item:DraftItem){setForm((current)=>({...current,items:current.items.map((old,i)=>i===index?item:old)}))}
   function addProduct(product:ProductChoice){
     if(form.items.some((item)=>item.productId===product.id))return;
-    setForm((current)=>({...current,items:[...current.items,{productId:product.id,imageId:product.primaryImageId??null,displayName:`${product.brand} ${product.model}`,description:product.shortDescription||product.descriptionTh||product.descriptionEn,quantity:1,unitPrice:String(product.sellingPrice),discount:''}]}));
+    setForm((current)=>({...current,items:[...current.items,{productId:product.id,imageId:product.primaryImageId??null,displayName:quotationItemTitle(`${product.brand} ${product.model}`,product.targetBodyPart??''),description:product.shortDescription||product.descriptionTh||product.descriptionEn,quantity:1,unitPrice:String(product.sellingPrice),discount:''}]}));
     setProductQuery('');
   }
   async function submit(e:FormEvent){e.preventDefault();setError('');if(!form.customerId){setError(t('Select a customer.'));return}if(!form.items.length){setError(t('Add at least one product.'));return}setBusy(true);try{const payload={...form,discount:Number(form.discount||0),deliveryFee:Number(form.deliveryFee||0),installationFee:Number(form.installationFee||0),otherCharges:Number(form.otherCharges||0),items:itemPayload(form.items)};const saved=await api<Quotation>(quoteId?`/quotations/${quoteId}`:'/quotations',{method:quoteId?'PATCH':'POST',body:JSON.stringify(payload)});navigate(`/quotations/${saved.id}`)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
