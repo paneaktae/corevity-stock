@@ -24,3 +24,16 @@ User requested "Commit and deploy".
 - Worker `88db2e25` → `9ef3724c-9f00-4b87-b550-f12d50acd683`; no migration, secret or var changes.
 - Verified live: custom domain serves `index-CiZamq6c.js` (matches `dist/client`, contains
   `COREVITY`); anonymous `/api/quotations` returns 401.
+
+## Follow-up 2026-11-21: phone layout for downloaded quotation HTML (e38b73e)
+
+User requested "Commit and deploy".
+
+- Downloaded quotation HTML at screen widths up to 760px shows each item as a card with labelled
+  Qty / Unit price / Discount / Line total rows (prices previously overflowed and overlapped).
+  Print and desktop layouts unchanged. Front-end only.
+- Checked locally with sample TH/EN quotes at 375, 645, 700, 765px and desktop: no overflowing cells.
+  `npm run check`: 197 tests.
+- Worker `9ef3724c` → `c88fd45c-39c3-44e0-b271-145f69abe174`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-DLxm9nfX.js` (matches `dist/client`);
+  `QuotationPdf-8E5ChEuk.js` contains the new 760px rules; anonymous `/api/quotations` returns 401.
