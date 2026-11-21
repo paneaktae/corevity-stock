@@ -312,7 +312,7 @@ export function QuotationDocument({
               <PText style={styles.productName}>{item.productName}</PText>
               <PText style={styles.productMeta}>
                 {item.sku}
-                {item.condition ? ` · ${item.condition}` : ''}
+                {item.specification ? ` · ${item.specification}` : ''}
               </PText>
               {item.description ? (
                 <PText style={styles.description}>{item.description}</PText>

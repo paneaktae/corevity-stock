@@ -14,7 +14,7 @@ const quote: Quotation = {
   salesContactEmail: 'sales@example.test', salesContactName: 'Sales Test',
   items: Array.from({ length: 60 }, (_, index) => ({
     id: `item-${index}`, productId: null, productName: `เครื่องออกกำลังกาย ${index + 1} Fitness equipment`, brand: 'Corevity', model: `Model ${index + 1}`, sku: `SKU-${index + 1}`,
-    description: 'รายละเอียดภาษาไทยและ English product details '.repeat(3), condition: 'Good', imageAvailable: false, imageId: '', quantity: 1, unitPrice: 1000, discount: 0, lineTotal: 1000, sortOrder: index, productStatus: null,
+    description: 'รายละเอียดภาษาไทยและ English product details '.repeat(3), condition: 'Good', specification: 'Leg Press', imageAvailable: false, imageId: '', quantity: 1, unitPrice: 1000, discount: 0, lineTotal: 1000, sortOrder: index, productStatus: null,
   })),
   subtotal: 60000, discount: 0, deliveryFee: 0, installationFee: 0, otherCharges: 0,
   vatEnabled: true, vatRate: 7, taxMode: 'EXCLUSIVE', vatAmount: 4200, grandTotal: 64200, beforeTax: 60000,

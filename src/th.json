@@ -649,6 +649,7 @@
   "Rounding: nearest minor currency unit. Totals are recalculated on save.": "ปัดเศษเป็นหน่วยย่อยของสกุลเงิน ยอดจะถูกตรวจสอบอีกครั้งเมื่อบันทึก",
   "Search inventory": "ค้นหาในคลังสินค้า",
   "Search brand, model, SKU, or category": "ค้นหาแบรนด์ รุ่น SKU หรือหมวดหมู่",
+  "Search brand, model, SKU, category, or specification": "ค้นหาแบรนด์ รุ่น SKU หมวดหมู่ หรือสเปก",
   "Move item up": "เลื่อนรายการขึ้น",
   "Move item down": "เลื่อนรายการลง",
   "Remove item": "ลบรายการ",

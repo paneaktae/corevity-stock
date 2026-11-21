@@ -90,6 +90,8 @@ export type QuotationItem = {
   sku: string;
   description: string;
   condition: string;
+  /** Product specification (Inventory "Specification"), read live from the product. */
+  specification: string;
   imageAvailable: boolean;
   imageId: string;
   quantity: number;

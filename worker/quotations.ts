@@ -91,6 +91,7 @@ type ItemRow = {
   line_total_minor: number;
   sort_order: number;
   product_status?: string | null;
+  product_spec?: string | null;
 };
 type CustomerRow = {
   id: string;
@@ -199,6 +200,7 @@ function toItem(row: ItemRow): QuotationItem {
     lineTotal: fromMinor(row.line_total_minor),
     sortOrder: row.sort_order,
     productStatus: row.product_status ?? null,
+    specification: row.product_spec ?? '',
   };
 }
 // The seller block (company name, address, contacts, bank details, logo) always
@@ -267,7 +269,7 @@ async function getQuote(database: D1Database, quoteId: string) {
   const [items, history, profile] = await Promise.all([
     database
       .prepare(
-        'SELECT i.*,p.status AS product_status FROM quotation_items i LEFT JOIN products p ON p.id=i.product_id WHERE i.quotation_id=? ORDER BY i.sort_order,i.rowid',
+        'SELECT i.*,p.status AS product_status,p.target_body_part AS product_spec FROM quotation_items i LEFT JOIN products p ON p.id=i.product_id WHERE i.quotation_id=? ORDER BY i.sort_order,i.rowid',
       )
       .bind(quoteId)
       .all<ItemRow>(),
@@ -601,9 +603,9 @@ quotationSettingsRoutes.get('/logo', async (c) => {
 quotationRoutes.get('/products', async (c) => {
   const q = c.req.query('q')?.trim().slice(0, 150);
   const rows = await c.env.DB.prepare(
-    `SELECT id,sku,brand,model,category,condition,selling_price AS sellingPrice,status,short_description AS shortDescription,description_th AS descriptionTh,description_en AS descriptionEn,(SELECT id FROM product_images WHERE product_id=products.id ORDER BY is_primary DESC,sort_order LIMIT 1) AS primaryImageId FROM products WHERE archived_at IS NULL${q ? ' AND (sku LIKE ? OR brand LIKE ? OR model LIKE ? OR category LIKE ?)' : ''} ORDER BY created_at DESC LIMIT 80`,
+    `SELECT id,sku,brand,model,category,condition,target_body_part AS targetBodyPart,selling_price AS sellingPrice,status,short_description AS shortDescription,description_th AS descriptionTh,description_en AS descriptionEn,(SELECT id FROM product_images WHERE product_id=products.id ORDER BY is_primary DESC,sort_order LIMIT 1) AS primaryImageId FROM products WHERE archived_at IS NULL${q ? ' AND (sku LIKE ? OR brand LIKE ? OR model LIKE ? OR category LIKE ? OR target_body_part LIKE ?)' : ''} ORDER BY created_at DESC LIMIT 80`,
   )
-    .bind(...(q ? [`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`] : []))
+    .bind(...(q ? Array<string>(5).fill(`%${q}%`) : []))
     .all();
   return c.json(rows.results);
 });

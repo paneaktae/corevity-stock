@@ -2241,6 +2241,33 @@ describe('quotation workflow', () => {
     expect(saved.company.taxId).toBe('0105555555555');
   });
 
+  it('shows product specification on quotation items and finds products by specification', async () => {
+    const customerRecord = await customer();
+    const equipment = await product('Spec Brand');
+    const db = await mf.getD1Database('DB');
+    await db
+      .prepare('UPDATE products SET target_body_part=? WHERE id=?')
+      .bind('Seated Leg Press; Purple', equipment.id)
+      .run();
+    const found = await json<{ id: string; targetBodyPart: string }[]>(
+      await request(`/quotations/products?q=${encodeURIComponent('Leg Press; Purple')}`),
+    );
+    expect(found.map((p) => p.id)).toContain(equipment.id);
+    expect(found.find((p) => p.id === equipment.id)?.targetBodyPart).toBe(
+      'Seated Leg Press; Purple',
+    );
+    const quote = await json<Quotation>(
+      await makeQuotation(customerRecord.id, equipment.id),
+    );
+    expect(quote.items[0].specification).toBe('Seated Leg Press; Purple');
+    await db
+      .prepare('UPDATE products SET target_body_part=? WHERE id=?')
+      .bind('Seated Leg Press', equipment.id)
+      .run();
+    const saved = await json<Quotation>(await request(`/quotations/${quote.id}`));
+    expect(saved.items[0].specification).toBe('Seated Leg Press');
+  });
+
   it('reserves unique sequential numbers when quotes are created concurrently', async () => {
     const customerRecord = await customer();
     const equipment = await product('Concurrent Brand');
