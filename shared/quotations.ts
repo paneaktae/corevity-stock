@@ -139,3 +139,32 @@ export type Quotation = {
     createdAt: string;
   }[];
 };
+
+/** Brand name printed as the company title on English quotations. */
+export const QUOTATION_ENGLISH_BRAND = 'COREVITY';
+
+/**
+ * Company title and optional second line for a quotation header/footer.
+ * Thai: Thai name, with the English name underneath. English: COREVITY, with
+ * the English company name underneath when it says something more.
+ */
+export function quotationCompanyNames(
+  company: Pick<QuotationSettingsInput, 'companyNameTh' | 'companyNameEn'>,
+  language: 'th' | 'en',
+): { title: string; subtitle: string } {
+  if (language === 'en') {
+    const english = company.companyNameEn.trim();
+    return {
+      title: QUOTATION_ENGLISH_BRAND,
+      subtitle:
+        english.toUpperCase() === QUOTATION_ENGLISH_BRAND ? '' : english,
+    };
+  }
+  return {
+    title: company.companyNameTh || company.companyNameEn || 'Corevity',
+    subtitle:
+      company.companyNameTh && company.companyNameEn
+        ? company.companyNameEn
+        : '',
+  };
+}

@@ -12,7 +12,10 @@ import latinRegular from '@fontsource/noto-sans-thai/files/noto-sans-thai-latin-
 import latinBold from '@fontsource/noto-sans-thai/files/noto-sans-thai-latin-700-normal.woff?url';
 import thaiRegular from '@fontsource/noto-sans-thai/files/noto-sans-thai-thai-400-normal.woff?url';
 import thaiBold from '@fontsource/noto-sans-thai/files/noto-sans-thai-thai-700-normal.woff?url';
-import type { Quotation } from '../../shared/quotations';
+import {
+  quotationCompanyNames,
+  type Quotation,
+} from '../../shared/quotations';
 import { getLanguage, t } from '../i18n';
 import type { TextProps } from '@react-pdf/renderer';
 
@@ -219,7 +222,7 @@ export function QuotationDocument({
   assets: Record<string, string>;
 }) {
   const company = quote.company;
-  const title = company.companyNameTh || company.companyNameEn || 'Corevity';
+  const { title, subtitle } = quotationCompanyNames(company, getLanguage());
   const terms = [
     ['Payment terms', quote.paymentTerms],
     ['Delivery terms', quote.deliveryTerms],
@@ -237,10 +240,8 @@ export function QuotationDocument({
             ) : null}
             <View>
               <PText style={styles.companyName}>{title}</PText>
-              {company.companyNameEn && company.companyNameTh ? (
-                <PText style={styles.companyMeta}>
-                  {company.companyNameEn}
-                </PText>
+              {subtitle ? (
+                <PText style={styles.companyMeta}>{subtitle}</PText>
               ) : null}
               {company.address ? (
                 <PText style={styles.companyMeta}>{company.address}</PText>
@@ -377,8 +378,7 @@ export function QuotationDocument({
         ))}
         <View style={styles.footer} fixed>
           <PText>
-            {quote.quotationNumber} ·{' '}
-            {company.companyNameTh || company.companyNameEn || 'Corevity'}
+            {quote.quotationNumber} · {title}
           </PText>
           <Text
             style={{ fontFamily: 'QuotationLatin' }}
