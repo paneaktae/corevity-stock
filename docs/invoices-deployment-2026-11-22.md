@@ -1,0 +1,28 @@
+# Invoices — production deployment 2026-11-22
+
+User explicitly requested "Back up and deploy".
+
+- Commit: `7ca510a` on `main` (clean tree). Checks: `npm run check`, 211 tests (invoice workflow +
+  print layout). Full flow tried locally: QT → INV → deposit complete (RESERVED) → payment complete
+  (SOLD, sale recorded, reservation cleared).
+- D1 backup: `output/d1-backup-2026-11-22-pre-0044.sql` (local, gitignored; 2.7 MB, 188 products).
+- Remote D1: applied `0044_invoices.sql` only — new tables `invoices`, `invoice_items`,
+  `invoice_status_history`, `invoice_number_sequences`; nullable `invoice_id` on `reservations` and
+  `product_sales`. No existing data changed (188 products, 0 reservations before and after).
+- Management Worker `fitness-equipment-manager`: `ec129703` → `91a1988e-4e63-4c2e-a848-9c5930866feb`.
+  No secret or var changes. Catalog Worker unchanged.
+- Verified live: custom domain serves `index-19iDqRJE.js` (matches `dist/client`, contains the
+  `/invoices` routes); `/invoices` page 200; anonymous `/api/invoices` and `/api/quotations` 401.
+
+## Behaviour
+
+- Invoice created from a quotation (one non-cancelled invoice per quotation); quotation → ACCEPTED.
+- DEPOSIT_COMPLETE reserves every invoice product for the invoice customer (`reservations.invoice_id`);
+  PAYMENT_COMPLETE inserts `product_sales` (`invoice_id`, selling price = line total) so products
+  become SOLD. All-or-nothing; 409 lists SKUs that are sold, unavailable or reserved for someone else.
+- Cancelling after the deposit deletes the invoice's reservations; paid invoices cannot be cancelled.
+
+## Rollback
+
+Code: redeploy `ec129703` (`wrangler rollback`). The new tables/columns are additive and unused by
+older code; drop them only if invoices must be removed entirely (restore from the backup above).
