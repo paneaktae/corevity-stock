@@ -201,12 +201,15 @@ function toItem(row: ItemRow): QuotationItem {
     productStatus: row.product_status ?? null,
   };
 }
-function toQuote(row: QuoteRow, items: ItemRow[], history: Quotation['history']): Quotation {
-  const storedCompany = parse<StoredCompanySnapshot>(row.company_snapshot, {
-    ...defaultCompany(),
-    logoKey: '',
-  });
-  const { logoKey, ...company } = storedCompany;
+// The seller block (company name, address, contacts, bank details, logo) always
+// reflects the current quotation settings, so edits in Settings apply to every
+// quotation. company_snapshot is still written for history but not displayed.
+function toQuote(
+  row: QuoteRow,
+  items: ItemRow[],
+  history: Quotation['history'],
+  profile: CompanyRow | null,
+): Quotation {
   return {
     id: row.id,
     quotationNumber: row.quotation_number,
@@ -224,7 +227,7 @@ function toQuote(row: QuoteRow, items: ItemRow[], history: Quotation['history'])
       email: '',
       billingAddress: '',
     }),
-    company: { ...company, logoAvailable: !!logoKey },
+    company: { ...companyInput(profile), logoAvailable: !!profile?.logo_key },
     salesContactEmail: row.sales_contact_email,
     salesContactName: row.sales_contact_name,
     items: items.map(toItem),
@@ -261,7 +264,7 @@ async function getQuote(database: D1Database, quoteId: string) {
     .bind(quoteId)
     .first<QuoteRow>();
   if (!row) fail(404, 'Quotation not found.');
-  const [items, history] = await Promise.all([
+  const [items, history, profile] = await Promise.all([
     database
       .prepare(
         'SELECT i.*,p.status AS product_status FROM quotation_items i LEFT JOIN products p ON p.id=i.product_id WHERE i.quotation_id=? ORDER BY i.sort_order,i.rowid',
@@ -274,8 +277,13 @@ async function getQuote(database: D1Database, quoteId: string) {
       )
       .bind(quoteId)
       .all<Quotation['history'][number]>(),
+    companyRow(database),
   ]);
-  return { row, items: items.results, quote: toQuote(row, items.results, history.results) };
+  return {
+    row,
+    items: items.results,
+    quote: toQuote(row, items.results, history.results, profile),
+  };
 }
 async function getCustomer(database: D1Database, customerId: string) {
   const customer = await database
@@ -726,17 +734,13 @@ quotationRoutes.get('/:id/items/:itemId/image', async (c) => {
   return c.body(object.body);
 });
 quotationRoutes.get('/:id/company-logo', async (c) => {
-  const row = await c.env.DB.prepare(
-    'SELECT company_snapshot FROM quotations WHERE id=?',
-  )
+  const exists = await c.env.DB.prepare('SELECT 1 AS ok FROM quotations WHERE id=?')
     .bind(c.req.param('id'))
-    .first<{ company_snapshot: string }>();
-  if (!row) fail(404, 'Quotation not found.');
-  const snapshot = parse<StoredCompanySnapshot>(row.company_snapshot, {
-    ...defaultCompany(), logoKey: '',
-  });
-  if (!snapshot.logoKey) fail(404, 'Quotation logo not found.');
-  const object = await c.env.PRODUCT_IMAGES.get(snapshot.logoKey);
+    .first<{ ok: number }>();
+  if (!exists) fail(404, 'Quotation not found.');
+  const profile = await companyRow(c.env.DB);
+  if (!profile?.logo_key) fail(404, 'Quotation logo not found.');
+  const object = await c.env.PRODUCT_IMAGES.get(profile.logo_key);
   if (!object) fail(404, 'Quotation logo is unavailable.');
   c.header('Content-Type', object.httpMetadata?.contentType ?? 'image/png');
   c.header('Content-Disposition', 'inline');

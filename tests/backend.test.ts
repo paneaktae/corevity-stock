@@ -2196,6 +2196,51 @@ describe('quotation workflow', () => {
     expect(copy.history.map((entry) => entry.toStatus)).toEqual(['DRAFT']);
   });
 
+  it('shows the current company settings on existing quotations', async () => {
+    const customerRecord = await customer();
+    const equipment = await product('Settings Brand');
+    const settings = {
+      companyNameTh: 'บริษัทเดิม',
+      companyNameEn: 'Old Co',
+      address: '1 Old Road, Bangkok',
+      phone: '02-111-1111',
+      email: '',
+      taxId: '0105555555555',
+      lineUrl: '',
+      facebookUrl: '',
+      bankDetails: 'Old bank',
+      paymentTerms: '',
+      deliveryTerms: '',
+      warrantyTerms: '',
+      defaultVatRate: 7,
+    };
+    expect(
+      (await request('/quotation-settings', 'PATCH', settings)).status,
+    ).toBe(200);
+    const quote = await json<Quotation>(
+      await makeQuotation(customerRecord.id, equipment.id),
+    );
+    expect(quote.company.address).toBe('1 Old Road, Bangkok');
+    await request(`/quotations/${quote.id}/status`, 'POST', { status: 'SENT' });
+    expect(
+      (
+        await request('/quotation-settings', 'PATCH', {
+          ...settings,
+          companyNameEn: 'New Co',
+          address: '',
+          bankDetails: '',
+        })
+      ).status,
+    ).toBe(200);
+    const saved = await json<Quotation>(
+      await request(`/quotations/${quote.id}`),
+    );
+    expect(saved.company.companyNameEn).toBe('New Co');
+    expect(saved.company.address).toBe('');
+    expect(saved.company.bankDetails).toBe('');
+    expect(saved.company.taxId).toBe('0105555555555');
+  });
+
   it('reserves unique sequential numbers when quotes are created concurrently', async () => {
     const customerRecord = await customer();
     const equipment = await product('Concurrent Brand');
