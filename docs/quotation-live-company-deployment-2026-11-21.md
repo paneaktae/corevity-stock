@@ -13,3 +13,14 @@ User explicitly requested "Commit and deploy".
 - Management Worker `fitness-equipment-manager`: `30db79c2` → `88db2e25-b737-4773-b179-5810e97d6a51`.
 - Verified live: custom domain serves `index-DDr61NWl.js` (matches `dist/client`); anonymous
   `/api/quotations` returns 401.
+
+## Follow-up 2026-11-21: COREVITY on English quotations (9d53c69)
+
+User requested "Commit and deploy".
+
+- English quotations (print view and PDF) show `COREVITY` as the company title and footer, with
+  `companyNameEn` underneath unless it is just "Corevity". Thai quotations unchanged. Front-end only.
+- Checks: `npm run check`, 197 tests (new `tests/quotation-company-names.test.ts`).
+- Worker `88db2e25` → `9ef3724c-9f00-4b87-b550-f12d50acd683`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-CiZamq6c.js` (matches `dist/client`, contains
+  `COREVITY`); anonymous `/api/quotations` returns 401.
