@@ -1,4 +1,10 @@
-import { quotationPrintHtml, type QuotationFonts } from '../quotationPrint';
+import {
+  quotationPrintHtml,
+  quotationPrintOptions,
+  type PrintableDocument,
+  type PrintOptions,
+  type QuotationFonts,
+} from '../quotationPrint';
 import {
   Font,
   Image,
@@ -392,9 +398,13 @@ export function QuotationDocument({
 export default function QuotationPdf({
   quote,
   assets,
+  options = quotationPrintOptions,
+  downloadLabel = 'Download HTML quotation',
 }: {
-  quote: Quotation;
+  quote: PrintableDocument;
   assets: Record<string, string>;
+  options?: PrintOptions;
+  downloadLabel?: string;
 }) {
   const filename = `${quote.quotationNumber}-${(quote.customer.companyName || quote.customer.name || 'Customer').replace(/[^a-z0-9]+/gi, '-')}.pdf`;
   const fonts: QuotationFonts = {
@@ -417,7 +427,7 @@ export default function QuotationPdf({
     }
     popup.document.open();
     popup.document.write(
-      quotationPrintHtml(quote, assets, absoluteFonts, getLanguage(), t),
+      quotationPrintHtml(quote, assets, absoluteFonts, getLanguage(), t, options),
     );
     popup.document.close();
     void (async () => {
@@ -469,6 +479,7 @@ export default function QuotationPdf({
         embedded,
         getLanguage(),
         t,
+        options,
       );
       const url = URL.createObjectURL(
         new Blob([html], { type: 'text/html;charset=utf-8' }),
@@ -492,7 +503,7 @@ export default function QuotationPdf({
         className="button"
         onClick={() => void downloadHtml()}
       >
-        {t('Download HTML quotation')}
+        {t(downloadLabel)}
       </button>
     </div>
   );

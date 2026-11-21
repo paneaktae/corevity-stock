@@ -8,6 +8,7 @@ import { generateSkus, nextSku } from '../worker/services/sku';
 import { digest } from '../worker/auth';
 import type { ChatMessage } from '../shared/schemas';
 import type { Quotation } from '../shared/quotations';
+import type { Invoice } from '../shared/invoices';
 let mf: Miniflare;
 let publicCatalogWorker: {
   fetch: (
@@ -2282,6 +2283,241 @@ describe('quotation workflow', () => {
       json<Quotation>(second),
     ]);
     expect(a.quotationNumber).not.toBe(b.quotationNumber);
+  });
+});
+describe('invoice workflow', () => {
+  async function quoteFor(customerId: string, productIds: string[]) {
+    const response = await request('/quotations', 'POST', {
+      customerId,
+      issueDate: '2026-11-22',
+      validUntil: '2026-12-22',
+      currency: 'THB',
+      items: productIds.map((productId, index) => ({
+        productId,
+        imageId: null,
+        displayName: `Invoice product ${index + 1}`,
+        description: '',
+        quantity: 1,
+        unitPrice: 1000 + index,
+        discount: 0,
+      })),
+      discount: 0,
+      deliveryFee: 0,
+      installationFee: 0,
+      otherCharges: 0,
+      vatEnabled: false,
+      vatRate: 7,
+      taxMode: 'EXCLUSIVE',
+      paymentTerms: '',
+      deliveryTerms: '',
+      warrantyTerms: '',
+      notes: '',
+    });
+    expect(response.status).toBe(201);
+    return json<Quotation>(response);
+  }
+  async function invoiceFor(quotationId: string) {
+    const response = await request('/invoices', 'POST', { quotationId });
+    expect(response.status).toBe(201);
+    return json<Invoice>(response);
+  }
+  const setStatus = (invoiceId: string, status: string) =>
+    request(`/invoices/${invoiceId}/status`, 'POST', { status });
+  async function stock(productId: string) {
+    const db = await mf.getD1Database('DB');
+    return db
+      .prepare(
+        'SELECT p.status, r.customer_id AS reservedFor, r.invoice_id AS reservationInvoice, s.invoice_id AS saleInvoice, s.selling_price AS soldFor FROM products p LEFT JOIN reservations r ON r.product_id=p.id LEFT JOIN product_sales s ON s.product_id=p.id WHERE p.id=?',
+      )
+      .bind(productId)
+      .first<{ status: string; reservedFor: string | null; reservationInvoice: string | null; saleInvoice: string | null; soldFor: number | null }>();
+  }
+
+  it('creates a linked draft invoice and marks the quotation accepted', async () => {
+    const buyer = await customer();
+    const item = await product('Invoice Link');
+    const quote = await quoteFor(buyer.id, [item.id]);
+    const invoice = await invoiceFor(quote.id);
+    expect(invoice.invoiceNumber).toMatch(/^INV-\d{4}-\d{4}$/);
+    expect(invoice.status).toBe('DRAFT');
+    expect(invoice.quotationId).toBe(quote.id);
+    expect(invoice.quotationNumber).toBe(quote.quotationNumber);
+    expect(invoice.items).toHaveLength(1);
+    expect(invoice.grandTotal).toBe(quote.grandTotal);
+    const linked = await json<Quotation>(await request(`/quotations/${quote.id}`));
+    expect(linked.status).toBe('ACCEPTED');
+    expect(linked.invoice).toEqual({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, status: 'DRAFT' });
+    expect((await request('/invoices', 'POST', { quotationId: quote.id })).status).toBe(409);
+    expect((await stock(item.id))?.status).toBe('AVAILABLE');
+  });
+
+  it('reserves products on deposit complete and sells them on payment complete', async () => {
+    const buyer = await customer();
+    const first = await product('Invoice Deposit A');
+    const second = await product('Invoice Deposit B');
+    const invoice = await invoiceFor((await quoteFor(buyer.id, [first.id, second.id])).id);
+    expect((await setStatus(invoice.id, 'DEPOSIT_COMPLETE')).status).toBe(409);
+    expect((await setStatus(invoice.id, 'ISSUED')).status).toBe(200);
+    expect((await setStatus(invoice.id, 'DEPOSIT_COMPLETE')).status).toBe(200);
+    for (const item of [first, second]) {
+      const row = await stock(item.id);
+      expect(row?.status).toBe('RESERVED');
+      expect(row?.reservedFor).toBe(buyer.id);
+      expect(row?.reservationInvoice).toBe(invoice.id);
+    }
+    const paid = await setStatus(invoice.id, 'PAYMENT_COMPLETE');
+    expect(paid.status).toBe(200);
+    expect((await json<Invoice>(paid)).status).toBe('PAYMENT_COMPLETE');
+    for (const item of [first, second]) {
+      const row = await stock(item.id);
+      expect(row?.status).toBe('SOLD');
+      expect(row?.reservedFor).toBeNull();
+      expect(row?.saleInvoice).toBe(invoice.id);
+    }
+    expect((await stock(second.id))?.soldFor).toBe(1001);
+    expect((await setStatus(invoice.id, 'CANCELLED')).status).toBe(409);
+  });
+
+  it('sells straight from issued when paid in full', async () => {
+    const buyer = await customer();
+    const item = await product('Invoice Full Payment');
+    const invoice = await invoiceFor((await quoteFor(buyer.id, [item.id])).id);
+    await setStatus(invoice.id, 'ISSUED');
+    expect((await setStatus(invoice.id, 'PAYMENT_COMPLETE')).status).toBe(200);
+    expect((await stock(item.id))?.status).toBe('SOLD');
+  });
+
+  it('changes no stock when one product is sold or reserved for someone else', async () => {
+    const buyer = await customer();
+    const other = await customer();
+    const free = await product('Invoice Conflict Free');
+    const taken = await product('Invoice Conflict Taken');
+    const invoice = await invoiceFor((await quoteFor(buyer.id, [free.id, taken.id])).id);
+    await setStatus(invoice.id, 'ISSUED');
+    expect(
+      (await request(`/products/${taken.id}/reserve`, 'POST', { customerId: other.id })).status,
+    ).toBe(200);
+    const blocked = await setStatus(invoice.id, 'DEPOSIT_COMPLETE');
+    expect(blocked.status).toBe(409);
+    expect((await json<{ error: { message: string } }>(blocked)).error.message).toContain(
+      taken.sku,
+    );
+    expect((await stock(free.id))?.status).toBe('AVAILABLE');
+    expect((await json<Invoice>(await request(`/invoices/${invoice.id}`))).status).toBe('ISSUED');
+
+    await request(`/products/${taken.id}/release-reservation`, 'POST');
+    expect((await request(`/products/${taken.id}/mark-sold`, 'POST')).status).toBe(200);
+    expect((await setStatus(invoice.id, 'PAYMENT_COMPLETE')).status).toBe(409);
+    expect((await stock(free.id))?.status).toBe('AVAILABLE');
+  });
+
+  it('keeps an existing reservation for the same customer and releases it on cancel', async () => {
+    const buyer = await customer();
+    const item = await product('Invoice Same Customer');
+    expect(
+      (await request(`/products/${item.id}/reserve`, 'POST', { customerId: buyer.id })).status,
+    ).toBe(200);
+    const invoice = await invoiceFor((await quoteFor(buyer.id, [item.id])).id);
+    await setStatus(invoice.id, 'ISSUED');
+    expect((await setStatus(invoice.id, 'DEPOSIT_COMPLETE')).status).toBe(200);
+    expect((await stock(item.id))?.reservationInvoice).toBe(invoice.id);
+    expect((await setStatus(invoice.id, 'CANCELLED')).status).toBe(200);
+    const row = await stock(item.id);
+    expect(row?.status).toBe('AVAILABLE');
+    expect(row?.reservedFor).toBeNull();
+    const quote = await json<Quotation>(await request(`/quotations/${invoice.quotationId}`));
+    expect(quote.invoice?.status).toBe('CANCELLED');
+    const again = await invoiceFor(invoice.quotationId);
+    expect(again.id).not.toBe(invoice.id);
+  });
+
+  it('applies a status change only once when two requests race', async () => {
+    const buyer = await customer();
+    const item = await product('Invoice Race');
+    const invoice = await invoiceFor((await quoteFor(buyer.id, [item.id])).id);
+    await setStatus(invoice.id, 'ISSUED');
+    const results = await Promise.all([
+      setStatus(invoice.id, 'DEPOSIT_COMPLETE'),
+      setStatus(invoice.id, 'DEPOSIT_COMPLETE'),
+    ]);
+    // The loser either sees the status already changed (200) or a conflict (409).
+    for (const r of results) expect([200, 409]).toContain(r.status);
+    expect(results.some((r) => r.status === 200)).toBe(true);
+    const saved = await json<Invoice>(await request(`/invoices/${invoice.id}`));
+    expect(saved.history.filter((h) => h.toStatus === 'DEPOSIT_COMPLETE')).toHaveLength(1);
+    expect((await stock(item.id))?.status).toBe('RESERVED');
+  });
+
+  it('edits a draft invoice but never adds products and caps the deposit', async () => {
+    const buyer = await customer();
+    const first = await product('Invoice Edit A');
+    const second = await product('Invoice Edit B');
+    const invoice = await invoiceFor((await quoteFor(buyer.id, [first.id, second.id])).id);
+    const base = {
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate,
+      discount: 0,
+      deliveryFee: 0,
+      installationFee: 0,
+      otherCharges: 0,
+      vatEnabled: false,
+      vatRate: 7,
+      taxMode: 'EXCLUSIVE',
+      paymentTerms: '',
+      deliveryTerms: '',
+      warrantyTerms: '',
+      notes: '',
+    };
+    const keep = invoice.items[0];
+    const edited = await request(`/invoices/${invoice.id}`, 'PATCH', {
+      ...base,
+      depositAmount: 300,
+      items: [{ id: keep.id, displayName: 'Renamed', description: '', quantity: 1, unitPrice: 900, discount: 0 }],
+    });
+    expect(edited.status).toBe(200);
+    const saved = await json<Invoice>(edited);
+    expect(saved.items.map((i) => i.productName)).toEqual(['Renamed']);
+    expect(saved.grandTotal).toBe(900);
+    expect(saved.depositAmount).toBe(300);
+    expect(
+      (
+        await request(`/invoices/${invoice.id}`, 'PATCH', {
+          ...base,
+          depositAmount: 0,
+          items: [{ id: 'not-from-quote', displayName: 'X', description: '', quantity: 1, unitPrice: 1, discount: 0 }],
+        })
+      ).status,
+    ).toBe(422);
+    expect(
+      (
+        await request(`/invoices/${invoice.id}`, 'PATCH', {
+          ...base,
+          depositAmount: 5000,
+          items: [{ id: keep.id, displayName: 'Renamed', description: '', quantity: 1, unitPrice: 900, discount: 0 }],
+        })
+      ).status,
+    ).toBe(422);
+    await setStatus(invoice.id, 'ISSUED');
+    expect(
+      (
+        await request(`/invoices/${invoice.id}`, 'PATCH', {
+          ...base,
+          depositAmount: 0,
+          items: [{ id: keep.id, displayName: 'Late', description: '', quantity: 1, unitPrice: 900, discount: 0 }],
+        })
+      ).status,
+    ).toBe(409);
+    const quote = await json<Invoice>(await request(`/invoices/${invoice.id}`));
+    expect(quote.items).toHaveLength(1);
+    expect((await stock(second.id))?.status).toBe('AVAILABLE');
+  });
+
+  it('does not invoice cancelled quotations', async () => {
+    const buyer = await customer();
+    const item = await product('Invoice Cancelled Quote');
+    const quote = await quoteFor(buyer.id, [item.id]);
+    await request(`/quotations/${quote.id}/status`, 'POST', { status: 'CANCELLED' });
+    expect((await request('/invoices', 'POST', { quotationId: quote.id })).status).toBe(409);
   });
 });
 describe('AI response validation', () => {

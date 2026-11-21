@@ -4178,3 +4178,8 @@ html[data-theme='dark'] .email-tag.replied { background: #172c4a; color: #9cc3ff
 .catalog-price-visibility { display: grid; gap: 4px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .catalog-price-visibility legend { padding: 0; font-weight: 600; font-size: 13px; }
 .catalog-price-visibility .quotation-check { min-height: 32px; }
+
+.invoice-stock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.badge.issued { background: #e0ecff; color: #1d4f9c; }
+.badge.deposit_complete { background: #fbf0d9; color: #9c7e3c; }
+.badge.payment_complete { background: #dcfce7; color: #166534; }

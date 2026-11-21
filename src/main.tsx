@@ -24,6 +24,7 @@ import {
   X,
   Wallet,
   ReceiptText,
+  FileCheck,
   LogOut,
   Globe2,
   ExternalLink,
@@ -43,6 +44,7 @@ import { ChatBadge } from './components/ChatBadge';
 import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
 import { QuotationsPage, QuotationForm, QuotationPage } from './pages/Quotations';
+import { InvoicesPage, InvoicePage, InvoiceForm } from './pages/Invoices';
 import { CatalogsPage } from './pages/Catalogs';
 import { ExpenseCategoriesPage, ExpenseDetailPage, ExpenseFormPage, ExpensesPage, FinanceOverviewPage } from './pages/Finance';
 import { CalendarPage } from './pages/Calendar';
@@ -54,7 +56,7 @@ const MetaPage = lazy(() => import('./pages/Meta').then(module => ({ default: mo
 const navigationGroups = [
   { label: 'Overview', items: [['/', 'Dashboard', LayoutDashboard]] },
   { label: 'Products & inventory', items: [['/inventory', 'Inventory', Dumbbell], ['/catalogs', 'Catalogs', Share2], ['/equipment-guide', 'Equipment guide', BookOpenText]] },
-  { label: 'Customers & sales', items: [['/customers', 'Customers', Users], ['/sales', 'Sales', Kanban], ['/quotations', 'Quotations', FileText], ['/followups', 'Follow-ups', CalendarClock], ['/calendar', 'Calendar & reminders', CalendarDays]] },
+  { label: 'Customers & sales', items: [['/customers', 'Customers', Users], ['/sales', 'Sales', Kanban], ['/quotations', 'Quotations', FileText], ['/invoices', 'Invoices', FileCheck], ['/followups', 'Follow-ups', CalendarClock], ['/calendar', 'Calendar & reminders', CalendarDays]] },
   { label: 'Tools', items: [['/chat', 'Team chat', MessageCircle], ['/catalog-chats', 'Customer chat', MessagesSquare], ['/inbox', 'Email inbox', Mail], ['/ai-search', 'AI product search', Sparkles], ['/news', 'News', Newspaper]] },
   { label: 'Meta / Facebook', items: [['/meta/inbox', 'Messenger Inbox', MessagesSquare], ['/meta/leads', 'Meta Leads', Users], ['/meta/ads', 'Ads Dashboard', LayoutDashboard], ['/meta/campaigns', 'Campaigns', FileText], ['/meta/insights', 'Page Insights', Globe2], ['/meta/content', 'Page Content', FileText], ['/meta/webhooks', 'Meta Webhooks', CalendarClock]] },
   { label: 'Finance', items: [['/finance', 'Finance', Wallet], ['/expenses', 'Expenses', ReceiptText]] },
@@ -309,6 +311,9 @@ function AppLayout() {
               <Route path="/quotations/new" element={<QuotationForm />} />
               <Route path="/quotations/:id" element={<QuotationPage />} />
               <Route path="/quotations/:id/edit" element={<QuotationForm />} />
+              <Route path="/invoices" element={<InvoicesPage />} />
+              <Route path="/invoices/:id" element={<InvoicePage />} />
+              <Route path="/invoices/:id/edit" element={<InvoiceForm />} />
               <Route path="/followups" element={<FollowupsPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/chat" element={<ChatPage />} />

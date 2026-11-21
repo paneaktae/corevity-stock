@@ -113,6 +113,7 @@ export const reservations = sqliteTable('reservations', {
   reservedAt: text('reserved_at').notNull(),
   expiresAt: text('expires_at'),
   notes: text('notes').notNull(),
+  invoiceId: text('invoice_id'),
 });
 export const activities = sqliteTable('activities', {
   id: text('id').primaryKey(),
@@ -212,6 +213,66 @@ export const quotationStatusHistory = sqliteTable(
     createdAt: text('created_at').notNull(),
   },
 );
+export const invoiceNumberSequences = sqliteTable('invoice_number_sequences', {
+  year: integer('year').primaryKey(),
+  lastNumber: integer('last_number').notNull(),
+});
+export const invoices = sqliteTable('invoices', {
+  id: text('id').primaryKey(),
+  invoiceNumber: text('invoice_number').notNull().unique(),
+  quotationId: text('quotation_id').notNull(),
+  customerId: text('customer_id').notNull(),
+  leadId: text('lead_id'),
+  status: text('status').notNull(),
+  issueDate: text('issue_date').notNull(),
+  dueDate: text('due_date').notNull(),
+  currency: text('currency').notNull(),
+  customerSnapshot: text('customer_snapshot').notNull(),
+  salesContactEmail: text('sales_contact_email').notNull(),
+  salesContactName: text('sales_contact_name').notNull(),
+  subtotalMinor: integer('subtotal_minor').notNull(),
+  discountMinor: integer('discount_minor').notNull(),
+  deliveryFeeMinor: integer('delivery_fee_minor').notNull(),
+  installationFeeMinor: integer('installation_fee_minor').notNull(),
+  otherChargesMinor: integer('other_charges_minor').notNull(),
+  vatEnabled: integer('vat_enabled', { mode: 'boolean' }).notNull(),
+  vatRateBps: integer('vat_rate_bps').notNull(),
+  taxMode: text('tax_mode').notNull(),
+  vatMinor: integer('vat_minor').notNull(),
+  grandTotalMinor: integer('grand_total_minor').notNull(),
+  depositMinor: integer('deposit_minor').notNull(),
+  paymentTerms: text('payment_terms').notNull(),
+  deliveryTerms: text('delivery_terms').notNull(),
+  warrantyTerms: text('warranty_terms').notNull(),
+  notes: text('notes').notNull(),
+  createdBy: text('created_by').notNull(),
+  ...timestamps,
+});
+export const invoiceItems = sqliteTable('invoice_items', {
+  id: text('id').primaryKey(),
+  invoiceId: text('invoice_id').notNull(),
+  productId: text('product_id'),
+  productNameSnapshot: text('product_name_snapshot').notNull(),
+  brandSnapshot: text('brand_snapshot').notNull(),
+  modelSnapshot: text('model_snapshot').notNull(),
+  skuSnapshot: text('sku_snapshot').notNull(),
+  descriptionSnapshot: text('description_snapshot').notNull(),
+  imageKeySnapshot: text('image_key_snapshot').notNull(),
+  imageMimeSnapshot: text('image_mime_snapshot').notNull(),
+  quantity: integer('quantity').notNull(),
+  unitPriceMinor: integer('unit_price_minor').notNull(),
+  discountMinor: integer('discount_minor').notNull(),
+  lineTotalMinor: integer('line_total_minor').notNull(),
+  sortOrder: integer('sort_order').notNull(),
+});
+export const invoiceStatusHistory = sqliteTable('invoice_status_history', {
+  id: text('id').primaryKey(),
+  invoiceId: text('invoice_id').notNull(),
+  fromStatus: text('from_status'),
+  toStatus: text('to_status').notNull(),
+  changedBy: text('changed_by').notNull(),
+  createdAt: text('created_at').notNull(),
+});
 export const productSales = sqliteTable('product_sales', {
   productId: text('product_id')
     .primaryKey()
@@ -221,6 +282,7 @@ export const productSales = sqliteTable('product_sales', {
   soldAt: text('sold_at').notNull(),
   sellingPrice: real('selling_price').notNull(),
   purchaseCost: real('purchase_cost').notNull(),
+  invoiceId: text('invoice_id'),
 });
 
 export const salespeople = sqliteTable('salespeople', {

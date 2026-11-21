@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowLeft, ArrowUp, Copy, FileText, Plus, Search, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Copy, FileText, Plus, ReceiptText, Search, Trash2 } from 'lucide-react';
 import type { Customer, CustomerDetail, CustomerInput, Product, ProductDetail } from '../../shared/schemas';
 import type { Quotation, QuotationInput, QuotationItemInput, QuotationStatus } from '../../shared/quotations';
 import { quotationItemTitle, quotationStatuses } from '../../shared/quotations';
@@ -29,7 +29,7 @@ const dateAfter = (day: string, count: number) => {
   value.setDate(value.getDate() + count);
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
 };
-function formatCurrency(value: number, currency: string) {
+export function formatCurrency(value: number, currency: string) {
   try {
     return new Intl.NumberFormat(getLanguage() === 'th' ? 'th-TH' : 'en-TH', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
   } catch {
@@ -296,11 +296,12 @@ export function QuotationPage() {
   },[quote,showPdf]);
   if(!quote)return <><ErrorBox message={error}/>{!error&&<Loading/>}</>;
   async function changeStatus(status:QuotationStatus){setBusy(true);setActionError('');try{await api(`/quotations/${quote!.id}/status`,{method:'POST',body:JSON.stringify({status})});reload()}catch(e){setActionError((e as Error).message)}finally{setBusy(false)}}
+  async function createInvoice(){setBusy(true);setActionError('');try{const invoice=await api<{id:string}>('/invoices',{method:'POST',body:JSON.stringify({quotationId:quote!.id})});navigate(`/invoices/${invoice.id}`)}catch(e){setActionError((e as Error).message)}finally{setBusy(false)}}
   async function duplicate(){setBusy(true);setActionError('');try{const copy=await api<Quotation>(`/quotations/${quote!.id}/duplicate`,{method:'POST'});navigate(`/quotations/${copy.id}/edit`)}catch(e){setActionError((e as Error).message)}finally{setBusy(false)}}
   const Pdf = PdfPreview;
   return <>
     <Link className="back" to="/quotations"><ArrowLeft size={16}/>{t('Quotations')}</Link>
-    <Header title={quote.quotationNumber} subtitle={`${quote.customer.companyName||quote.customer.name} · ${date(quote.issueDate)}`} action={<div className="header-actions"><button type="button" onClick={()=>void duplicate()} disabled={busy}><Copy size={16}/>{t('Duplicate')}</button>{quote.status==='DRAFT'&&<Link className="button" to={`/quotations/${quote.id}/edit`}>{t('Edit draft')}</Link>}<button className="primary" type="button" onClick={()=>setShowPdf((v)=>!v)}><FileText size={16}/>{showPdf?t('Hide PDF'):t('Preview / download PDF')}</button></div>}/>
+    <Header title={quote.quotationNumber} subtitle={`${quote.customer.companyName||quote.customer.name} · ${date(quote.issueDate)}`} action={<div className="header-actions">{quote.invoice&&<Link className="button" to={`/invoices/${quote.invoice.id}`}><ReceiptText size={16}/>{quote.invoice.invoiceNumber} · {t(quote.invoice.status)}</Link>}{(!quote.invoice||quote.invoice.status==='CANCELLED')&&quote.status!=='CANCELLED'&&quote.status!=='REJECTED'&&<button type="button" onClick={()=>void createInvoice()} disabled={busy}><ReceiptText size={16}/>{t('Create invoice')}</button>}<button type="button" onClick={()=>void duplicate()} disabled={busy}><Copy size={16}/>{t('Duplicate')}</button>{quote.status==='DRAFT'&&<Link className="button" to={`/quotations/${quote.id}/edit`}>{t('Edit draft')}</Link>}<button className="primary" type="button" onClick={()=>setShowPdf((v)=>!v)}><FileText size={16}/>{showPdf?t('Hide PDF'):t('Preview / download PDF')}</button></div>}/>
     <ErrorBox message={actionError}/>
     <div className="quotation-detail-layout"><div className="panel quotation-detail-card">
       <div className="section-heading"><h2>{t('Quotation details')}</h2><Badge value={quote.status}/></div>

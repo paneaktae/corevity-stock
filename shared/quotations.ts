@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { money } from './schemas';
+import type { QuotationInvoiceLink } from './invoices';
 
 export const quotationStatuses = [
   'DRAFT',
@@ -133,6 +134,8 @@ export type Quotation = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** Latest invoice issued from this quotation (a cancelled one only if no other exists). */
+  invoice?: QuotationInvoiceLink | null;
   history: {
     id: string;
     fromStatus: QuotationStatus | null;

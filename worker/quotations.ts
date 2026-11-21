@@ -25,7 +25,7 @@ function fail(status: 400 | 404 | 409 | 422, message: string): never {
 const id = () => crypto.randomUUID();
 const timestamp = () => new Date().toISOString();
 const authEmail = (c: { get: (key: 'email') => string }) => c.get('email');
-type CompanyRow = {
+export type CompanyRow = {
   company_name_th: string;
   company_name_en: string;
   address: string;
@@ -138,12 +138,12 @@ const defaultCompany = (): QuotationSettingsInput => ({
   warrantyTerms: '',
   defaultVatRate: 7,
 });
-async function companyRow(database: D1Database) {
+export async function companyRow(database: D1Database) {
   return database
     .prepare("SELECT * FROM quotation_settings WHERE id='default'")
     .first<CompanyRow>();
 }
-function companyInput(row: CompanyRow | null): QuotationSettingsInput {
+export function companyInput(row: CompanyRow | null): QuotationSettingsInput {
   return row
     ? {
         companyNameTh: row.company_name_th,
@@ -162,14 +162,14 @@ function companyInput(row: CompanyRow | null): QuotationSettingsInput {
       }
     : defaultCompany();
 }
-function parse<T>(value: string, fallback: T): T {
+export function parse<T>(value: string, fallback: T): T {
   try {
     return JSON.parse(value) as T;
   } catch {
     return fallback;
   }
 }
-function todayBangkok() {
+export function todayBangkok() {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Bangkok',
     year: 'numeric',
@@ -211,6 +211,7 @@ function toQuote(
   items: ItemRow[],
   history: Quotation['history'],
   profile: CompanyRow | null,
+  invoice: Quotation['invoice'] = null,
 ): Quotation {
   return {
     id: row.id,
@@ -258,6 +259,7 @@ function toQuote(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     history,
+    invoice,
   };
 }
 async function getQuote(database: D1Database, quoteId: string) {
@@ -266,7 +268,7 @@ async function getQuote(database: D1Database, quoteId: string) {
     .bind(quoteId)
     .first<QuoteRow>();
   if (!row) fail(404, 'Quotation not found.');
-  const [items, history, profile] = await Promise.all([
+  const [items, history, profile, invoice] = await Promise.all([
     database
       .prepare(
         'SELECT i.*,p.status AS product_status,p.target_body_part AS product_spec FROM quotation_items i LEFT JOIN products p ON p.id=i.product_id WHERE i.quotation_id=? ORDER BY i.sort_order,i.rowid',
@@ -280,11 +282,17 @@ async function getQuote(database: D1Database, quoteId: string) {
       .bind(quoteId)
       .all<Quotation['history'][number]>(),
     companyRow(database),
+    database
+      .prepare(
+        "SELECT id,invoice_number AS invoiceNumber,status FROM invoices WHERE quotation_id=? ORDER BY status='CANCELLED',created_at DESC LIMIT 1",
+      )
+      .bind(quoteId)
+      .first<NonNullable<Quotation['invoice']>>(),
   ]);
   return {
     row,
     items: items.results,
-    quote: toQuote(row, items.results, history.results, profile),
+    quote: toQuote(row, items.results, history.results, profile, invoice),
   };
 }
 async function getCustomer(database: D1Database, customerId: string) {
@@ -346,7 +354,7 @@ async function reserveNumber(database: D1Database, year: number) {
   if (!row) throw new Error('Could not reserve a quotation number.');
   return `QT-${year}-${String(row.last_number).padStart(4, '0')}`;
 }
-async function copyObject(
+export async function copyObject(
   bucket: R2Bucket,
   from: string,
   to: string,
@@ -515,7 +523,7 @@ function quoteWriteStatement(
       args.createdAt,
     );
 }
-async function salespersonName(database: D1Database, email: string) {
+export async function salespersonName(database: D1Database, email: string) {
   const row = await database
     .prepare(
       "SELECT trim(first_name || ' ' || last_name) AS name FROM salespeople WHERE email=?",
