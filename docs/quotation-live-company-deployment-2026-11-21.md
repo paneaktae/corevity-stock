@@ -63,3 +63,14 @@ User requested "Commit and deploy".
 - Worker `c4e8585d` → `e6d204a4-3779-4e3b-99dd-49dc9b9beb81`; no migration, secret or var changes.
 - Verified live: custom domain serves `index-C6H8lnJs.js` (matches `dist/client`),
   `QuotationPdf-Cry1V8Wn.js` 200; anonymous `/api/quotations` returns 401.
+
+## Follow-up 2026-11-22: hide Before tax without VAT (334beb8)
+
+User requested "Commit and deploy".
+
+- "Before tax" (and VAT) rows show only when VAT is applied: create/edit summary, detail page, PDF,
+  downloaded HTML. Totals calculation unchanged.
+- Checks: `npm run check`, 201 tests; checked detail page and edit summary (VAT off/on) locally.
+- Worker `e6d204a4` → `206d1799-761a-4f1d-a5a4-9dc502e2d041`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-B8jZD3z5.js` (matches `dist/client`),
+  `QuotationPdf-Btf4T3rl.js` 200; anonymous `/api/quotations` returns 401.
