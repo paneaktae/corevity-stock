@@ -170,3 +170,13 @@ export function quotationCompanyNames(
         : '',
   };
 }
+
+/**
+ * Name shown for a quotation item: the saved product name followed by the
+ * product's specification (skipped when the name already contains it).
+ */
+export function quotationItemTitle(name: string, specification: string): string {
+  const spec = specification.trim();
+  if (!spec || name.toLowerCase().includes(spec.toLowerCase())) return name;
+  return `${name} ${spec}`;
+}

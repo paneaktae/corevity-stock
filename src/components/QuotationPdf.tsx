@@ -14,6 +14,7 @@ import thaiRegular from '@fontsource/noto-sans-thai/files/noto-sans-thai-thai-40
 import thaiBold from '@fontsource/noto-sans-thai/files/noto-sans-thai-thai-700-normal.woff?url';
 import {
   quotationCompanyNames,
+  quotationItemTitle,
   type Quotation,
 } from '../../shared/quotations';
 import { getLanguage, t } from '../i18n';
@@ -309,11 +310,10 @@ export function QuotationDocument({
               )}
             </View>
             <View style={styles.cellProduct}>
-              <PText style={styles.productName}>{item.productName}</PText>
-              <PText style={styles.productMeta}>
-                {item.sku}
-                {item.specification ? ` · ${item.specification}` : ''}
+              <PText style={styles.productName}>
+                {quotationItemTitle(item.productName, item.specification)}
               </PText>
+              <PText style={styles.productMeta}>{item.sku}</PText>
               {item.description ? (
                 <PText style={styles.description}>{item.description}</PText>
               ) : null}

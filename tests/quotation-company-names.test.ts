@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { quotationCompanyNames } from '../shared/quotations';
+import {
+  quotationCompanyNames,
+  quotationItemTitle,
+} from '../shared/quotations';
 import { quotationPrintHtml } from '../src/quotationPrint';
 import type { Quotation } from '../shared/quotations';
 
@@ -141,7 +144,23 @@ describe('quotation company names', () => {
       'en',
       (v) => v,
     );
-    expect(html).toContain('SKU-1 · Seated Leg Press');
+    expect(html).toContain(
+      '<div class="product">Leg press Seated Leg Press</div>',
+    );
+    expect(html).toContain('<div class="product-meta">SKU-1</div>');
     expect(html).not.toContain('Used - Excellent');
+  });
+
+  it('appends the specification to the item name once', () => {
+    expect(
+      quotationItemTitle(
+        'Hammer Strength Iso-Lateral Row',
+        'Seated Leg Press; Purple',
+      ),
+    ).toBe('Hammer Strength Iso-Lateral Row Seated Leg Press; Purple');
+    expect(quotationItemTitle('Matrix Leg Press', 'leg press')).toBe(
+      'Matrix Leg Press',
+    );
+    expect(quotationItemTitle('Matrix Row', '  ')).toBe('Matrix Row');
   });
 });
