@@ -51,3 +51,15 @@ User requested "Commit and deploy".
 - Worker `c88fd45c` → `c4e8585d-7c47-4311-b327-a314183ca820`; no migration, secret or var changes.
 - Verified live: custom domain serves `index-D6N3SfV1.js` (matches `dist/client`, has the new
   placeholder) and `QuotationPdf-DuRFNZ1u.js`; anonymous `/api/quotations/products` returns 401.
+
+## Follow-up 2026-11-21: specification appended to item name (8428354)
+
+User requested "Commit and deploy".
+
+- Spec now follows the product name (`quotationItemTitle`: name + " " + spec, skipped when the name
+  already contains it) on the detail page, PDF, downloaded HTML and product search results; the SKU
+  line shows only the SKU. Display only; saved `product_name_snapshot` unchanged.
+- Checks: `npm run check`, 200 tests; checked detail, edit and search in the local app.
+- Worker `c4e8585d` → `e6d204a4-3779-4e3b-99dd-49dc9b9beb81`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-C6H8lnJs.js` (matches `dist/client`),
+  `QuotationPdf-Cry1V8Wn.js` 200; anonymous `/api/quotations` returns 401.
