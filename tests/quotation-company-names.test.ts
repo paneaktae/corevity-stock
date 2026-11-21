@@ -163,4 +163,57 @@ describe('quotation company names', () => {
     );
     expect(quotationItemTitle('Matrix Row', '  ')).toBe('Matrix Row');
   });
+
+  it('shows Before tax and VAT only when VAT is applied', () => {
+    const base = {
+      quotationNumber: 'QT-2026-0003',
+      issueDate: '2026-11-22',
+      validUntil: '2026-12-22',
+      currency: 'THB',
+      customer: {
+        name: 'Customer',
+        companyName: '',
+        contactName: '',
+        phone: '',
+        email: '',
+        billingAddress: '',
+      },
+      company: {
+        ...names,
+        address: '',
+        phone: '',
+        email: '',
+        taxId: '',
+        bankDetails: '',
+      },
+      salesContactName: 'Sales',
+      items: [],
+      subtotal: 100,
+      discount: 0,
+      deliveryFee: 0,
+      installationFee: 0,
+      otherCharges: 0,
+      vatRate: 7,
+      taxMode: 'EXCLUSIVE',
+      beforeTax: 100,
+      paymentTerms: '',
+      deliveryTerms: '',
+      warrantyTerms: '',
+      notes: '',
+    };
+    const render = (extra: object) =>
+      quotationPrintHtml(
+        { ...base, ...extra } as unknown as Quotation,
+        {},
+        { regular: '', bold: '' } as never,
+        'en',
+        (v) => v,
+      );
+    const noVat = render({ vatEnabled: false, vatAmount: 0, grandTotal: 100 });
+    expect(noVat).not.toContain('Before tax');
+    expect(noVat).not.toContain('VAT (');
+    const withVat = render({ vatEnabled: true, vatAmount: 7, grandTotal: 107 });
+    expect(withVat).toContain('Before tax');
+    expect(withVat).toContain('VAT (7%)');
+  });
 });

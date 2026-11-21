@@ -347,14 +347,11 @@ export function QuotationDocument({
             ['Delivery fee', quote.deliveryFee],
             ['Installation fee', quote.installationFee],
             ['Other charges', quote.otherCharges],
-            ['Before tax', quote.beforeTax],
             ...(quote.vatEnabled
-              ? [
-                  [`VAT (${quote.vatRate}%)`, quote.vatAmount] as [
-                    string,
-                    number,
-                  ],
-                ]
+              ? ([
+                  ['Before tax', quote.beforeTax],
+                  [`VAT (${quote.vatRate}%)`, quote.vatAmount],
+                ] as [string, number][])
               : []),
           ].map(([label, value]) => (
             <View key={String(label)} style={styles.totalLine}>

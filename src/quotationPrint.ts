@@ -55,10 +55,12 @@ export function quotationPrintHtml(
     ['Delivery fee', quote.deliveryFee],
     ['Installation fee', quote.installationFee],
     ['Other charges', quote.otherCharges],
-    ['Before tax', quote.beforeTax],
   ];
   if (quote.vatEnabled)
-    totalRows.push([`${t('VAT')} (${quote.vatRate}%)`, quote.vatAmount]);
+    totalRows.push(
+      ['Before tax', quote.beforeTax],
+      [`${t('VAT')} (${quote.vatRate}%)`, quote.vatAmount],
+    );
   const terms = [
     ['Payment terms', quote.paymentTerms],
     ['Delivery terms', quote.deliveryTerms],
