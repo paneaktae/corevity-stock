@@ -98,3 +98,20 @@ User requested "Commit and deploy".
 - Worker `b48b141c` → `05a1ca97-00fa-4a73-be81-8d1f08e9255d`; no migration, secret or var changes.
 - Verified live: custom domain serves `index-aeSqIHSz.js` (matches `dist/client`, has the button);
   anonymous `DELETE /api/quotations/:id` 401.
+
+## Follow-up 2026-11-22: bank account name/number on invoices only (1d8c8a0)
+
+User requested "Back up and deploy".
+
+- D1 backup: `output/d1-backup-2026-11-22-pre-0046.sql` (local, gitignored; 2.7 MB).
+- Remote D1: applied `0046_bank_account_number.sql` only (`quotation_settings.bank_account_number`,
+  empty). Settings row intact; production then had 2 quotations and 1 invoice (user deletions since
+  the 0045 backup).
+- Settings: "Bank details" is now Bank account name (Thai/English, `bank_details`/`bank_details_en`)
+  plus Bank account number. Invoices print both (name in the document language); quotations print no
+  bank details.
+- Checks: `npm run check`, 223 tests; settings save and TH/EN invoice/quotation previews tried locally.
+- Worker `05a1ca97` → `2d2d7373-921a-45eb-b2ea-5395957322d1`; no secret or var changes.
+- Verified live: custom domain serves `index-DK2qEYuX.js` (matches `dist/client`) and
+  `QuotationPdf-BfxjqVhY.js` (has the bank account rows); anonymous `/api/quotation-settings` 401.
+- To do by the user: fill in the bank account name and number in Settings › Quotations.
