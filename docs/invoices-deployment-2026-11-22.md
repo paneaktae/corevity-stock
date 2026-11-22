@@ -74,3 +74,14 @@ User requested "Commit and deploy".
   (`AI_API_KEY` already set in production).
 - Verified live: custom domain serves `index-CzeaxPMg.js` (matches `dist/client`, calls the translate
   endpoint); anonymous `POST /api/quotation-settings/translate` 401.
+
+## Follow-up 2026-11-22: status badge colors, compact search badge (c917b91)
+
+User requested "Commit and deploy".
+
+- Quotation/invoice status badges colored per status with dark-theme variants; the status badge in the
+  create-invoice quotation search no longer stretches. CSS/markup only.
+- Checks: `npm run check`, 221 tests; badges checked in light and dark themes locally.
+- Worker `0fda58ef` → `b48b141c-ab11-40db-a15d-38f97a3c5201`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-DrGVgkFl.css` / `index-Cki4V45t.js` (match `dist/client`),
+  CSS contains the new badge rules.
