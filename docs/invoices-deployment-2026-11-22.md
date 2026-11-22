@@ -85,3 +85,16 @@ User requested "Commit and deploy".
 - Worker `0fda58ef` → `b48b141c-ab11-40db-a15d-38f97a3c5201`; no migration, secret or var changes.
 - Verified live: custom domain serves `index-DrGVgkFl.css` / `index-Cki4V45t.js` (match `dist/client`),
   CSS contains the new badge rules.
+
+## Follow-up 2026-11-22: delete quotations (8f37b32)
+
+User requested "Commit and deploy".
+
+- `DELETE /api/quotations/:id`: removes the quotation, its items/history (cascade) and its own R2
+  copies; logged on the customer. Refused (409) while any invoice references it; guarded in the same
+  batch with `NOT EXISTS(invoices)`. Quotation page: Delete button with confirmation, disabled when
+  an invoice is linked.
+- Checks: `npm run check`, 222 tests; delete and the blocked case tried locally.
+- Worker `b48b141c` → `05a1ca97-00fa-4a73-be81-8d1f08e9255d`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-aeSqIHSz.js` (matches `dist/client`, has the button);
+  anonymous `DELETE /api/quotations/:id` 401.
