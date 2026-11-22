@@ -41,3 +41,21 @@ User requested "Commit and deploy".
 - Verified live: custom domain serves `index-CColghLu.js` (matches `dist/client`, has `/invoices/new`)
   and `QuotationPdf-BrF9JAEK.js` (has the preview); `/invoices/new` 200; anonymous
   `DELETE /api/invoices/:id` 401.
+
+## Follow-up 2026-11-22: Thai/English terms, no delivery terms on invoices (a4efb3b)
+
+User requested "Back up and deploy".
+
+- D1 backup: `output/d1-backup-2026-11-22-pre-0045.sql` (local, gitignored; 2.7 MB, 4 quotations,
+  2 invoices).
+- Remote D1: applied `0045_bilingual_terms.sql` only — empty `*_en` term columns on
+  `quotation_settings` (incl. `bank_details_en`), `quotations` and `invoices` (payment/warranty).
+  Existing rows unchanged (4 quotations, 2 invoices, Thai default terms intact).
+- Forms take each term in Thai and English; documents print the term in their language and fall back
+  to the other. Invoices no longer copy, show or print delivery terms.
+- Checks: `npm run check`, 217 tests; settings, quotation form, invoice form and TH/EN invoice preview
+  tried locally.
+- Worker `421f54ae` → `e6a5ccf0-77e7-4d0c-8a41-4bc76b14f25b`; no secret or var changes.
+- Verified live: custom domain serves `index-DKEl7bzc.js` (matches `dist/client`, has the bilingual
+  term fields); anonymous `/api/quotation-settings`, `/api/invoices`, `/api/quotations` 401.
+- To do by the user: fill in the English default terms in Settings › Quotations.
