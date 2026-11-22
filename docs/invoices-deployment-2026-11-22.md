@@ -26,3 +26,18 @@ User explicitly requested "Back up and deploy".
 
 Code: redeploy `ec129703` (`wrangler rollback`). The new tables/columns are additive and unused by
 older code; drop them only if invoices must be removed entirely (restore from the backup above).
+
+## Follow-up 2026-11-22: delete, create page, Thai/English documents (ea35b06)
+
+User requested "Commit and deploy".
+
+- `DELETE /api/invoices/:id` (not for PAYMENT_COMPLETE; deposit-complete invoices release their
+  reservations in the same status-guarded batch). `/invoices/new` finds a quotation by number or
+  customer and creates the draft. Quotation and invoice documents get a ไทย/English switch with an
+  inline preview; print/PDF and HTML download use the chosen language (`-TH`/`-EN` file names).
+- Checks: `npm run check`, 214 tests; create page, TH/EN preview (quotation and invoice) and delete
+  tried in the local app.
+- Worker `91a1988e` → `421f54ae-2c0a-4194-bf10-36d43364dcdb`; no migration, secret or var changes.
+- Verified live: custom domain serves `index-CColghLu.js` (matches `dist/client`, has `/invoices/new`)
+  and `QuotationPdf-BrF9JAEK.js` (has the preview); `/invoices/new` 200; anonymous
+  `DELETE /api/invoices/:id` 401.
