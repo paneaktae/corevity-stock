@@ -44,6 +44,7 @@ export type CompanyRow = {
   delivery_terms_en: string;
   warranty_terms_en: string;
   bank_details_en: string;
+  bank_account_number: string;
   default_vat_rate_bps: number;
 };
 type QuoteRow = {
@@ -148,6 +149,7 @@ const defaultCompany = (): QuotationSettingsInput => ({
   deliveryTermsEn: '',
   warrantyTermsEn: '',
   bankDetailsEn: '',
+  bankAccountNumber: '',
   defaultVatRate: 7,
 });
 export async function companyRow(database: D1Database) {
@@ -174,6 +176,7 @@ export function companyInput(row: CompanyRow | null): QuotationSettingsInput {
         deliveryTermsEn: row.delivery_terms_en ?? '',
         warrantyTermsEn: row.warranty_terms_en ?? '',
         bankDetailsEn: row.bank_details_en ?? '',
+        bankAccountNumber: row.bank_account_number ?? '',
         defaultVatRate: row.default_vat_rate_bps / 100,
       }
     : defaultCompany();
@@ -575,7 +578,7 @@ quotationSettingsRoutes.patch('/', async (c) => {
   const values = quotationSettingsInput.parse(await c.req.json());
   const dbNow = timestamp();
   await c.env.DB.prepare(
-    'UPDATE quotation_settings SET company_name_th=?,company_name_en=?,address=?,phone=?,email=?,tax_id=?,line_url=?,facebook_url=?,bank_details=?,payment_terms=?,delivery_terms=?,warranty_terms=?,payment_terms_en=?,delivery_terms_en=?,warranty_terms_en=?,bank_details_en=?,default_vat_rate_bps=?,updated_at=? WHERE id=\'default\'',
+    'UPDATE quotation_settings SET company_name_th=?,company_name_en=?,address=?,phone=?,email=?,tax_id=?,line_url=?,facebook_url=?,bank_details=?,payment_terms=?,delivery_terms=?,warranty_terms=?,payment_terms_en=?,delivery_terms_en=?,warranty_terms_en=?,bank_details_en=?,bank_account_number=?,default_vat_rate_bps=?,updated_at=? WHERE id=\'default\'',
   )
     .bind(
       values.companyNameTh,
@@ -594,6 +597,7 @@ quotationSettingsRoutes.patch('/', async (c) => {
       values.deliveryTermsEn,
       values.warrantyTermsEn,
       values.bankDetailsEn,
+      values.bankAccountNumber,
       Math.round(values.defaultVatRate * 100),
       dbNow,
     )

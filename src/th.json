@@ -1192,5 +1192,8 @@
   "Automatic translation failed. Please try again.": "แปลอัตโนมัติไม่สำเร็จ กรุณาลองใหม่",
   "Delete quotation": "ลบใบเสนอราคา",
   "Delete this quotation? This cannot be undone.": "ลบใบเสนอราคานี้? ย้อนกลับไม่ได้",
-  "This quotation has an invoice. Delete the invoice first.": "ใบเสนอราคานี้มีใบแจ้งหนี้อยู่ ต้องลบใบแจ้งหนี้ก่อน"
+  "This quotation has an invoice. Delete the invoice first.": "ใบเสนอราคานี้มีใบแจ้งหนี้อยู่ ต้องลบใบแจ้งหนี้ก่อน",
+  "Bank account name": "ชื่อบัญชีธนาคาร",
+  "Bank account number": "เลขที่บัญชีธนาคาร",
+  "shown on invoices only": "แสดงเฉพาะในใบแจ้งหนี้"
 }

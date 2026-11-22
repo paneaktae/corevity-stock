@@ -154,6 +154,7 @@ export const quotationSettings = sqliteTable('quotation_settings', {
   deliveryTermsEn: text('delivery_terms_en').notNull().default(''),
   warrantyTermsEn: text('warranty_terms_en').notNull().default(''),
   bankDetailsEn: text('bank_details_en').notNull().default(''),
+  bankAccountNumber: text('bank_account_number').notNull().default(''),
   defaultVatRateBps: integer('default_vat_rate_bps').notNull(),
   updatedAt: text('updated_at').notNull(),
 });

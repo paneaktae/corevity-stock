@@ -73,6 +73,8 @@ export const quotationSettingsInput = z
     deliveryTermsEn: z.string().trim().max(2000).default(''),
     warrantyTermsEn: z.string().trim().max(2000).default(''),
     bankDetailsEn: z.string().trim().max(2000).default(''),
+    /** Printed on invoices with the account name (bankDetails / bankDetailsEn). */
+    bankAccountNumber: z.string().trim().max(100).default(''),
     defaultVatRate: z.number().finite().min(0).max(100),
   })
   .strict();

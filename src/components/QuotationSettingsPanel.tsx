@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { api, useData } from '../lib';
 import { t } from '../i18n';
 import { ErrorBox, Field, Loading } from './ui';
@@ -22,18 +22,19 @@ type CompanyProfile = {
   deliveryTermsEn: string;
   warrantyTermsEn: string;
   bankDetailsEn: string;
+  bankAccountNumber: string;
   defaultVatRate: number;
   hasLogo: boolean;
 };
 const empty: CompanyProfile = {
   companyNameTh: '', companyNameEn: '', address: '', phone: '', email: '',
   taxId: '', lineUrl: '', facebookUrl: '', bankDetails: '', paymentTerms: '', deliveryTerms: '',
-  warrantyTerms: '', paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '', bankDetailsEn: '',
+  warrantyTerms: '', paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '', bankDetailsEn: '', bankAccountNumber: '',
   defaultVatRate: 7, hasLogo: false,
 };
 
 const bilingualTerms = [
-  ['bankDetails', 'bankDetailsEn', 'Bank details'],
+  ['bankDetails', 'bankDetailsEn', 'Bank account name'],
   ['paymentTerms', 'paymentTermsEn', 'Default payment terms'],
   ['deliveryTerms', 'deliveryTermsEn', 'Default delivery terms'],
   ['warrantyTerms', 'warrantyTermsEn', 'Default warranty terms'],
@@ -210,16 +211,27 @@ export function QuotationSettingsPanel() {
         {bilingualTerms.map((term) => {
           const [thKey, enKey, label] = term;
           return (
-            <BilingualTermField
-              key={thKey}
-              label={label}
-              thai={form[thKey]}
-              english={form[enKey]}
-              onThai={(value) => update(thKey, value)}
-              onEnglish={(value) => update(enKey, value)}
-              translating={translating === thKey}
-              onTranslate={translating ? undefined : () => void autoEnglish(term)}
-            />
+            <Fragment key={thKey}>
+              <BilingualTermField
+                label={thKey === 'bankDetails' ? `${t(label)} (${t('shown on invoices only')})` : label}
+                thai={form[thKey]}
+                english={form[enKey]}
+                onThai={(value) => update(thKey, value)}
+                onEnglish={(value) => update(enKey, value)}
+                translating={translating === thKey}
+                onTranslate={translating ? undefined : () => void autoEnglish(term)}
+              />
+              {thKey === 'bankDetails' && (
+                <Field label={`${t('Bank account number')} (${t('shown on invoices only')})`}>
+                  <input
+                    inputMode="numeric"
+                    placeholder="123-4-56789-0"
+                    value={form.bankAccountNumber}
+                    onChange={(e) => update('bankAccountNumber', e.target.value)}
+                  />
+                </Field>
+              )}
+            </Fragment>
           );
         })}
         <button className="primary" disabled={busy}>

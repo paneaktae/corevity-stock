@@ -81,6 +81,8 @@ export type PrintOptions = {
   afterTotal?: [label: string, value: number][];
   /** Hide the "this product is sold/reserved" notes (expected on invoices). */
   hideStockNotes?: boolean;
+  /** Print the bank account name and number (invoices only). */
+  showBankAccount?: boolean;
 };
 export const quotationPrintOptions: PrintOptions = {
   title: 'Quotation',
@@ -131,7 +133,12 @@ export function quotationPrintHtml(
     ['Payment terms', termFor(quote.paymentTerms, quote.paymentTermsEn, language)],
     ['Delivery terms', termFor(quote.deliveryTerms, quote.deliveryTermsEn, language)],
     ['Warranty terms', termFor(quote.warrantyTerms, quote.warrantyTermsEn, language)],
-    ['Bank details', termFor(company.bankDetails, company.bankDetailsEn ?? '', language)],
+    ...(options.showBankAccount
+      ? [
+          ['Bank account name', termFor(company.bankDetails, company.bankDetailsEn ?? '', language)],
+          ['Bank account number', company.bankAccountNumber ?? ''],
+        ]
+      : []),
     ['Additional notes', quote.notes],
   ].filter(([, value]) => value.trim());
   return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(quote.quotationNumber)}</title><style>

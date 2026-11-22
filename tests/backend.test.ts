@@ -2276,11 +2276,13 @@ describe('quotation workflow', () => {
       ...values,
       paymentTermsEn: 'Default 50% deposit',
       bankDetailsEn: 'KBank account 123',
+      bankAccountNumber: '123-4-56789-0',
     });
     expect(saved.status).toBe(200);
     const reread = await json<Record<string, string>>(await request('/quotation-settings'));
     expect(reread.paymentTermsEn).toBe('Default 50% deposit');
     expect(reread.bankDetailsEn).toBe('KBank account 123');
+    expect(reread.bankAccountNumber).toBe('123-4-56789-0');
   });
 
   it('refuses automatic translation when AI is not configured', async () => {

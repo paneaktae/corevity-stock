@@ -83,6 +83,7 @@ export function invoicePrintOptions(invoice: Invoice): PrintOptions {
           ]
         : [],
     hideStockNotes: true,
+    showBankAccount: true,
   };
 }
 function printable(invoice: Invoice): PrintableDocument {

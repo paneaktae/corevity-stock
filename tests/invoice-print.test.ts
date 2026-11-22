@@ -11,7 +11,7 @@ const doc = {
   company: {
     companyNameTh: 'คอร์วิตี้', companyNameEn: 'Corevity Used Gym Equipment', address: '', phone: '', email: '',
     taxId: '', lineUrl: '', facebookUrl: '', bankDetails: '', paymentTerms: '', deliveryTerms: '', warrantyTerms: '',
-    paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '', bankDetailsEn: '',
+    paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '', bankDetailsEn: '', bankAccountNumber: '',
     defaultVatRate: 7, logoAvailable: false,
   },
   salesContactName: 'Sales',
@@ -84,13 +84,31 @@ describe('invoice print layout', () => {
     expect(thai).toContain('มัดจำ 30%');
     expect(thai).not.toContain('30% deposit');
     expect(thai).toContain('Delivery in 7 days');
-    expect(thai).toContain('กสิกรไทย 123');
+    expect(thai).not.toContain('กสิกรไทย 123');
     const english = quotationPrintHtml(bilingual, {}, fonts, 'en', (v) => v);
     expect(english).toContain('30% deposit');
     expect(english).not.toContain('มัดจำ 30%');
     expect(english).toContain('รับประกัน 6 เดือน');
-    expect(english).toContain('KBank 123');
+    expect(english).not.toContain('KBank 123');
     const invoiceLike = quotationPrintHtml({ ...bilingual, deliveryTerms: '', deliveryTermsEn: '' }, {}, fonts, 'en', (v) => v);
     expect(invoiceLike).not.toContain('Delivery terms');
+  });
+
+  it('prints the bank account name and number on invoices only', () => {
+    const fonts = { latinRegular: '', latinBold: '', thaiRegular: '', thaiBold: '' };
+    const withBank = {
+      ...doc,
+      company: { ...doc.company, bankDetails: 'บริษัท คอร์วิตี้ จำกัด', bankDetailsEn: 'Corevity Co., Ltd.', bankAccountNumber: '123-4-56789-0' },
+    };
+    const quotation = quotationPrintHtml(withBank, {}, fonts, 'th', (v) => translate(v, 'th'));
+    expect(quotation).not.toContain('123-4-56789-0');
+    expect(quotation).not.toContain('ชื่อบัญชีธนาคาร');
+    const invoiceOptions = { title: 'Invoice', englishTitle: 'INVOICE', secondDateLabel: 'Due date', showBankAccount: true };
+    const thai = quotationPrintHtml(withBank, {}, fonts, 'th', (v) => translate(v, 'th'), invoiceOptions);
+    expect(thai).toContain('<strong>ชื่อบัญชีธนาคาร</strong><p>บริษัท คอร์วิตี้ จำกัด</p>');
+    expect(thai).toContain('<strong>เลขที่บัญชีธนาคาร</strong><p>123-4-56789-0</p>');
+    const english = quotationPrintHtml(withBank, {}, fonts, 'en', (v) => v, invoiceOptions);
+    expect(english).toContain('<strong>Bank account name</strong><p>Corevity Co., Ltd.</p>');
+    expect(english).toContain('<strong>Bank account number</strong><p>123-4-56789-0</p>');
   });
 });
