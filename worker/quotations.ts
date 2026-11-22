@@ -878,6 +878,42 @@ quotationRoutes.patch('/:id', async (c) => {
   await Promise.all(oldKeys.map((key) => c.env.PRODUCT_IMAGES.delete(key)));
   return c.json((await getQuote(database, quoteId)).quote);
 });
+/**
+ * Deletes a quotation with its items and history. Not allowed while any
+ * invoice (even a cancelled one) points at it: delete the invoice first.
+ */
+quotationRoutes.delete('/:id', async (c) => {
+  const database = c.env.DB;
+  const quoteId = c.req.param('id');
+  const { row, items } = await getQuote(database, quoteId);
+  const invoice = await database
+    .prepare('SELECT invoice_number FROM invoices WHERE quotation_id=? LIMIT 1')
+    .bind(quoteId)
+    .first<{ invoice_number: string }>();
+  if (invoice) fail(409, 'This quotation has an invoice. Delete the invoice first.');
+  const email = authEmail(c);
+  const now = timestamp();
+  const noInvoice = 'NOT EXISTS(SELECT 1 FROM invoices WHERE quotation_id=?)';
+  const results = await database.batch([
+    database
+      .prepare(
+        `INSERT INTO activities(id,entity_type,entity_id,action,description,user_email,created_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM quotations WHERE id=?) AND ${noInvoice}`,
+      )
+      .bind(id(), 'customer', row.customer_id, 'quotation_deleted', `Quotation ${row.quotation_number} (${row.status}) deleted`, email, now, quoteId, quoteId),
+    database
+      .prepare(`DELETE FROM quotations WHERE id=? AND ${noInvoice}`)
+      .bind(quoteId, quoteId),
+  ]);
+  if (!results[1]?.meta.changes)
+    fail(409, 'This quotation has an invoice. Delete the invoice first.');
+  const company = parse<StoredCompanySnapshot>(row.company_snapshot, { ...defaultCompany(), logoKey: '' });
+  await Promise.all(
+    [...items.map((item) => item.image_key_snapshot), company.logoKey]
+      .filter((key): key is string => !!key && key.startsWith(`quotations/${quoteId}/`))
+      .map((key) => c.env.PRODUCT_IMAGES.delete(key)),
+  );
+  return c.json({ ok: true });
+});
 quotationRoutes.post('/:id/status', async (c) => {
   const { status } = zStatus(await c.req.json());
   const database = c.env.DB;

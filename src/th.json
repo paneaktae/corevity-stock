@@ -1189,5 +1189,8 @@
   "Some English boxes already have text. Replace them with new translations? Choose Cancel to fill only the empty ones.": "ช่องภาษาอังกฤษบางช่องมีข้อความอยู่แล้ว ต้องการแทนที่ด้วยคำแปลใหม่ไหม? กด Cancel เพื่อแปลเฉพาะช่องที่ว่าง",
   "English filled in from the Thai text. Check it, then save.": "เติมภาษาอังกฤษจากภาษาไทยแล้ว ตรวจข้อความ แล้วกดบันทึก",
   "Automatic translation is not set up on the server.": "ยังไม่ได้ตั้งค่าการแปลอัตโนมัติบนเซิร์ฟเวอร์",
-  "Automatic translation failed. Please try again.": "แปลอัตโนมัติไม่สำเร็จ กรุณาลองใหม่"
+  "Automatic translation failed. Please try again.": "แปลอัตโนมัติไม่สำเร็จ กรุณาลองใหม่",
+  "Delete quotation": "ลบใบเสนอราคา",
+  "Delete this quotation? This cannot be undone.": "ลบใบเสนอราคานี้? ย้อนกลับไม่ได้",
+  "This quotation has an invoice. Delete the invoice first.": "ใบเสนอราคานี้มีใบแจ้งหนี้อยู่ ต้องลบใบแจ้งหนี้ก่อน"
 }

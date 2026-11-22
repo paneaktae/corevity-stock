@@ -2590,6 +2590,25 @@ describe('invoice workflow', () => {
     expect(invoice).not.toHaveProperty('deliveryTerms');
   });
 
+  it('deletes a quotation only when no invoice points at it', async () => {
+    const buyer = await customer();
+    const item = await product('Quotation Delete');
+    const plain = await quoteFor(buyer.id, [item.id]);
+    expect((await request(`/quotations/${plain.id}`, 'DELETE')).status).toBe(200);
+    expect((await request(`/quotations/${plain.id}`)).status).toBe(404);
+    expect((await request(`/quotations/${plain.id}`, 'DELETE')).status).toBe(404);
+
+    const quote = await quoteFor(buyer.id, [item.id]);
+    const invoice = await invoiceFor(quote.id);
+    await setStatus(invoice.id, 'CANCELLED');
+    const blocked = await request(`/quotations/${quote.id}`, 'DELETE');
+    expect(blocked.status).toBe(409);
+    expect((await json<{ error: { message: string } }>(blocked)).error.message).toContain('Delete the invoice first');
+    expect((await request(`/invoices/${invoice.id}`, 'DELETE')).status).toBe(200);
+    expect((await request(`/quotations/${quote.id}`, 'DELETE')).status).toBe(200);
+    expect((await stock(item.id))?.status).toBe('AVAILABLE');
+  });
+
   it('does not invoice cancelled quotations', async () => {
     const buyer = await customer();
     const item = await product('Invoice Cancelled Quote');
