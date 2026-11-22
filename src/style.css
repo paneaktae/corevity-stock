@@ -4180,9 +4180,25 @@ html[data-theme='dark'] .email-tag.replied { background: #172c4a; color: #9cc3ff
 .catalog-price-visibility .quotation-check { min-height: 32px; }
 
 .invoice-stock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+/* Quotation and invoice statuses: one color per stage, readable in both themes. */
+.badge.draft { background: #eceff3; color: #4b5563; }
+.badge.sent,
 .badge.issued { background: #e0ecff; color: #1d4f9c; }
-.badge.deposit_complete { background: #fbf0d9; color: #9c7e3c; }
+.badge.accepted,
 .badge.payment_complete { background: #dcfce7; color: #166534; }
+.badge.deposit_complete { background: #fdf0d3; color: #8a5a00; }
+.badge.rejected { background: #fee2e2; color: #b91c1c; }
+.badge.expired { background: #ffedd5; color: #9a4a07; }
+.badge.cancelled { background: #f1f1f1; color: #737373; text-decoration: line-through; }
+html[data-theme='dark'] .badge.draft { background: #2a3443; color: #c3ccd8; }
+html[data-theme='dark'] .badge.sent,
+html[data-theme='dark'] .badge.issued { background: #1b3150; color: #9cc3ff; }
+html[data-theme='dark'] .badge.accepted,
+html[data-theme='dark'] .badge.payment_complete { background: #163a27; color: #8fe0ad; }
+html[data-theme='dark'] .badge.deposit_complete { background: #3d3218; color: #f3cf7f; }
+html[data-theme='dark'] .badge.rejected { background: #45201f; color: #fca5a5; }
+html[data-theme='dark'] .badge.expired { background: #42301a; color: #fbbf7a; }
+html[data-theme='dark'] .badge.cancelled { background: #2b2f36; color: #9aa3ad; }
 .quotation-search-results > button.selected { border-color: var(--brand-blue); background: var(--brand-soft); }
 .document-language { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .document-language > span { color: var(--muted-text); font-size: 13px; margin-right: 4px; }
@@ -4204,3 +4220,6 @@ html[data-theme='dark'] .email-tag.replied { background: #172c4a; color: #9cc3ff
 .bilingual-term-head .link-button { background: none; border: 0; padding: 0; min-height: 0; color: var(--brand-blue); font-size: 12px; font-weight: 600; cursor: pointer; }
 .bilingual-term-head .link-button:disabled { color: var(--muted-text); cursor: default; }
 .success-note { color: #166534; font-size: 13px; margin: 0 0 10px; }
+.invoice-quote-results > button { align-items: center; }
+.invoice-quote-results > button > span:first-child { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.invoice-quote-results > button > span.badge { flex: none; }

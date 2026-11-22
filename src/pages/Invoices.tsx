@@ -167,7 +167,7 @@ export function InvoiceCreate() {
       <div className="quotation-editor-main">
         <section className="panel quotation-section"><h2>{t('Quotation')}</h2>
           <Field label={t('Quotation number')}><input autoFocus value={query} placeholder={t('e.g. QT-2026-0003 or customer name')} onChange={(e) => setQuery(e.target.value)} /></Field>
-          {search && <div className="quotation-search-results">
+          {search && <div className="quotation-search-results invoice-quote-results">
             {results?.length ? results.map((choice) => <button type="button" key={choice.id} className={choice.id === selectedId ? 'selected' : ''} onClick={() => { setParams({ quotationId: choice.id }); setQuery(''); }}>
               <span><strong>{choice.quotationNumber}</strong><small>{choice.customer.companyName || choice.customer.name} · {date(choice.issueDate)} · {formatCurrency(choice.total, choice.currency)}</small></span>
               <Badge value={choice.status} />
