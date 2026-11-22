@@ -4197,3 +4197,10 @@ html[data-theme='dark'] .email-tag.replied { background: #172c4a; color: #9cc3ff
 .bilingual-term textarea { width: 100%; box-sizing: border-box; }
 .term-language { display: inline-block; font-size: 10px; font-weight: 700; color: var(--muted-text); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-right: 6px; vertical-align: 1px; }
 @media (max-width: 640px) { .bilingual-term { grid-template-columns: 1fr; } }
+.auto-english { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.auto-english .muted { margin: 0; flex: 1 1 280px; }
+.auto-english button { display: inline-flex; align-items: center; gap: 6px; }
+.bilingual-term-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bilingual-term-head .link-button { background: none; border: 0; padding: 0; min-height: 0; color: var(--brand-blue); font-size: 12px; font-weight: 600; cursor: pointer; }
+.bilingual-term-head .link-button:disabled { color: var(--muted-text); cursor: default; }
+.success-note { color: #166534; font-size: 13px; margin: 0 0 10px; }

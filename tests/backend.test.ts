@@ -2283,6 +2283,16 @@ describe('quotation workflow', () => {
     expect(reread.bankDetailsEn).toBe('KBank account 123');
   });
 
+  it('refuses automatic translation when AI is not configured', async () => {
+    const response = await request('/quotation-settings/translate', 'POST', {
+      texts: { paymentTerms: 'มัดจำ 30%' },
+    });
+    expect(response.status).toBe(503);
+    expect(
+      (await request('/quotation-settings/translate', 'POST', { texts: { 'bad key!': 'x' } })).status,
+    ).toBe(422);
+  });
+
   it('reserves unique sequential numbers when quotes are created concurrently', async () => {
     const customerRecord = await customer();
     const equipment = await product('Concurrent Brand');

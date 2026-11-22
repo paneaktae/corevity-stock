@@ -7,12 +7,17 @@ export function BilingualTermField({
   english,
   onThai,
   onEnglish,
+  onTranslate,
+  translating = false,
 }: {
   label: string;
   thai: string;
   english: string;
   onThai: (value: string) => void;
   onEnglish: (value: string) => void;
+  /** When given, shows a button that fills English from the Thai text. */
+  onTranslate?: () => void;
+  translating?: boolean;
 }) {
   return (
     <fieldset className="bilingual-term">
@@ -22,7 +27,22 @@ export function BilingualTermField({
         <textarea rows={3} value={thai} onChange={(e) => onThai(e.target.value)} />
       </label>
       <label>
-        <span>English</span>
+        <span className="bilingual-term-head">
+          English
+          {onTranslate || translating ? (
+            <button
+              type="button"
+              className="link-button"
+              disabled={translating || !onTranslate || !thai.trim()}
+              onClick={(e) => {
+                e.preventDefault();
+                onTranslate?.();
+              }}
+            >
+              {translating ? t('Translating…') : t('Translate from Thai')}
+            </button>
+          ) : null}
+        </span>
         <textarea rows={3} value={english} onChange={(e) => onEnglish(e.target.value)} />
       </label>
     </fieldset>

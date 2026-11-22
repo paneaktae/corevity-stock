@@ -3,6 +3,7 @@ import { api, useData } from '../lib';
 import { t } from '../i18n';
 import { ErrorBox, Field, Loading } from './ui';
 import { BilingualTermField } from './BilingualTerms';
+import { Languages } from 'lucide-react';
 
 type CompanyProfile = {
   companyNameTh: string;
@@ -31,6 +32,13 @@ const empty: CompanyProfile = {
   defaultVatRate: 7, hasLogo: false,
 };
 
+const bilingualTerms = [
+  ['bankDetails', 'bankDetailsEn', 'Bank details'],
+  ['paymentTerms', 'paymentTermsEn', 'Default payment terms'],
+  ['deliveryTerms', 'deliveryTermsEn', 'Default delivery terms'],
+  ['warrantyTerms', 'warrantyTermsEn', 'Default warranty terms'],
+] as const;
+
 export function QuotationSettingsPanel() {
   const { data, error: loadError, reload } = useData<CompanyProfile>(
     '/quotation-settings',
@@ -40,6 +48,8 @@ export function QuotationSettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [logoVersion, setLogoVersion] = useState(0);
+  const [translating, setTranslating] = useState<string | null>(null);
+  const [translated, setTranslated] = useState(false);
   useEffect(() => {
     if (data) setForm(data);
   }, [data]);
@@ -52,6 +62,46 @@ export function QuotationSettingsPanel() {
     );
   const update = (key: keyof CompanyProfile, value: string | number) =>
     setForm((current) => ({ ...current, [key]: value }));
+  /** Fills English boxes from the Thai text. Only changes the form; Save stores it. */
+  async function autoEnglish(only?: (typeof bilingualTerms)[number]) {
+    const targets = (only ? [only] : bilingualTerms).filter(([thKey]) => form[thKey].trim());
+    if (!targets.length) {
+      setError(t('Write the Thai text first.'));
+      return;
+    }
+    let chosen = targets;
+    if (!only && targets.some(([, enKey]) => form[enKey].trim())) {
+      const overwrite = window.confirm(
+        t('Some English boxes already have text. Replace them with new translations? Choose Cancel to fill only the empty ones.'),
+      );
+      if (!overwrite) chosen = targets.filter(([, enKey]) => !form[enKey].trim());
+    }
+    if (!chosen.length) return;
+    setTranslating(only ? only[0] : 'all');
+    setError('');
+    setSaved(false);
+    setTranslated(false);
+    try {
+      const { translations } = await api<{ translations: Record<string, string> }>(
+        '/quotation-settings/translate',
+        {
+          method: 'POST',
+          body: JSON.stringify({ texts: Object.fromEntries(chosen.map(([thKey]) => [thKey, form[thKey]])) }),
+        },
+      );
+      setForm((current) => {
+        const next = { ...current };
+        for (const [thKey, enKey] of chosen)
+          if (translations[thKey]) next[enKey] = translations[thKey];
+        return next;
+      });
+      setTranslated(true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTranslating(null);
+    }
+  }
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -147,24 +197,31 @@ export function QuotationSettingsPanel() {
         <Field label={t('Company address')}>
           <textarea rows={3} value={form.address} onChange={(e) => update('address', e.target.value)} />
         </Field>
-        <p className="muted">
-          {t('Write each term in Thai and English. Thai documents print the Thai text, English documents the English text.')}
-        </p>
-        {([
-          ['bankDetails', 'bankDetailsEn', 'Bank details'],
-          ['paymentTerms', 'paymentTermsEn', 'Default payment terms'],
-          ['deliveryTerms', 'deliveryTermsEn', 'Default delivery terms'],
-          ['warrantyTerms', 'warrantyTermsEn', 'Default warranty terms'],
-        ] as const).map(([thKey, enKey, label]) => (
-          <BilingualTermField
-            key={thKey}
-            label={label}
-            thai={form[thKey]}
-            english={form[enKey]}
-            onThai={(value) => update(thKey, value)}
-            onEnglish={(value) => update(enKey, value)}
-          />
-        ))}
+        <div className="auto-english">
+          <p className="muted">
+            {t('Write each term in Thai and English. Thai documents print the Thai text, English documents the English text.')}
+          </p>
+          <button type="button" disabled={!!translating} onClick={() => void autoEnglish()}>
+            <Languages size={16} />
+            {translating === 'all' ? t('Translating…') : t('Auto English (translate from Thai)')}
+          </button>
+        </div>
+        {translated && <p className="success-note">{t('English filled in from the Thai text. Check it, then save.')}</p>}
+        {bilingualTerms.map((term) => {
+          const [thKey, enKey, label] = term;
+          return (
+            <BilingualTermField
+              key={thKey}
+              label={label}
+              thai={form[thKey]}
+              english={form[enKey]}
+              onThai={(value) => update(thKey, value)}
+              onEnglish={(value) => update(enKey, value)}
+              translating={translating === thKey}
+              onTranslate={translating ? undefined : () => void autoEnglish(term)}
+            />
+          );
+        })}
         <button className="primary" disabled={busy}>
           {busy ? t('Saving…') : t('Save quotation settings')}
         </button>

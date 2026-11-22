@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { translateThaiToEnglish } from './services/translate';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 import type { Bindings, AppEnv } from './auth';
@@ -598,6 +599,33 @@ quotationSettingsRoutes.patch('/', async (c) => {
     )
     .run();
   return c.json({ ...values, hasLogo: !!(await companyRow(c.env.DB))?.logo_key });
+});
+/** Translates Thai term text to English with the configured AI provider. Nothing is saved. */
+quotationSettingsRoutes.post('/translate', async (c) => {
+  const { texts } = z
+    .object({
+      texts: z
+        .record(z.string().regex(/^[a-zA-Z]{1,40}$/), z.string().max(2000))
+        .refine((value) => Object.keys(value).length <= 10, 'Too many texts.'),
+    })
+    .strict()
+    .parse(await c.req.json());
+  try {
+    return c.json({ translations: await translateThaiToEnglish(c.env, texts) });
+  } catch (error) {
+    const unconfigured = error instanceof Error && error.message === 'AI_NOT_CONFIGURED';
+    return c.json(
+      {
+        error: {
+          code: unconfigured ? 'AI_NOT_CONFIGURED' : 'AI_FAILED',
+          message: unconfigured
+            ? 'Automatic translation is not set up on the server.'
+            : 'Automatic translation failed. Please try again.',
+        },
+      },
+      unconfigured ? 503 : 502,
+    );
+  }
 });
 quotationSettingsRoutes.post('/logo', async (c) => {
   const form = await c.req.formData();

@@ -1181,5 +1181,13 @@
   "The invoice starts as a draft, so you can set the deposit and due date next.": "ใบแจ้งหนี้จะเริ่มเป็นฉบับร่าง ตั้งเงินมัดจำและวันครบกำหนดได้ในขั้นถัดไป",
   "Search for a quotation to see its products and total.": "ค้นหาใบเสนอราคาเพื่อดูสินค้าและยอดรวม",
   "Oldest first": "เก่าสุดก่อน",
-  "Write each term in Thai and English. Thai documents print the Thai text, English documents the English text.": "กรอกเงื่อนไขทั้งภาษาไทยและภาษาอังกฤษ เอกสารภาษาไทยจะพิมพ์ข้อความภาษาไทย เอกสารภาษาอังกฤษจะพิมพ์ข้อความภาษาอังกฤษ (ถ้าเว้นว่าง จะใช้อีกภาษาแทน)"
+  "Write each term in Thai and English. Thai documents print the Thai text, English documents the English text.": "กรอกเงื่อนไขทั้งภาษาไทยและภาษาอังกฤษ เอกสารภาษาไทยจะพิมพ์ข้อความภาษาไทย เอกสารภาษาอังกฤษจะพิมพ์ข้อความภาษาอังกฤษ (ถ้าเว้นว่าง จะใช้อีกภาษาแทน)",
+  "Auto English (translate from Thai)": "Auto English (แปลจากภาษาไทย)",
+  "Translating…": "กำลังแปล…",
+  "Translate from Thai": "แปลจากภาษาไทย",
+  "Write the Thai text first.": "กรอกข้อความภาษาไทยก่อน",
+  "Some English boxes already have text. Replace them with new translations? Choose Cancel to fill only the empty ones.": "ช่องภาษาอังกฤษบางช่องมีข้อความอยู่แล้ว ต้องการแทนที่ด้วยคำแปลใหม่ไหม? กด Cancel เพื่อแปลเฉพาะช่องที่ว่าง",
+  "English filled in from the Thai text. Check it, then save.": "เติมภาษาอังกฤษจากภาษาไทยแล้ว ตรวจข้อความ แล้วกดบันทึก",
+  "Automatic translation is not set up on the server.": "ยังไม่ได้ตั้งค่าการแปลอัตโนมัติบนเซิร์ฟเวอร์",
+  "Automatic translation failed. Please try again.": "แปลอัตโนมัติไม่สำเร็จ กรุณาลองใหม่"
 }
