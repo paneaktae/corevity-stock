@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { quotationPrintHtml, type PrintableDocument } from '../src/quotationPrint';
+import { translate } from '../src/i18n';
 
 const doc = {
   quotationNumber: 'INV-2026-0001',
@@ -44,5 +45,24 @@ describe('invoice print layout', () => {
     expect(html).toContain('<h2>Quotation</h2><p>QUOTATION</p>');
     expect(html).toContain('<dt>Valid until</dt>');
     expect(html).not.toContain('Balance due');
+  });
+
+  it('prints Thai or English regardless of the CRM language', () => {
+    const options = {
+      title: 'Invoice',
+      englishTitle: 'INVOICE',
+      secondDateLabel: 'Due date',
+      reference: ['Quotation reference', 'QT-2026-0003'] as [string, string],
+      afterTotal: [['Deposit', 300], ['Balance due', 700]] as [string, number][],
+    };
+    const fonts = { latinRegular: '', latinBold: '', thaiRegular: '', thaiBold: '' };
+    const thai = quotationPrintHtml(doc, {}, fonts, 'th', (v) => translate(v, 'th'), options);
+    expect(thai).toContain('<h2>ใบแจ้งหนี้</h2><p>INVOICE</p>');
+    expect(thai).toContain('<dt>วันครบกำหนดชำระ</dt>');
+    expect(thai).toContain('<h1>คอร์วิตี้</h1>');
+    const english = quotationPrintHtml(doc, {}, fonts, 'en', (v) => translate(v, 'en'), options);
+    expect(english).toContain('<h2>Invoice</h2>');
+    expect(english).toContain('<h1>COREVITY</h1>');
+    expect(english).not.toContain('วันครบกำหนดชำระ');
   });
 });

@@ -759,6 +759,57 @@ invoiceRoutes.post('/:id/status', async (c) => {
   return c.json((await getInvoice(database, invoiceId)).invoice);
 });
 
+/**
+ * Deletes an invoice. A deposit-complete invoice releases its reservations in
+ * the same batch; a paid invoice cannot be deleted because it holds the sale
+ * records. The quotation stays as it is and can be invoiced again.
+ */
+invoiceRoutes.delete('/:id', async (c) => {
+  const database = c.env.DB;
+  const invoiceId = c.req.param('id');
+  const { row, items } = await getInvoice(database, invoiceId);
+  if (row.status === 'PAYMENT_COMPLETE')
+    fail(409, 'Paid invoices cannot be deleted because the products are sold on them.');
+  const email = authEmail(c);
+  const now = timestamp();
+  // Everything before the delete only runs while the invoice is still in the status read above.
+  const guard = 'EXISTS(SELECT 1 FROM invoices WHERE id=? AND status=?)';
+  const guarded = (sql: string, ...args: unknown[]) =>
+    database.prepare(`${sql} AND ${guard}`).bind(...args, invoiceId, row.status);
+  const log = (entityType: string, entityId: string, action: string, description: string) =>
+    database
+      .prepare(
+        `INSERT INTO activities(id,entity_type,entity_id,action,description,user_email,created_at) SELECT ?,?,?,?,?,?,? WHERE ${guard}`,
+      )
+      .bind(id(), entityType, entityId, action, description, email, now, invoiceId, row.status);
+  const statements: D1PreparedStatement[] = [];
+  if (row.status === 'DEPOSIT_COMPLETE') {
+    for (const line of items.filter((item) => item.product_id))
+      statements.push(
+        log('product', line.product_id!, 'released', `Reservation released: invoice ${row.invoice_number} deleted`),
+      );
+    statements.push(guarded('DELETE FROM reservations WHERE invoice_id=?', invoiceId));
+  }
+  statements.push(
+    log('quotation', row.quotation_id, 'invoice_deleted', `Invoice ${row.invoice_number} (${row.status}) deleted`),
+    guarded('UPDATE reservations SET invoice_id=NULL WHERE invoice_id=?', invoiceId),
+    database
+      .prepare('DELETE FROM invoices WHERE id=? AND status=?')
+      .bind(invoiceId, row.status),
+  );
+  const results = await database.batch(statements);
+  const deleted = results[statements.length - 1];
+  if (!deleted?.meta.changes)
+    fail(409, 'The invoice status changed. Refresh and try again.');
+  await Promise.all(
+    items
+      .map((item) => item.image_key_snapshot)
+      .filter(Boolean)
+      .map((key) => c.env.PRODUCT_IMAGES.delete(key)),
+  );
+  return c.json({ ok: true });
+});
+
 invoiceRoutes.get('/:id/items/:itemId/image', async (c) => {
   const row = await c.env.DB.prepare(
     'SELECT image_key_snapshot,image_mime_snapshot FROM invoice_items WHERE invoice_id=? AND id=?',

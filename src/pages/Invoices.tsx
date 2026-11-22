@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, FileText, Search, Trash2 } from 'lucide-react';
 import {
   invoiceStatuses,
@@ -9,12 +9,12 @@ import {
   type InvoiceStatus,
   type InvoiceUpdateInput,
 } from '../../shared/invoices';
-import { quotationItemTitle } from '../../shared/quotations';
+import { quotationItemTitle, type Quotation } from '../../shared/quotations';
 import { calculateQuotationTotals, fromMinor, toMinor } from '../../shared/quotation-money';
 import type { PrintableDocument, PrintOptions } from '../quotationPrint';
 import { api, date, useData, useDebounce } from '../lib';
 import { t } from '../i18n';
-import { Badge, Empty, ErrorBox, Field, Header, Loading } from '../components/ui';
+import { AddLink, Badge, Empty, ErrorBox, Field, Header, Loading } from '../components/ui';
 import { formatCurrency } from './Quotations';
 
 type DraftItem = {
@@ -97,7 +97,7 @@ export function InvoicesPage() {
     `/invoices?q=${encodeURIComponent(search)}&status=${status}&sort=${sort}`,
   );
   return <>
-    <Header title={t('Invoices')} subtitle={t('Invoices issued from quotations. Deposit and payment update stock.')} />
+    <Header title={t('Invoices')} subtitle={t('Invoices issued from quotations. Deposit and payment update stock.')} action={<AddLink to="/invoices/new">{t('Create invoice')}</AddLink>} />
     <div className="panel toolbar quotation-toolbar">
       <label className="search"><Search size={18} /><input aria-label={t('Search invoices')} placeholder={t('Search invoice number, quotation number or customer')} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
       <select aria-label={t('Filter by status')} value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -126,9 +126,81 @@ export function InvoicesPage() {
   </>;
 }
 
+type QuoteChoice = Pick<Quotation, 'id' | 'quotationNumber' | 'customer' | 'issueDate' | 'currency' | 'status'> & { total: number };
+
+/** Whether a quotation can get a new invoice, and why not. */
+function invoiceBlocker(quote: Quotation) {
+  if (quote.status === 'CANCELLED' || quote.status === 'REJECTED')
+    return t('Cancelled or rejected quotations cannot be invoiced.');
+  if (quote.invoice && quote.invoice.status !== 'CANCELLED')
+    return t('This quotation already has an invoice. Cancel it before issuing a new one.');
+  return '';
+}
+
+/** Create an invoice by finding the quotation it comes from. */
+export function InvoiceCreate() {
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const selectedId = params.get('quotationId');
+  const [query, setQuery] = useState('');
+  const search = useDebounce(query);
+  const { data: results } = useData<QuoteChoice[]>(search ? `/quotations?q=${encodeURIComponent(search)}` : null);
+  const { data: quote, error: quoteError } = useData<Quotation>(selectedId ? `/quotations/${selectedId}` : null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const blocker = quote ? invoiceBlocker(quote) : '';
+  async function create() {
+    if (!quote) return;
+    setBusy(true); setError('');
+    try {
+      const invoice = await api<Invoice>('/invoices', { method: 'POST', body: JSON.stringify({ quotationId: quote.id }) });
+      navigate(`/invoices/${invoice.id}/edit`);
+    } catch (e) { setError((e as Error).message); setBusy(false); }
+  }
+  return <>
+    <Link className="back" to="/invoices"><ArrowLeft size={16} />{t('Invoices')}</Link>
+    <Header title={t('Create invoice')} subtitle={t('Find the quotation by its number. Customer, products and prices are copied from it.')} />
+    <ErrorBox message={error} />
+    <div className="quotation-editor-layout">
+      <div className="quotation-editor-main">
+        <section className="panel quotation-section"><h2>{t('Quotation')}</h2>
+          <Field label={t('Quotation number')}><input autoFocus value={query} placeholder={t('e.g. QT-2026-0003 or customer name')} onChange={(e) => setQuery(e.target.value)} /></Field>
+          {search && <div className="quotation-search-results">
+            {results?.length ? results.map((choice) => <button type="button" key={choice.id} className={choice.id === selectedId ? 'selected' : ''} onClick={() => { setParams({ quotationId: choice.id }); setQuery(''); }}>
+              <span><strong>{choice.quotationNumber}</strong><small>{choice.customer.companyName || choice.customer.name} · {date(choice.issueDate)} · {formatCurrency(choice.total, choice.currency)}</small></span>
+              <Badge value={choice.status} />
+            </button>) : results ? <div className="quotation-no-items">{t('No quotations match this search.')}</div> : <Loading />}
+          </div>}
+        </section>
+        {selectedId && !quote && <><ErrorBox message={quoteError} />{!quoteError && <Loading />}</>}
+        {quote && <section className="panel quotation-section">
+          <div className="section-heading"><h2>{quote.quotationNumber}</h2><Badge value={quote.status} /></div>
+          <div className="quotation-facts">{[[t('Customer'), quote.customer.companyName || quote.customer.name], [t('Issue date'), date(quote.issueDate)], [t('Sales contact'), quote.salesContactName]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+          <div className="quotation-detail-items"><h3>{t('Products')}</h3>{quote.items.map((item) => <div className="quotation-detail-item" key={item.id}>
+            {item.imageAvailable ? <img src={`/api/quotations/${quote.id}/items/${item.id}/image`} alt="" /> : <div className="quotation-image-placeholder"><FileText size={18} /></div>}
+            <div className="grow"><strong>{quotationItemTitle(item.productName, item.specification)}</strong><small>{item.sku}</small><small>{item.quantity} × {formatCurrency(item.unitPrice, quote.currency)}</small>{item.productStatus && item.productStatus !== 'AVAILABLE' ? <span className="invoice-stock"><Badge value={item.productStatus} /></span> : null}</div>
+            <strong>{formatCurrency(item.lineTotal, quote.currency)}</strong>
+          </div>)}</div>
+          {quote.invoice && <p className="muted">{t('Linked invoice')}: <Link className="text-link" to={`/invoices/${quote.invoice.id}`}>{quote.invoice.invoiceNumber}</Link> · {t(quote.invoice.status)}</p>}
+        </section>}
+      </div>
+      <aside className="panel quotation-summary"><h2>{t('Summary')}</h2>
+        {quote ? <>
+          {[[t('Subtotal'), quote.subtotal], ...(quote.vatEnabled ? [[`${t('VAT')} (${quote.vatRate}%)`, quote.vatAmount] as [string, number]] : [])].map(([label, value]) => <div className="quotation-summary-line" key={String(label)}><span>{label}</span><strong>{formatCurrency(Number(value), quote.currency)}</strong></div>)}
+          <div className="quotation-grand-total"><span>{t('Grand total')}</span><strong>{formatCurrency(quote.grandTotal, quote.currency)}</strong></div>
+          {blocker ? <div className="warning">{blocker}</div> : null}
+          <div className="quotation-summary-actions"><button type="button" className="primary" disabled={busy || !!blocker} onClick={() => void create()}>{busy ? t('Saving…') : t('Create invoice')}</button><Link className="button" to="/invoices">{t('Cancel')}</Link></div>
+          <small>{t('The invoice starts as a draft, so you can set the deposit and due date next.')}</small>
+        </> : <p className="muted">{t('Search for a quotation to see its products and total.')}</p>}
+      </aside>
+    </div>
+  </>;
+}
+
 const PdfPreview = lazy(() => import('../components/QuotationPdf'));
 export function InvoicePage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data: invoice, error, reload } = useData<Invoice>(`/invoices/${id}`);
   const [actionError, setActionError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -173,6 +245,15 @@ export function InvoicePage() {
     catch (e) { setActionError(localizeStockError((e as Error).message)); }
     finally { setBusy(false); }
   }
+  async function remove() {
+    const message = current.status === 'DEPOSIT_COMPLETE'
+      ? `${t('Delete this invoice? The reservations for these products will be released:')}\n\n${current.items.filter((item) => item.productId).map((item) => `• ${item.sku} ${quotationItemTitle(item.productName, item.specification)}`).join('\n')}`
+      : t('Delete this invoice? This cannot be undone.');
+    if (!window.confirm(`${current.invoiceNumber}\n\n${message}`)) return;
+    setBusy(true); setActionError('');
+    try { await api(`/invoices/${current.id}`, { method: 'DELETE' }); navigate('/invoices'); }
+    catch (e) { setActionError((e as Error).message); setBusy(false); }
+  }
   const balance = fromMinor(toMinor(invoice.grandTotal) - toMinor(invoice.depositAmount));
   const nextStatuses = invoiceTransitions[invoice.status];
   const Pdf = PdfPreview;
@@ -181,6 +262,7 @@ export function InvoicePage() {
     <Header title={invoice.invoiceNumber} subtitle={`${customerName(invoice)} · ${date(invoice.issueDate)}`} action={<div className="header-actions">
       <Link className="button" to={`/quotations/${invoice.quotationId}`}><FileText size={16} />{invoice.quotationNumber}</Link>
       {invoice.status === 'DRAFT' && <Link className="button" to={`/invoices/${invoice.id}/edit`}>{t('Edit draft')}</Link>}
+      {invoice.status !== 'PAYMENT_COMPLETE' && <button type="button" className="danger" disabled={busy} onClick={() => void remove()}><Trash2 size={16} />{t('Delete invoice')}</button>}
       <button className="primary" type="button" onClick={() => setShowPdf((v) => !v)}><FileText size={16} />{showPdf ? t('Hide PDF') : t('Preview / download PDF')}</button>
     </div>} />
     <ErrorBox message={actionError} />

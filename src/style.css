@@ -4183,3 +4183,10 @@ html[data-theme='dark'] .email-tag.replied { background: #172c4a; color: #9cc3ff
 .badge.issued { background: #e0ecff; color: #1d4f9c; }
 .badge.deposit_complete { background: #fbf0d9; color: #9c7e3c; }
 .badge.payment_complete { background: #dcfce7; color: #166534; }
+.quotation-search-results > button.selected { border-color: var(--brand-blue); background: var(--brand-soft); }
+.document-language { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.document-language > span { color: var(--muted-text); font-size: 13px; margin-right: 4px; }
+.document-language button { min-height: 34px; padding: 6px 14px; border-radius: 999px; }
+.document-language button.active { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
+.document-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.document-preview { width: 100%; height: 72vh; min-height: 480px; border: 1px solid var(--border); border-radius: 8px; background: #f1f1ef; }

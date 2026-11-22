@@ -1168,5 +1168,17 @@
   "Accepted": "ยอมรับแล้ว",
   "Sent": "ส่งแล้ว",
   "Rejected": "ถูกปฏิเสธ",
-  "Expired": "หมดอายุ"
+  "Expired": "หมดอายุ",
+  "Document language": "ภาษาเอกสาร",
+  "Delete invoice": "ลบใบแจ้งหนี้",
+  "Delete this invoice? This cannot be undone.": "ลบใบแจ้งหนี้นี้? ย้อนกลับไม่ได้",
+  "Delete this invoice? The reservations for these products will be released:": "ลบใบแจ้งหนี้นี้? การจองสินค้าต่อไปนี้จะถูกปล่อย:",
+  "Paid invoices cannot be deleted because the products are sold on them.": "ลบใบแจ้งหนี้ที่ชำระครบแล้วไม่ได้ เพราะสินค้าถูกขายผ่านใบนี้แล้ว",
+  "Find the quotation by its number. Customer, products and prices are copied from it.": "ค้นหาใบเสนอราคาด้วยเลขที่ ระบบจะดึงลูกค้า สินค้า และราคามาให้",
+  "e.g. QT-2026-0003 or customer name": "เช่น QT-2026-0003 หรือชื่อลูกค้า",
+  "No quotations match this search.": "ไม่พบใบเสนอราคาที่ตรงกับคำค้น",
+  "Linked invoice": "ใบแจ้งหนี้ที่ผูกไว้",
+  "The invoice starts as a draft, so you can set the deposit and due date next.": "ใบแจ้งหนี้จะเริ่มเป็นฉบับร่าง ตั้งเงินมัดจำและวันครบกำหนดได้ในขั้นถัดไป",
+  "Search for a quotation to see its products and total.": "ค้นหาใบเสนอราคาเพื่อดูสินค้าและยอดรวม",
+  "Oldest first": "เก่าสุดก่อน"
 }

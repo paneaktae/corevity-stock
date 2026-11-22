@@ -44,7 +44,7 @@ import { ChatBadge } from './components/ChatBadge';
 import { ExchangeRateProvider } from './components/UsdPrice';
 import { SettingsPage } from './pages/Settings';
 import { QuotationsPage, QuotationForm, QuotationPage } from './pages/Quotations';
-import { InvoicesPage, InvoicePage, InvoiceForm } from './pages/Invoices';
+import { InvoicesPage, InvoicePage, InvoiceForm, InvoiceCreate } from './pages/Invoices';
 import { CatalogsPage } from './pages/Catalogs';
 import { ExpenseCategoriesPage, ExpenseDetailPage, ExpenseFormPage, ExpensesPage, FinanceOverviewPage } from './pages/Finance';
 import { CalendarPage } from './pages/Calendar';
@@ -312,6 +312,7 @@ function AppLayout() {
               <Route path="/quotations/:id" element={<QuotationPage />} />
               <Route path="/quotations/:id/edit" element={<QuotationForm />} />
               <Route path="/invoices" element={<InvoicesPage />} />
+              <Route path="/invoices/new" element={<InvoiceCreate />} />
               <Route path="/invoices/:id" element={<InvoicePage />} />
               <Route path="/invoices/:id/edit" element={<InvoiceForm />} />
               <Route path="/followups" element={<FollowupsPage />} />

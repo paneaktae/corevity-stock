@@ -23,7 +23,8 @@ import {
   quotationItemTitle,
   type Quotation,
 } from '../../shared/quotations';
-import { getLanguage, t } from '../i18n';
+import { getLanguage, t, translate, type Language } from '../i18n';
+import { useMemo, useState } from 'react';
 import type { TextProps } from '@react-pdf/renderer';
 
 Font.register({
@@ -395,6 +396,16 @@ export function QuotationDocument({
   );
 }
 
+const fonts: QuotationFonts = { latinRegular, latinBold, thaiRegular, thaiBold };
+const documentLanguages: { value: Language; label: string; suffix: string }[] = [
+  { value: 'th', label: 'ไทย', suffix: 'TH' },
+  { value: 'en', label: 'English', suffix: 'EN' },
+];
+
+/**
+ * Preview, print/save as PDF, or download a quotation or invoice in Thai or
+ * English, independent of the CRM's own language.
+ */
 export default function QuotationPdf({
   quote,
   assets,
@@ -406,19 +417,21 @@ export default function QuotationPdf({
   options?: PrintOptions;
   downloadLabel?: string;
 }) {
-  const filename = `${quote.quotationNumber}-${(quote.customer.companyName || quote.customer.name || 'Customer').replace(/[^a-z0-9]+/gi, '-')}.pdf`;
-  const fonts: QuotationFonts = {
-    latinRegular,
-    latinBold,
-    thaiRegular,
-    thaiBold,
-  };
-  const absoluteFonts = Object.fromEntries(
-    Object.entries(fonts).map(([key, url]) => [
-      key,
-      new URL(url, window.location.href).href,
-    ]),
-  ) as QuotationFonts;
+  const [docLanguage, setDocLanguage] = useState<Language>(getLanguage());
+  const translateDoc = (text: string) => translate(text, docLanguage);
+  const suffix = documentLanguages.find((entry) => entry.value === docLanguage)!.suffix;
+  const baseName = `${quote.quotationNumber}-${(quote.customer.companyName || quote.customer.name || 'Customer').replace(/[^a-z0-9]+/gi, '-')}-${suffix}`;
+  const absoluteFonts = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(fonts).map(([key, url]) => [key, new URL(url, window.location.href).href]),
+      ) as QuotationFonts,
+    [],
+  );
+  const previewHtml = useMemo(
+    () => quotationPrintHtml(quote, assets, absoluteFonts, docLanguage, (text) => translate(text, docLanguage), options),
+    [quote, assets, absoluteFonts, docLanguage, options],
+  );
   function openPrintable() {
     const popup = window.open('', '_blank');
     if (!popup) {
@@ -426,24 +439,14 @@ export default function QuotationPdf({
       return;
     }
     popup.document.open();
-    popup.document.write(
-      quotationPrintHtml(quote, assets, absoluteFonts, getLanguage(), t, options),
-    );
+    popup.document.write(previewHtml.replace('<title>', `<title>${baseName} · `));
     popup.document.close();
     void (async () => {
       try {
         await Promise.all([
-          popup.document.fonts.load(
-            '400 10pt CorevityQuote',
-            'Corevity ใบเสนอราคา',
-          ),
-          popup.document.fonts.load(
-            '700 10pt CorevityQuote',
-            'Corevity ใบเสนอราคา',
-          ),
-          ...Array.from(popup.document.images).map((img) =>
-            img.decode().catch(() => undefined),
-          ),
+          popup.document.fonts.load('400 10pt CorevityQuote', 'Corevity ใบเสนอราคา'),
+          popup.document.fonts.load('700 10pt CorevityQuote', 'Corevity ใบเสนอราคา'),
+          ...Array.from(popup.document.images).map((img) => img.decode().catch(() => undefined)),
         ]);
         await popup.document.fonts.ready;
         if (!popup.closed) {
@@ -473,20 +476,11 @@ export default function QuotationPdf({
           }),
         ),
       ) as QuotationFonts;
-      const html = quotationPrintHtml(
-        quote,
-        assets,
-        embedded,
-        getLanguage(),
-        t,
-        options,
-      );
-      const url = URL.createObjectURL(
-        new Blob([html], { type: 'text/html;charset=utf-8' }),
-      );
+      const html = quotationPrintHtml(quote, assets, embedded, docLanguage, translateDoc, options);
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${filename.replace(/\.pdf$/i, '')}.html`;
+      link.download = `${baseName}.html`;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
@@ -495,16 +489,35 @@ export default function QuotationPdf({
   }
   return (
     <div className="quotation-pdf-viewer">
-      <button type="button" className="button primary" onClick={openPrintable}>
-        {t('Print / save as PDF')}
-      </button>
-      <button
-        type="button"
-        className="button"
-        onClick={() => void downloadHtml()}
-      >
-        {t(downloadLabel)}
-      </button>
+      <div className="document-language" role="radiogroup" aria-label={t('Document language')}>
+        <span>{t('Document language')}</span>
+        {documentLanguages.map((entry) => (
+          <button
+            key={entry.value}
+            type="button"
+            role="radio"
+            aria-checked={docLanguage === entry.value}
+            className={docLanguage === entry.value ? 'active' : ''}
+            onClick={() => setDocLanguage(entry.value)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+      <div className="document-actions">
+        <button type="button" className="button primary" onClick={openPrintable}>
+          {t('Print / save as PDF')} ({suffix})
+        </button>
+        <button type="button" className="button" onClick={() => void downloadHtml()}>
+          {t(downloadLabel)} ({suffix})
+        </button>
+      </div>
+      <iframe
+        className="document-preview"
+        title={`${quote.quotationNumber} ${suffix}`}
+        srcDoc={previewHtml}
+        sandbox="allow-same-origin"
+      />
     </div>
   );
 }

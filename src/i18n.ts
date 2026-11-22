@@ -49,3 +49,7 @@ export function t(text: string): string {
 export function localized(en: string, th: string) {
   return language === 'th' ? th : en;
 }
+/** Translates for a document in a fixed language, regardless of the CRM language. */
+export function translate(text: string, target: Language): string {
+  return target === 'th' ? ((thai as Record<string, string>)[text] ?? text) : text;
+}

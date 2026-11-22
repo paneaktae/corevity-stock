@@ -2512,6 +2512,35 @@ describe('invoice workflow', () => {
     expect((await stock(second.id))?.status).toBe('AVAILABLE');
   });
 
+  it('deletes invoices, releasing deposit reservations, but never paid ones', async () => {
+    const buyer = await customer();
+    const item = await product('Invoice Delete');
+    const invoice = await invoiceFor((await quoteFor(buyer.id, [item.id])).id);
+    await setStatus(invoice.id, 'ISSUED');
+    expect((await setStatus(invoice.id, 'DEPOSIT_COMPLETE')).status).toBe(200);
+    expect((await stock(item.id))?.status).toBe('RESERVED');
+    expect((await request(`/invoices/${invoice.id}`, 'DELETE')).status).toBe(200);
+    expect((await request(`/invoices/${invoice.id}`)).status).toBe(404);
+    expect((await stock(item.id))?.status).toBe('AVAILABLE');
+    const quote = await json<Quotation>(await request(`/quotations/${invoice.quotationId}`));
+    expect(quote.invoice).toBeNull();
+
+    const reissued = await invoiceFor(invoice.quotationId);
+    await setStatus(reissued.id, 'ISSUED');
+    expect((await setStatus(reissued.id, 'PAYMENT_COMPLETE')).status).toBe(200);
+    expect((await request(`/invoices/${reissued.id}`, 'DELETE')).status).toBe(409);
+    expect((await stock(item.id))?.status).toBe('SOLD');
+  });
+
+  it('deletes a draft invoice without touching a reservation made by hand', async () => {
+    const buyer = await customer();
+    const item = await product('Invoice Delete Draft');
+    await request(`/products/${item.id}/reserve`, 'POST', { customerId: buyer.id });
+    const invoice = await invoiceFor((await quoteFor(buyer.id, [item.id])).id);
+    expect((await request(`/invoices/${invoice.id}`, 'DELETE')).status).toBe(200);
+    expect((await stock(item.id))?.status).toBe('RESERVED');
+  });
+
   it('does not invoice cancelled quotations', async () => {
     const buyer = await customer();
     const item = await product('Invoice Cancelled Quote');
