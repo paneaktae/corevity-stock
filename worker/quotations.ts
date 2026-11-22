@@ -39,6 +39,10 @@ export type CompanyRow = {
   payment_terms: string;
   delivery_terms: string;
   warranty_terms: string;
+  payment_terms_en: string;
+  delivery_terms_en: string;
+  warranty_terms_en: string;
+  bank_details_en: string;
   default_vat_rate_bps: number;
 };
 type QuoteRow = {
@@ -67,6 +71,9 @@ type QuoteRow = {
   payment_terms: string;
   delivery_terms: string;
   warranty_terms: string;
+  payment_terms_en: string;
+  delivery_terms_en: string;
+  warranty_terms_en: string;
   notes: string;
   created_by: string;
   created_at: string;
@@ -136,6 +143,10 @@ const defaultCompany = (): QuotationSettingsInput => ({
   paymentTerms: '',
   deliveryTerms: '',
   warrantyTerms: '',
+  paymentTermsEn: '',
+  deliveryTermsEn: '',
+  warrantyTermsEn: '',
+  bankDetailsEn: '',
   defaultVatRate: 7,
 });
 export async function companyRow(database: D1Database) {
@@ -158,6 +169,10 @@ export function companyInput(row: CompanyRow | null): QuotationSettingsInput {
         paymentTerms: row.payment_terms,
         deliveryTerms: row.delivery_terms,
         warrantyTerms: row.warranty_terms,
+        paymentTermsEn: row.payment_terms_en ?? '',
+        deliveryTermsEn: row.delivery_terms_en ?? '',
+        warrantyTermsEn: row.warranty_terms_en ?? '',
+        bankDetailsEn: row.bank_details_en ?? '',
         defaultVatRate: row.default_vat_rate_bps / 100,
       }
     : defaultCompany();
@@ -254,6 +269,9 @@ function toQuote(
     paymentTerms: row.payment_terms,
     deliveryTerms: row.delivery_terms,
     warrantyTerms: row.warranty_terms,
+    paymentTermsEn: row.payment_terms_en ?? '',
+    deliveryTermsEn: row.delivery_terms_en ?? '',
+    warrantyTermsEn: row.warranty_terms_en ?? '',
     notes: row.notes,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -523,6 +541,18 @@ function quoteWriteStatement(
       args.createdAt,
     );
 }
+function englishTermsStatement(
+  database: D1Database,
+  quoteId: string,
+  input: QuotationInput,
+  draftOnly = false,
+) {
+  return database
+    .prepare(
+      `UPDATE quotations SET payment_terms_en=?,delivery_terms_en=?,warranty_terms_en=? WHERE id=?${draftOnly ? " AND status='DRAFT'" : ''}`,
+    )
+    .bind(input.paymentTermsEn, input.deliveryTermsEn, input.warrantyTermsEn, quoteId);
+}
 export async function salespersonName(database: D1Database, email: string) {
   const row = await database
     .prepare(
@@ -544,7 +574,7 @@ quotationSettingsRoutes.patch('/', async (c) => {
   const values = quotationSettingsInput.parse(await c.req.json());
   const dbNow = timestamp();
   await c.env.DB.prepare(
-    'UPDATE quotation_settings SET company_name_th=?,company_name_en=?,address=?,phone=?,email=?,tax_id=?,line_url=?,facebook_url=?,bank_details=?,payment_terms=?,delivery_terms=?,warranty_terms=?,default_vat_rate_bps=?,updated_at=? WHERE id=\'default\'',
+    'UPDATE quotation_settings SET company_name_th=?,company_name_en=?,address=?,phone=?,email=?,tax_id=?,line_url=?,facebook_url=?,bank_details=?,payment_terms=?,delivery_terms=?,warranty_terms=?,payment_terms_en=?,delivery_terms_en=?,warranty_terms_en=?,bank_details_en=?,default_vat_rate_bps=?,updated_at=? WHERE id=\'default\'',
   )
     .bind(
       values.companyNameTh,
@@ -559,6 +589,10 @@ quotationSettingsRoutes.patch('/', async (c) => {
       values.paymentTerms,
       values.deliveryTerms,
       values.warrantyTerms,
+      values.paymentTermsEn,
+      values.deliveryTermsEn,
+      values.warrantyTermsEn,
+      values.bankDetailsEn,
       Math.round(values.defaultVatRate * 100),
       dbNow,
     )
@@ -711,6 +745,7 @@ quotationRoutes.post('/', async (c) => {
         userEmail: email,
         createdAt,
       }),
+      englishTermsStatement(database, quoteId, input),
       ...items.map((item) => itemStatement(database, quoteId, item)),
       database
         .prepare(
@@ -795,6 +830,7 @@ quotationRoutes.patch('/:id', async (c) => {
         input.taxMode,totals.vatMinor,totals.grandTotalMinor,input.paymentTerms,
         input.deliveryTerms,input.warrantyTerms,input.notes,now,quoteId,
       ),
+    englishTermsStatement(database, quoteId, input, true),
     database
       .prepare("DELETE FROM quotation_items WHERE quotation_id=? AND EXISTS(SELECT 1 FROM quotations WHERE id=? AND status='DRAFT')")
       .bind(quoteId,quoteId),
@@ -869,6 +905,7 @@ quotationRoutes.post('/:id/duplicate', async (c) => {
     ).bind(newId,newNumber,row.customer_id,row.lead_id,'DRAFT',today,due,row.currency,row.customer_snapshot,JSON.stringify(newCompany),email,await salespersonName(c.env.DB,email),row.subtotal_minor,row.discount_minor,row.delivery_fee_minor,row.installation_fee_minor,row.other_charges_minor,row.vat_enabled,row.vat_rate_bps,row.tax_mode,row.vat_minor,row.grand_total_minor,row.payment_terms,row.delivery_terms,row.warranty_terms,row.notes,email,createdAt,createdAt);
     await c.env.DB.batch([
       insertQuote,
+      c.env.DB.prepare('UPDATE quotations SET payment_terms_en=?,delivery_terms_en=?,warranty_terms_en=? WHERE id=?').bind(row.payment_terms_en ?? '',row.delivery_terms_en ?? '',row.warranty_terms_en ?? '',newId),
       ...newItems.map((item)=>itemStatement(c.env.DB,newId,item)),
       c.env.DB.prepare("INSERT INTO quotation_status_history(id,quotation_id,from_status,to_status,changed_by,created_at) VALUES(?,?,NULL,'DRAFT',?,?)").bind(id(),newId,email,createdAt),
       c.env.DB.prepare('INSERT INTO activities(id,entity_type,entity_id,action,description,user_email,created_at) VALUES(?,?,?,?,?,?,?)').bind(id(),'quotation',newId,'duplicated',`Quotation ${newNumber} duplicated`,email,createdAt),

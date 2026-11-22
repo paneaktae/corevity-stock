@@ -10,7 +10,7 @@ const quote: Quotation = {
   id: 'pdf-test', quotationNumber: 'QT-2026-0001', customerId: 'customer', leadId: null,
   status: 'DRAFT', issueDate: '2026-10-12', validUntil: '2026-11-11', currency: 'THB',
   customer: { name: 'ลูกค้าทดสอบ', companyName: 'บริษัท Corevity', contactName: 'Sales Test', phone: '', email: '', billingAddress: 'กรุงเทพมหานคร Bangkok' },
-  company: { companyNameTh: 'บริษัท Corevity', companyNameEn: 'Corevity Co., Ltd.', address: 'Bangkok, Thailand', phone: '02-000-0000', email: 'sales@example.test', taxId: '', lineUrl: '', facebookUrl: '', bankDetails: '', paymentTerms: '50% deposit', deliveryTerms: '', warrantyTerms: '', defaultVatRate: 7, logoAvailable: false },
+  company: { companyNameTh: 'บริษัท Corevity', companyNameEn: 'Corevity Co., Ltd.', address: 'Bangkok, Thailand', phone: '02-000-0000', email: 'sales@example.test', taxId: '', lineUrl: '', facebookUrl: '', bankDetails: '', paymentTerms: '50% deposit', deliveryTerms: '', warrantyTerms: '', paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '', bankDetailsEn: '', defaultVatRate: 7, logoAvailable: false },
   salesContactEmail: 'sales@example.test', salesContactName: 'Sales Test',
   items: Array.from({ length: 60 }, (_, index) => ({
     id: `item-${index}`, productId: null, productName: `เครื่องออกกำลังกาย ${index + 1} Fitness equipment`, brand: 'Corevity', model: `Model ${index + 1}`, sku: `SKU-${index + 1}`,
@@ -18,7 +18,7 @@ const quote: Quotation = {
   })),
   subtotal: 60000, discount: 0, deliveryFee: 0, installationFee: 0, otherCharges: 0,
   vatEnabled: true, vatRate: 7, taxMode: 'EXCLUSIVE', vatAmount: 4200, grandTotal: 64200, beforeTax: 60000,
-  paymentTerms: '50% deposit', deliveryTerms: '', warrantyTerms: '', notes: '', createdBy: 'tester', createdAt: '', updatedAt: '',
+  paymentTerms: '50% deposit', deliveryTerms: '', warrantyTerms: '', paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '', notes: '', createdBy: 'tester', createdAt: '', updatedAt: '',
   history: [],
 };
 

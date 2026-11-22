@@ -70,6 +70,8 @@ type InvoiceRow = {
   payment_terms: string;
   delivery_terms: string;
   warranty_terms: string;
+  payment_terms_en: string;
+  warranty_terms_en: string;
   notes: string;
   created_by: string;
   created_at: string;
@@ -116,6 +118,8 @@ type QuoteSourceRow = {
   payment_terms: string;
   delivery_terms: string;
   warranty_terms: string;
+  payment_terms_en: string;
+  warranty_terms_en: string;
   notes: string;
 };
 type QuoteItemSourceRow = {
@@ -213,8 +217,9 @@ function toInvoice(
     ),
     depositAmount: fromMinor(row.deposit_minor),
     paymentTerms: row.payment_terms,
-    deliveryTerms: row.delivery_terms,
+    paymentTermsEn: row.payment_terms_en ?? '',
     warrantyTerms: row.warranty_terms,
+    warrantyTermsEn: row.warranty_terms_en ?? '',
     notes: row.notes,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -431,13 +436,16 @@ invoiceRoutes.post('/', async (c) => {
           quote.vat_minor,
           quote.grand_total_minor,
           quote.payment_terms,
-          quote.delivery_terms,
+          '',
           quote.warranty_terms,
           quote.notes,
           email,
           createdAt,
           createdAt,
         ),
+      database
+        .prepare('UPDATE invoices SET payment_terms_en=?,warranty_terms_en=? WHERE id=?')
+        .bind(quote.payment_terms_en ?? '', quote.warranty_terms_en ?? '', invoiceId),
       ...itemStatements,
       database
         .prepare(
@@ -529,7 +537,7 @@ invoiceRoutes.patch('/:id', async (c) => {
   const result = await database.batch([
     database
       .prepare(
-        "UPDATE invoices SET issue_date=?,due_date=?,subtotal_minor=?,discount_minor=?,delivery_fee_minor=?,installation_fee_minor=?,other_charges_minor=?,vat_enabled=?,vat_rate_bps=?,tax_mode=?,vat_minor=?,grand_total_minor=?,deposit_minor=?,payment_terms=?,delivery_terms=?,warranty_terms=?,notes=?,updated_at=? WHERE id=? AND status='DRAFT'",
+        "UPDATE invoices SET issue_date=?,due_date=?,subtotal_minor=?,discount_minor=?,delivery_fee_minor=?,installation_fee_minor=?,other_charges_minor=?,vat_enabled=?,vat_rate_bps=?,tax_mode=?,vat_minor=?,grand_total_minor=?,deposit_minor=?,payment_terms=?,payment_terms_en=?,warranty_terms=?,warranty_terms_en=?,notes=?,updated_at=? WHERE id=? AND status='DRAFT'",
       )
       .bind(
         input.issueDate,
@@ -546,8 +554,9 @@ invoiceRoutes.patch('/:id', async (c) => {
         totals.grandTotalMinor,
         depositMinor,
         input.paymentTerms,
-        input.deliveryTerms,
+        input.paymentTermsEn,
         input.warrantyTerms,
+        input.warrantyTermsEn,
         input.notes,
         now,
         invoiceId,

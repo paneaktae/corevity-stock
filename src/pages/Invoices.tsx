@@ -15,6 +15,7 @@ import type { PrintableDocument, PrintOptions } from '../quotationPrint';
 import { api, date, useData, useDebounce } from '../lib';
 import { t } from '../i18n';
 import { AddLink, Badge, Empty, ErrorBox, Field, Header, Loading } from '../components/ui';
+import { BilingualTermField, BilingualTermText } from '../components/BilingualTerms';
 import { formatCurrency } from './Quotations';
 
 type DraftItem = {
@@ -85,7 +86,8 @@ export function invoicePrintOptions(invoice: Invoice): PrintOptions {
   };
 }
 function printable(invoice: Invoice): PrintableDocument {
-  return { ...invoice, quotationNumber: invoice.invoiceNumber, validUntil: invoice.dueDate };
+  // Invoices print no delivery terms.
+  return { ...invoice, quotationNumber: invoice.invoiceNumber, validUntil: invoice.dueDate, deliveryTerms: '', deliveryTermsEn: '' };
 }
 
 export function InvoicesPage() {
@@ -281,7 +283,8 @@ export function InvoicePage() {
         <div className="quotation-grand-total"><span>{t('Grand total')}</span><strong>{formatCurrency(invoice.grandTotal, invoice.currency)}</strong></div>
         {invoice.depositAmount > 0 && <><div><span>{t('Deposit')}</span><strong>{formatCurrency(invoice.depositAmount, invoice.currency)}</strong></div><div><span>{t('Balance due')}</span><strong>{formatCurrency(balance, invoice.currency)}</strong></div></>}
       </div>
-      {[['Payment terms', invoice.paymentTerms], ['Delivery terms', invoice.deliveryTerms], ['Warranty terms', invoice.warrantyTerms], ['Additional notes', invoice.notes]].map(([label, value]) => value && <div className="quotation-detail-term" key={label}><strong>{t(label)}</strong><p>{value}</p></div>)}
+      {([['Payment terms', invoice.paymentTerms, invoice.paymentTermsEn], ['Warranty terms', invoice.warrantyTerms, invoice.warrantyTermsEn]] as const).map(([label, thai, english]) => <BilingualTermText key={label} label={label} thai={thai} english={english} />)}
+      {invoice.notes && <div className="quotation-detail-term"><strong>{t('Additional notes')}</strong><p>{invoice.notes}</p></div>}
       <div className="quotation-status-actions"><h3>{t('Change status')}</h3>
         {nextStatuses.length ? <div>{nextStatuses.map((next) => <button key={next} type="button" className={next === 'CANCELLED' ? 'danger' : next === 'ISSUED' ? '' : 'primary'} disabled={busy} onClick={() => void changeStatus(next)}>{t(actionLabels[next])}</button>)}</div> : <p className="muted">{t(invoice.status === 'PAYMENT_COMPLETE' ? 'Paid in full. The products are marked sold.' : 'This invoice is cancelled.')}</p>}
         <small>{t('Deposit complete reserves the products for this customer. Payment complete marks them sold.')}</small>
@@ -317,8 +320,9 @@ function draftFromInvoice(invoice: Invoice): DraftForm {
     taxMode: invoice.taxMode,
     depositAmount: invoice.depositAmount,
     paymentTerms: invoice.paymentTerms,
-    deliveryTerms: invoice.deliveryTerms,
+    paymentTermsEn: invoice.paymentTermsEn,
     warrantyTerms: invoice.warrantyTerms,
+    warrantyTermsEn: invoice.warrantyTermsEn,
     notes: invoice.notes,
   };
 }
@@ -404,9 +408,9 @@ export function InvoiceForm() {
           <Field label={t('VAT rate (%)')}><input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={draft.vatRate} onChange={(e) => setForm({ ...draft, vatRate: Number(e.target.value || 0) })} /></Field>
           <Field label={t('Tax calculation')}><select value={draft.taxMode} onChange={(e) => setForm({ ...draft, taxMode: e.target.value as 'EXCLUSIVE' | 'INCLUSIVE' })}><option value="EXCLUSIVE">{t('Tax exclusive')}</option><option value="INCLUSIVE">{t('Tax inclusive')}</option></select></Field>
         </div><label className="quotation-check"><input type="checkbox" checked={draft.vatEnabled} onChange={(e) => setForm({ ...draft, vatEnabled: e.target.checked })} />{t('Apply VAT')}</label></section>
-        <section className="panel quotation-section"><h2>{t('Terms and notes')}</h2><div className="form-grid">
-          {([['paymentTerms', 'Payment terms'], ['deliveryTerms', 'Delivery terms'], ['warrantyTerms', 'Warranty terms']] as const).map(([key, label]) => <Field key={key} label={t(label)}><textarea rows={3} value={draft[key]} onChange={(e) => setForm({ ...draft, [key]: e.target.value })} /></Field>)}
-        </div><Field label={t('Additional notes')}><textarea rows={3} value={draft.notes} onChange={(e) => setForm({ ...draft, notes: e.target.value })} /></Field></section>
+        <section className="panel quotation-section"><h2>{t('Terms and notes')}</h2><p className="muted">{t('Write each term in Thai and English. Thai documents print the Thai text, English documents the English text.')}</p>
+          {([['paymentTerms', 'paymentTermsEn', 'Payment terms'], ['warrantyTerms', 'warrantyTermsEn', 'Warranty terms']] as const).map(([thKey, enKey, label]) => <BilingualTermField key={thKey} label={label} thai={draft[thKey]} english={draft[enKey]} onThai={(value) => setForm({ ...draft, [thKey]: value })} onEnglish={(value) => setForm({ ...draft, [enKey]: value })} />)}
+        <Field label={t('Additional notes')}><textarea rows={3} value={draft.notes} onChange={(e) => setForm({ ...draft, notes: e.target.value })} /></Field></section>
       </div>
       <aside className="panel quotation-summary"><h2>{t('Summary')}</h2>
         {[[t('Subtotal'), summary.subtotal], [t('Quotation discount'), -Number(draft.discount || 0)], [t('Delivery fee'), Number(draft.deliveryFee || 0)], [t('Installation fee'), Number(draft.installationFee || 0)], [t('Other charges'), Number(draft.otherCharges || 0)], ...(draft.vatEnabled ? [[t('Before tax'), summary.beforeTax], [t('VAT'), summary.vat]] as [string, number][] : [])].map(([label, value]) => <div className="quotation-summary-line" key={String(label)}><span>{label}</span><strong>{formatCurrency(Number(value), invoice.currency)}</strong></div>)}

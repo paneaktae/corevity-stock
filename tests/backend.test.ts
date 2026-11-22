@@ -2269,6 +2269,20 @@ describe('quotation workflow', () => {
     expect(saved.items[0].specification).toBe('Seated Leg Press');
   });
 
+  it('saves English default terms in quotation settings', async () => {
+    const current = await json<Record<string, unknown>>(await request('/quotation-settings'));
+    const { hasLogo: _hasLogo, ...values } = current;
+    const saved = await request('/quotation-settings', 'PATCH', {
+      ...values,
+      paymentTermsEn: 'Default 50% deposit',
+      bankDetailsEn: 'KBank account 123',
+    });
+    expect(saved.status).toBe(200);
+    const reread = await json<Record<string, string>>(await request('/quotation-settings'));
+    expect(reread.paymentTermsEn).toBe('Default 50% deposit');
+    expect(reread.bankDetailsEn).toBe('KBank account 123');
+  });
+
   it('reserves unique sequential numbers when quotes are created concurrently', async () => {
     const customerRecord = await customer();
     const equipment = await product('Concurrent Brand');
@@ -2464,7 +2478,6 @@ describe('invoice workflow', () => {
       vatRate: 7,
       taxMode: 'EXCLUSIVE',
       paymentTerms: '',
-      deliveryTerms: '',
       warrantyTerms: '',
       notes: '',
     };
@@ -2539,6 +2552,32 @@ describe('invoice workflow', () => {
     const invoice = await invoiceFor((await quoteFor(buyer.id, [item.id])).id);
     expect((await request(`/invoices/${invoice.id}`, 'DELETE')).status).toBe(200);
     expect((await stock(item.id))?.status).toBe('RESERVED');
+  });
+
+  it('keeps Thai and English terms on quotations and copies payment and warranty terms to invoices', async () => {
+    const buyer = await customer();
+    const item = await product('Invoice Terms');
+    const response = await request('/quotations', 'POST', {
+      customerId: buyer.id,
+      issueDate: '2026-11-22',
+      validUntil: '2026-12-22',
+      currency: 'THB',
+      items: [{ productId: item.id, imageId: null, displayName: 'Terms item', description: '', quantity: 1, unitPrice: 100, discount: 0 }],
+      discount: 0, deliveryFee: 0, installationFee: 0, otherCharges: 0,
+      vatEnabled: false, vatRate: 7, taxMode: 'EXCLUSIVE',
+      paymentTerms: 'มัดจำ 30%', paymentTermsEn: '30% deposit',
+      deliveryTerms: 'ส่งภายใน 7 วัน', deliveryTermsEn: 'Delivery in 7 days',
+      warrantyTerms: 'รับประกัน 6 เดือน', warrantyTermsEn: '6-month warranty',
+      notes: '',
+    });
+    expect(response.status).toBe(201);
+    const quote = await json<Quotation>(response);
+    expect([quote.paymentTermsEn, quote.deliveryTermsEn, quote.warrantyTermsEn]).toEqual(['30% deposit', 'Delivery in 7 days', '6-month warranty']);
+    const copy = await json<Quotation>(await request(`/quotations/${quote.id}/duplicate`, 'POST'));
+    expect(copy.paymentTermsEn).toBe('30% deposit');
+    const invoice = await invoiceFor(quote.id);
+    expect([invoice.paymentTerms, invoice.paymentTermsEn, invoice.warrantyTerms, invoice.warrantyTermsEn]).toEqual(['มัดจำ 30%', '30% deposit', 'รับประกัน 6 เดือน', '6-month warranty']);
+    expect(invoice).not.toHaveProperty('deliveryTerms');
   });
 
   it('does not invoice cancelled quotations', async () => {

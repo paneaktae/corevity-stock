@@ -11,6 +11,7 @@ const doc = {
   company: {
     companyNameTh: 'คอร์วิตี้', companyNameEn: 'Corevity Used Gym Equipment', address: '', phone: '', email: '',
     taxId: '', lineUrl: '', facebookUrl: '', bankDetails: '', paymentTerms: '', deliveryTerms: '', warrantyTerms: '',
+    paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '', bankDetailsEn: '',
     defaultVatRate: 7, logoAvailable: false,
   },
   salesContactName: 'Sales',
@@ -18,6 +19,7 @@ const doc = {
   subtotal: 1000, discount: 0, deliveryFee: 0, installationFee: 0, otherCharges: 0,
   vatEnabled: false, vatRate: 7, vatAmount: 0, grandTotal: 1000, beforeTax: 1000,
   paymentTerms: '', deliveryTerms: '', warrantyTerms: '', notes: '',
+  paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '',
 } satisfies PrintableDocument;
 
 describe('invoice print layout', () => {
@@ -64,5 +66,31 @@ describe('invoice print layout', () => {
     expect(english).toContain('<h2>Invoice</h2>');
     expect(english).toContain('<h1>COREVITY</h1>');
     expect(english).not.toContain('วันครบกำหนดชำระ');
+  });
+
+  it('prints each term in the document language, falling back to the other one', () => {
+    const fonts = { latinRegular: '', latinBold: '', thaiRegular: '', thaiBold: '' };
+    const bilingual = {
+      ...doc,
+      paymentTerms: 'มัดจำ 30%',
+      paymentTermsEn: '30% deposit',
+      warrantyTerms: 'รับประกัน 6 เดือน',
+      warrantyTermsEn: '',
+      deliveryTerms: '',
+      deliveryTermsEn: 'Delivery in 7 days',
+      company: { ...doc.company, bankDetails: 'กสิกรไทย 123', bankDetailsEn: 'KBank 123' },
+    };
+    const thai = quotationPrintHtml(bilingual, {}, fonts, 'th', (v) => translate(v, 'th'));
+    expect(thai).toContain('มัดจำ 30%');
+    expect(thai).not.toContain('30% deposit');
+    expect(thai).toContain('Delivery in 7 days');
+    expect(thai).toContain('กสิกรไทย 123');
+    const english = quotationPrintHtml(bilingual, {}, fonts, 'en', (v) => v);
+    expect(english).toContain('30% deposit');
+    expect(english).not.toContain('มัดจำ 30%');
+    expect(english).toContain('รับประกัน 6 เดือน');
+    expect(english).toContain('KBank 123');
+    const invoiceLike = quotationPrintHtml({ ...bilingual, deliveryTerms: '', deliveryTermsEn: '' }, {}, fonts, 'en', (v) => v);
+    expect(invoiceLike).not.toContain('Delivery terms');
   });
 });

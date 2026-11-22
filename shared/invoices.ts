@@ -51,8 +51,9 @@ export const invoiceUpdateInput = z
     taxMode: z.enum(['EXCLUSIVE', 'INCLUSIVE']),
     depositAmount: money,
     paymentTerms: z.string().trim().max(2000).default(''),
-    deliveryTerms: z.string().trim().max(2000).default(''),
+    paymentTermsEn: z.string().trim().max(2000).default(''),
     warrantyTerms: z.string().trim().max(2000).default(''),
+    warrantyTermsEn: z.string().trim().max(2000).default(''),
     notes: z.string().trim().max(5000).default(''),
   })
   .strict()
@@ -109,9 +110,11 @@ export type Invoice = {
   grandTotal: number;
   beforeTax: number;
   depositAmount: number;
+  /** Invoices carry payment and warranty terms only (no delivery terms). */
   paymentTerms: string;
-  deliveryTerms: string;
+  paymentTermsEn: string;
   warrantyTerms: string;
+  warrantyTermsEn: string;
   notes: string;
   createdBy: string;
   createdAt: string;

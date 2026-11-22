@@ -8,6 +8,7 @@ import { calculateQuotationTotals, fromMinor, toMinor } from '../../shared/quota
 import { api, date, useData, useDebounce } from '../lib';
 import { getLanguage, t } from '../i18n';
 import { AddLink, Badge, Empty, ErrorBox, Field, Header, Loading } from '../components/ui';
+import { BilingualTermField, BilingualTermText } from '../components/BilingualTerms';
 
 type CustomerChoice = Pick<Customer, 'id' | 'name' | 'companyName' | 'contactName' | 'phone' | 'email' | 'billingAddress'>;
 type ProductChoice = Pick<Product, 'id' | 'sku' | 'brand' | 'model' | 'category' | 'condition' | 'targetBodyPart' | 'sellingPrice' | 'status' | 'shortDescription' | 'descriptionTh' | 'descriptionEn' | 'primaryImageId'>;
@@ -55,6 +56,9 @@ function blankForm(defaultVatRate = 7, query?: URLSearchParams): DraftForm {
     paymentTerms: '',
     deliveryTerms: '',
     warrantyTerms: '',
+    paymentTermsEn: '',
+    deliveryTermsEn: '',
+    warrantyTermsEn: '',
     notes: '',
   };
 }
@@ -84,6 +88,9 @@ function draftFromQuote(quote: Quotation): DraftForm {
     paymentTerms: quote.paymentTerms,
     deliveryTerms: quote.deliveryTerms,
     warrantyTerms: quote.warrantyTerms,
+    paymentTermsEn: quote.paymentTermsEn,
+    deliveryTermsEn: quote.deliveryTermsEn,
+    warrantyTermsEn: quote.warrantyTermsEn,
     notes: quote.notes,
   };
 }
@@ -178,7 +185,7 @@ export function QuotationForm() {
   const [queryParams] = useSearchParams();
   const navigate = useNavigate();
   const { data: existing, error: loadError } = useData<Quotation>(quoteId ? `/quotations/${quoteId}` : null);
-  const { data: company } = useData<{ defaultVatRate: number; paymentTerms: string; deliveryTerms: string; warrantyTerms: string }>('/quotation-settings');
+  const { data: company } = useData<{ defaultVatRate: number; paymentTerms: string; deliveryTerms: string; warrantyTerms: string; paymentTermsEn: string; deliveryTermsEn: string; warrantyTermsEn: string }>('/quotation-settings');
   const prefilledCustomerId = !quoteId ? queryParams.get('customerId') : null;
   const { data: prefilledCustomer } = useData<CustomerDetail>(prefilledCustomerId ? `/customers/${prefilledCustomerId}` : null);
   const [form,setForm] = useState<DraftForm>(()=>blankForm());
@@ -199,6 +206,9 @@ export function QuotationForm() {
       blank.paymentTerms=company.paymentTerms;
       blank.deliveryTerms=company.deliveryTerms;
       blank.warrantyTerms=company.warrantyTerms;
+      blank.paymentTermsEn=company.paymentTermsEn??'';
+      blank.deliveryTermsEn=company.deliveryTermsEn??'';
+      blank.warrantyTermsEn=company.warrantyTermsEn??'';
       const productId=queryParams.get('productId');
       if(productId){api<ProductDetail>(`/products/${productId}`).then(({product,images})=>setForm({...blank,items:[{productId:product.id,imageId:images.find((photo)=>photo.isPrimary)?.id??images[0]?.id??null,displayName:quotationItemTitle(`${product.brand} ${product.model}`,product.targetBodyPart??''),description:product.shortDescription||product.descriptionTh||product.descriptionEn,quantity:1,unitPrice:String(product.sellingPrice),discount:''}]})).catch(()=>setForm(blank))}
       else setForm(blank);
@@ -257,9 +267,9 @@ export function QuotationForm() {
           <Field label={t('VAT rate (%)')}><input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={form.vatRate} onChange={(e)=>setForm({...form,vatRate:Number(e.target.value||0)})}/></Field>
           <Field label={t('Tax calculation')}><select value={form.taxMode} onChange={(e)=>setForm({...form,taxMode:e.target.value as 'EXCLUSIVE'|'INCLUSIVE'})}><option value="EXCLUSIVE">{t('Tax exclusive')}</option><option value="INCLUSIVE">{t('Tax inclusive')}</option></select></Field>
         </div><label className="quotation-check"><input type="checkbox" checked={form.vatEnabled} onChange={(e)=>setForm({...form,vatEnabled:e.target.checked})}/>{t('Apply VAT')}</label></section>
-        <section className="panel quotation-section"><h2>{t('Terms and notes')}</h2><div className="form-grid">
-          {([['paymentTerms','Payment terms'],['deliveryTerms','Delivery terms'],['warrantyTerms','Warranty terms']] as const).map(([key,label])=><Field key={key} label={t(label)}><textarea rows={3} value={form[key]} onChange={(e)=>setForm({...form,[key]:e.target.value})}/></Field>)}
-        </div><Field label={t('Additional notes')}><textarea rows={3} value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})}/></Field></section>
+        <section className="panel quotation-section"><h2>{t('Terms and notes')}</h2><p className="muted">{t('Write each term in Thai and English. Thai documents print the Thai text, English documents the English text.')}</p>
+          {([['paymentTerms','paymentTermsEn','Payment terms'],['deliveryTerms','deliveryTermsEn','Delivery terms'],['warrantyTerms','warrantyTermsEn','Warranty terms']] as const).map(([thKey,enKey,label])=><BilingualTermField key={thKey} label={label} thai={form[thKey]} english={form[enKey]} onThai={(value)=>setForm({...form,[thKey]:value})} onEnglish={(value)=>setForm({...form,[enKey]:value})}/>)}
+        <Field label={t('Additional notes')}><textarea rows={3} value={form.notes} onChange={(e)=>setForm({...form,notes:e.target.value})}/></Field></section>
       </div>
       <aside className="panel quotation-summary"><h2>{t('Summary')}</h2>
         {[[t('Subtotal'),summary.subtotal],[t('Quotation discount'),-Number(form.discount||0)],[t('Delivery fee'),Number(form.deliveryFee||0)],[t('Installation fee'),Number(form.installationFee||0)],[t('Other charges'),Number(form.otherCharges||0)],...(form.vatEnabled?[[t('Before tax'),summary.beforeTax],[t('VAT'),summary.vat]] as [string,number][]:[])].map(([label,value])=><div className="quotation-summary-line" key={String(label)}><span>{label}</span><strong>{formatCurrency(Number(value),form.currency)}</strong></div>)}
@@ -308,7 +318,8 @@ export function QuotationPage() {
       <div className="quotation-facts">{[[t('Customer'),quote.customer.companyName||quote.customer.name],[t('Issue date'),date(quote.issueDate)],[t('Valid until'),date(quote.validUntil)],[t('Sales contact'),quote.salesContactName],[t('Status'),t(quote.status)]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
       <div className="quotation-detail-items"><h3>{t('Products')}</h3>{quote.items.map((item)=><div className="quotation-detail-item" key={item.id}>{item.imageAvailable?<img src={`/api/quotations/${quote.id}/items/${item.id}/image`} alt=""/>:<div className="quotation-image-placeholder"><FileText size={18}/></div>}<div className="grow"><strong>{quotationItemTitle(item.productName,item.specification)}</strong><small>{item.sku}</small><small>{item.quantity} × {formatCurrency(item.unitPrice,quote.currency)}</small>{item.productStatus==='SOLD'||item.productStatus==='RESERVED'?<span className="warning">{t(item.productStatus==='SOLD'?'This product is sold.':'This product is reserved.')}</span>:null}</div><strong>{formatCurrency(item.lineTotal,quote.currency)}</strong></div>)}</div>
       <div className="quotation-detail-totals">{[[t('Subtotal'),quote.subtotal],[t('Quotation discount'),-quote.discount],[t('Delivery fee'),quote.deliveryFee],[t('Installation fee'),quote.installationFee],[t('Other charges'),quote.otherCharges],...(quote.vatEnabled?[[t('Before tax'),quote.beforeTax] as [string,number],[`${t('VAT')} (${quote.vatRate}%)`,quote.vatAmount] as [string,number]]:[])].map(([label,value])=><div key={String(label)}><span>{label}</span><strong>{formatCurrency(Number(value),quote.currency)}</strong></div>)}<div className="quotation-grand-total"><span>{t('Grand total')}</span><strong>{formatCurrency(quote.grandTotal,quote.currency)}</strong></div></div>
-      {[['Payment terms',quote.paymentTerms],['Delivery terms',quote.deliveryTerms],['Warranty terms',quote.warrantyTerms],['Additional notes',quote.notes]].map(([label,value])=>value&&<div className="quotation-detail-term" key={label}><strong>{t(label)}</strong><p>{value}</p></div>)}
+      {([['Payment terms',quote.paymentTerms,quote.paymentTermsEn],['Delivery terms',quote.deliveryTerms,quote.deliveryTermsEn],['Warranty terms',quote.warrantyTerms,quote.warrantyTermsEn]] as const).map(([label,thai,english])=><BilingualTermText key={label} label={label} thai={thai} english={english}/>)}
+      {quote.notes&&<div className="quotation-detail-term"><strong>{t('Additional notes')}</strong><p>{quote.notes}</p></div>}
       <div className="quotation-status-actions"><h3>{t('Change status')}</h3><div>{quotationStatuses.filter((status)=>status!==quote.status).map((status)=><button key={status} type="button" disabled={busy} onClick={()=>void changeStatus(status)}>{t(status)}</button>)}</div></div>
       <div className="quotation-history"><h3>{t('Status history')}</h3>{quote.history.map((entry)=><div key={entry.id}><span>{date(entry.createdAt)}</span><strong>{entry.fromStatus?t(entry.fromStatus):t('Created')} → {t(entry.toStatus)}</strong><small>{entry.changedBy}</small></div>)}</div>
     </div>

@@ -4190,3 +4190,10 @@ html[data-theme='dark'] .email-tag.replied { background: #172c4a; color: #9cc3ff
 .document-language button.active { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
 .document-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .document-preview { width: 100%; height: 72vh; min-height: 480px; border: 1px solid var(--border); border-radius: 8px; background: #f1f1ef; }
+.bilingual-term { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.bilingual-term legend { font-weight: 650; margin-bottom: 6px; padding: 0; }
+.bilingual-term label { display: grid; gap: 4px; min-width: 0; }
+.bilingual-term label > span { font-size: 12px; color: var(--muted-text); }
+.bilingual-term textarea { width: 100%; box-sizing: border-box; }
+.term-language { display: inline-block; font-size: 10px; font-weight: 700; color: var(--muted-text); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-right: 6px; vertical-align: 1px; }
+@media (max-width: 640px) { .bilingual-term { grid-template-columns: 1fr; } }

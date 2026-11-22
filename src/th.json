@@ -1180,5 +1180,6 @@
   "Linked invoice": "ใบแจ้งหนี้ที่ผูกไว้",
   "The invoice starts as a draft, so you can set the deposit and due date next.": "ใบแจ้งหนี้จะเริ่มเป็นฉบับร่าง ตั้งเงินมัดจำและวันครบกำหนดได้ในขั้นถัดไป",
   "Search for a quotation to see its products and total.": "ค้นหาใบเสนอราคาเพื่อดูสินค้าและยอดรวม",
-  "Oldest first": "เก่าสุดก่อน"
+  "Oldest first": "เก่าสุดก่อน",
+  "Write each term in Thai and English. Thai documents print the Thai text, English documents the English text.": "กรอกเงื่อนไขทั้งภาษาไทยและภาษาอังกฤษ เอกสารภาษาไทยจะพิมพ์ข้อความภาษาไทย เอกสารภาษาอังกฤษจะพิมพ์ข้อความภาษาอังกฤษ (ถ้าเว้นว่าง จะใช้อีกภาษาแทน)"
 }

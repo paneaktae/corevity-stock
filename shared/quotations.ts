@@ -42,6 +42,9 @@ export const quotationInput = z
     paymentTerms: z.string().trim().max(2000).default(''),
     deliveryTerms: z.string().trim().max(2000).default(''),
     warrantyTerms: z.string().trim().max(2000).default(''),
+    paymentTermsEn: z.string().trim().max(2000).default(''),
+    deliveryTermsEn: z.string().trim().max(2000).default(''),
+    warrantyTermsEn: z.string().trim().max(2000).default(''),
     notes: z.string().trim().max(5000).default(''),
   })
   .strict()
@@ -66,6 +69,10 @@ export const quotationSettingsInput = z
     paymentTerms: z.string().trim().max(2000),
     deliveryTerms: z.string().trim().max(2000),
     warrantyTerms: z.string().trim().max(2000),
+    paymentTermsEn: z.string().trim().max(2000).default(''),
+    deliveryTermsEn: z.string().trim().max(2000).default(''),
+    warrantyTermsEn: z.string().trim().max(2000).default(''),
+    bankDetailsEn: z.string().trim().max(2000).default(''),
     defaultVatRate: z.number().finite().min(0).max(100),
   })
   .strict();
@@ -130,6 +137,9 @@ export type Quotation = {
   paymentTerms: string;
   deliveryTerms: string;
   warrantyTerms: string;
+  paymentTermsEn: string;
+  deliveryTermsEn: string;
+  warrantyTermsEn: string;
   notes: string;
   createdBy: string;
   createdAt: string;
@@ -182,4 +192,26 @@ export function quotationItemTitle(name: string, specification: string): string 
   const spec = specification.trim();
   if (!spec || name.toLowerCase().includes(spec.toLowerCase())) return name;
   return `${name} ${spec}`;
+}
+
+/** Thai and English versions of the terms printed at the bottom of a document. */
+export type BilingualTerms = {
+  paymentTerms: string;
+  paymentTermsEn: string;
+  deliveryTerms: string;
+  deliveryTermsEn: string;
+  warrantyTerms: string;
+  warrantyTermsEn: string;
+};
+/**
+ * Picks a term for the document language: Thai uses the Thai text, English
+ * uses the English text; either falls back to the other when it is empty.
+ */
+export function termFor(
+  thai: string | undefined,
+  english: string | undefined,
+  language: 'th' | 'en',
+): string {
+  const [first = '', second = ''] = language === 'en' ? [english, thai] : [thai, english];
+  return first.trim() ? first : second;
 }

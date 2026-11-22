@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, useData } from '../lib';
 import { t } from '../i18n';
 import { ErrorBox, Field, Loading } from './ui';
+import { BilingualTermField } from './BilingualTerms';
 
 type CompanyProfile = {
   companyNameTh: string;
@@ -16,13 +17,18 @@ type CompanyProfile = {
   paymentTerms: string;
   deliveryTerms: string;
   warrantyTerms: string;
+  paymentTermsEn: string;
+  deliveryTermsEn: string;
+  warrantyTermsEn: string;
+  bankDetailsEn: string;
   defaultVatRate: number;
   hasLogo: boolean;
 };
 const empty: CompanyProfile = {
   companyNameTh: '', companyNameEn: '', address: '', phone: '', email: '',
   taxId: '', lineUrl: '', facebookUrl: '', bankDetails: '', paymentTerms: '', deliveryTerms: '',
-  warrantyTerms: '', defaultVatRate: 7, hasLogo: false,
+  warrantyTerms: '', paymentTermsEn: '', deliveryTermsEn: '', warrantyTermsEn: '', bankDetailsEn: '',
+  defaultVatRate: 7, hasLogo: false,
 };
 
 export function QuotationSettingsPanel() {
@@ -141,20 +147,24 @@ export function QuotationSettingsPanel() {
         <Field label={t('Company address')}>
           <textarea rows={3} value={form.address} onChange={(e) => update('address', e.target.value)} />
         </Field>
-        <Field label={t('Bank details')}>
-          <textarea rows={3} value={form.bankDetails} onChange={(e) => update('bankDetails', e.target.value)} />
-        </Field>
-        <div className="form-grid">
-          {([
-            ['paymentTerms', 'Default payment terms'],
-            ['deliveryTerms', 'Default delivery terms'],
-            ['warrantyTerms', 'Default warranty terms'],
-          ] as const).map(([key, label]) => (
-            <Field key={key} label={t(label)}>
-              <textarea rows={3} value={form[key]} onChange={(e) => update(key, e.target.value)} />
-            </Field>
-          ))}
-        </div>
+        <p className="muted">
+          {t('Write each term in Thai and English. Thai documents print the Thai text, English documents the English text.')}
+        </p>
+        {([
+          ['bankDetails', 'bankDetailsEn', 'Bank details'],
+          ['paymentTerms', 'paymentTermsEn', 'Default payment terms'],
+          ['deliveryTerms', 'deliveryTermsEn', 'Default delivery terms'],
+          ['warrantyTerms', 'warrantyTermsEn', 'Default warranty terms'],
+        ] as const).map(([thKey, enKey, label]) => (
+          <BilingualTermField
+            key={thKey}
+            label={label}
+            thai={form[thKey]}
+            english={form[enKey]}
+            onThai={(value) => update(thKey, value)}
+            onEnglish={(value) => update(enKey, value)}
+          />
+        ))}
         <button className="primary" disabled={busy}>
           {busy ? t('Saving…') : t('Save quotation settings')}
         </button>
