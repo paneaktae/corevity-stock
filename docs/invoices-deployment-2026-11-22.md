@@ -59,3 +59,18 @@ User requested "Back up and deploy".
 - Verified live: custom domain serves `index-DKEl7bzc.js` (matches `dist/client`, has the bilingual
   term fields); anonymous `/api/quotation-settings`, `/api/invoices`, `/api/quotations` 401.
 - To do by the user: fill in the English default terms in Settings › Quotations.
+
+## Follow-up 2026-11-22: Auto English for terms in Settings (631116f)
+
+User requested "Commit and deploy".
+
+- `POST /api/quotation-settings/translate` (session-protected) translates Thai term texts with the
+  existing AI provider settings (`AI_API_KEY` secret, `AI_MODEL`, `AI_BASE_URL`); nothing is saved.
+  Settings › Quotations: "Auto English" for all terms (asks before replacing English text) and a
+  per-term "translate from Thai" link; results only fill the form for review.
+- Checks: `npm run check`, 221 tests (incl. `tests/translate.test.ts` with a fake provider); real
+  translation tried locally.
+- Worker `e6a5ccf0` → `0fda58ef-05a8-40f8-8348-fa5abb71d867`; no migration, secret or var changes
+  (`AI_API_KEY` already set in production).
+- Verified live: custom domain serves `index-CzeaxPMg.js` (matches `dist/client`, calls the translate
+  endpoint); anonymous `POST /api/quotation-settings/translate` 401.
